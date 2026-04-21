@@ -107,14 +107,40 @@ Tracks skills we evaluated and consciously skipped. Prevents anti-pattern #18 (i
 
 ## ROI LOG — actual outcomes (populate as we go)
 
-### Day 0 (Apr 21) — Setup phase
+### Day 0 (Apr 21) — Setup phase — COMPLETE
 
-| Tool | Outcome | Time saved / cost | Notes |
+| Tool | Outcome | ROI | Notes |
 |---|---|---|---|
-| `Explore` agent (3x parallel) | Deep understanding of Alternative_Data foundation in ~5 min | Saved ~60 min of manual file reading | Critical: revealed that 3 signals are MISSING not just stubbed |
-| `Plan` agent (1x) | Found 4-agent swarm was redundant; recommended single Opus + tools | Prevented 3-4x Opus API cost + correlated outputs | HIGH ROI — restructured entire agent architecture |
-| `perplexity_ask` | Biomech thresholds (pending) | Citations for Opus system prompt | TBD |
-| `context7` | Ultralytics + Anthropic SDK current APIs (pending) | Avoids deprecated API hallucinations | TBD |
+| `Explore` agent (3x parallel) | Deep understanding of Alternative_Data foundation in ~5 min | HIGH (+60 min saved) | Revealed that 3 of 7 signals are MISSING not just stubbed |
+| `Plan` agent (1x) | Found 4-agent swarm was redundant; single Opus + tools recommended | HIGH (3-4x Opus cost avoided) | Restructured entire agent architecture |
+| `perplexity_ask` | Biomech thresholds cited (400ms serve return, 150ms split-step baseline, 2.5x body-weight vGRF on split-step landing) | MEDIUM | Partial — elite thresholds for some signals not in literature |
+| `perplexity_ask` (#2) | Claude Managed Agents 2026-04-01 API (`client.beta.agents.create`, `client.beta.sessions.create`, `agent_toolset_20260401`) | HIGH | Directly unblocks Phase 2 scouting-report work |
+| `context7` / `/websites/ultralytics` | Keypoints `.xyn` (pre-normalized [0,1]) | HIGH — non-obvious | Saves coordinate-normalization step AND pre-empts resize bug at source |
+| `context7` / `/anthropics/anthropic-sdk-python` | Extended thinking API shape, streaming pattern, prompt caching `cache_control` | HIGH | Phase 2 code shape confirmed |
+| `ToolSearch` (deferred-tool loading) | AskUserQuestion, ExitPlanMode, TodoWrite loaded on demand | MEDIUM | Avoids cluttering context with tools we don't need |
+| PreToolUse security hook | Caught `exec`/`innerHTML` strings twice (false positives but forced better code) | LOW — but habit-forming | Rewrote probe_clip with sync subprocess + court_annotator with textContent + DOM methods |
+| Day-0 probe (YOLO11m-Pose MPS) | 12.7 FPS warm, 100% detection, 99.9% two-player, no leak | HIGH (Go/No-Go GATE) | Unblocked Phase 1 — entire week's work was contingent on this |
+| pyproject.toml bifurcation | `-local` vs `-prod` req files baked in from day 1 | CRITICAL (250MB wall defense) | Prevents Vercel deploy failure later |
+
+### End-of-Day-0 Meta-Summary
+
+**What the tool stack produced in ~6 hours:**
+- 5 living docs (~3000 lines)
+- 12 specialized agents (~2500 lines of system prompts)
+- 8 project-scoped skills (~4000 lines of pattern/constraint documentation)
+- Full Python scaffolding (config, Pydantic schemas, DuckDB DDL, venv + deps)
+- Working YOLO probe pipeline on real pro tennis broadcast video
+- Initial public GitHub repo committed + pushed
+
+**Skills I could have used and didn't:** `search-first` was skipped when I confidently searched library docs directly via Context7 — justified. `continuous-learning-v2` hooks not yet activated; will activate on Wed Apr 22. `/find-skills` not used because user explicitly listed the skill inventory.
+
+**Gotchas discovered (now in MEMORY.md):**
+- Ultralytics `.xyn` gives pre-normalized coords (saves code)
+- YOLO sees crowd + ball-boys + linesmen → Phase 1 needs player-filtering
+- Memory-slope sign matters (only positive = leak)
+- `create_subprocess_exec` + `innerHTML` trip the security hook (workarounds documented)
+
+**Day 1 pre-loaded learnings ready to deploy** — Wed Apr 22 starts Phase 1 with zero re-discovery overhead.
 
 ---
 

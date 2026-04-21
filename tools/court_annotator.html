@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PANOPTICON Court Annotator</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: #0a0e1a;
+        color: #f8fafc;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+      header {
+        padding: 16px 24px;
+        border-bottom: 1px solid #243049;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      h1 { margin: 0; font-size: 18px; font-weight: 600; }
+      .muted { color: #94a3b8; font-size: 13px; }
+      .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      button, label.file {
+        cursor: pointer;
+        background: #1a2238;
+        border: 1px solid #3b4f7e;
+        color: #f8fafc;
+        padding: 8px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      button:hover, label.file:hover { background: #243049; }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      input[type='file'] { display: none; }
+      main {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        gap: 24px;
+        padding: 24px;
+      }
+      .canvas-wrap {
+        position: relative;
+        width: 100%;
+        background: #000;
+        border: 1px solid #243049;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      canvas { display: block; width: 100%; height: auto; cursor: crosshair; }
+      aside {
+        background: #0f1524;
+        border: 1px solid #243049;
+        border-radius: 8px;
+        padding: 20px;
+      }
+      .corner-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        font-size: 13px;
+        border-bottom: 1px solid #243049;
+      }
+      .corner-row.done { color: #34d399; }
+      .corner-row.pending { color: #94a3b8; }
+      .json-out {
+        margin-top: 16px;
+        padding: 12px;
+        background: #050810;
+        border: 1px solid #243049;
+        border-radius: 6px;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 280px;
+        overflow: auto;
+      }
+      .note {
+        margin-top: 16px;
+        padding: 12px;
+        background: #1a2238;
+        border-left: 3px solid #00e5ff;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      h2.aside-title { font-size: 14px; margin: 0 0 12px 0; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>PANOPTICON Court Annotator</h1>
+        <div class="muted">
+          Click the 4 corners of the singles court (clockwise from top-left).
+        </div>
+      </div>
+      <div class="controls">
+        <label class="file" for="video">Load video...</label>
+        <input type="file" id="video" accept="video/*" />
+        <button id="btnCaptureFrame" disabled>Capture frame</button>
+        <button id="btnReset" disabled>Reset</button>
+        <button id="btnDownload" disabled>Download JSON</button>
+      </div>
+    </header>
+    <main>
+      <div>
+        <div class="canvas-wrap">
+          <canvas id="canvas" width="1920" height="1080"></canvas>
+        </div>
+        <div class="note">
+          Click corners in order, clockwise from top-left:
+          <strong>top-left -> top-right -> bottom-right -> bottom-left</strong>.
+          Output coordinates are normalized [0.0, 1.0] (shape-invariant).
+          Scrub the video to a clean wide-angle frame, click "Capture frame," then click corners.
+          Save as <code>&lt;clip_basename&gt;_corners.json</code> next to the clip.
+        </div>
+      </div>
+      <aside>
+        <h2 class="aside-title">Corners (normalized)</h2>
+        <div id="cornerList"></div>
+        <div class="json-out" id="jsonOut">// Load a video and capture a frame to begin.</div>
+      </aside>
+    </main>
+    <script>
+      const CORNER_LABELS = ["top-left", "top-right", "bottom-right", "bottom-left"];
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const cornerList = document.getElementById("cornerList");
+      const jsonOut = document.getElementById("jsonOut");
+      const fileInput = document.getElementById("video");
+      const btnCaptureFrame = document.getElementById("btnCaptureFrame");
+      const btnReset = document.getElementById("btnReset");
+      const btnDownload = document.getElementById("btnDownload");
+
+      const video = document.createElement("video");
+      video.controls = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "metadata";
+      video.style.maxWidth = "100%";
+      video.style.display = "none";
+
+      let corners = [];
+      let clipName = "clip";
+      let frameCaptured = false;
+
+      function clearChildren(node) {
+        while (node.firstChild) node.removeChild(node.firstChild);
+      }
+
+      function makeSpan(text, className) {
+        const s = document.createElement("span");
+        if (className) s.className = className;
+        s.textContent = text;
+        return s;
+      }
+
+      function renderCornerList() {
+        clearChildren(cornerList);
+        for (let i = 0; i < 4; i++) {
+          const row = document.createElement("div");
+          row.className = "corner-row " + (corners[i] ? "done" : "pending");
+          row.appendChild(makeSpan(CORNER_LABELS[i]));
+          row.appendChild(
+            makeSpan(
+              corners[i]
+                ? corners[i].x.toFixed(4) + ", " + corners[i].y.toFixed(4)
+                : "-"
+            )
+          );
+          cornerList.appendChild(row);
+        }
+
+        if (corners.length === 4) {
+          const obj = {
+            clip: clipName,
+            annotated_at: new Date().toISOString(),
+            corners: {
+              top_left: [corners[0].x, corners[0].y],
+              top_right: [corners[1].x, corners[1].y],
+              bottom_right: [corners[2].x, corners[2].y],
+              bottom_left: [corners[3].x, corners[3].y],
+            },
+            notes:
+              "Normalized [0,1] coordinates. Use with cv2.getPerspectiveTransform against (23.77m x 8.23m) singles court.",
+          };
+          jsonOut.textContent = JSON.stringify(obj, null, 2);
+          btnDownload.disabled = false;
+        } else {
+          jsonOut.textContent =
+            "// Click the next corner on the video frame.\n// Still needed: " +
+            CORNER_LABELS.slice(corners.length).join(", ");
+          btnDownload.disabled = true;
+        }
+      }
+
+      function redrawOverlay() {
+        if (!frameCaptured) return;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        corners.forEach((c, i) => {
+          const px = c.x * canvas.width;
+          const py = c.y * canvas.height;
+          ctx.fillStyle = "#00e5ff";
+          ctx.strokeStyle = "#0a0e1a";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(px, py, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = "#f8fafc";
+          ctx.font = "bold 14px system-ui";
+          ctx.fillText(String(i + 1), px + 14, py - 8);
+        });
+        if (corners.length === 4) {
+          ctx.strokeStyle = "#00e5ff";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          corners.forEach((c, i) => {
+            const px = c.x * canvas.width;
+            const py = c.y * canvas.height;
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          });
+          ctx.closePath();
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
+      fileInput.addEventListener("change", (evt) => {
+        const file = evt.target.files[0];
+        if (!file) return;
+        clipName = file.name.replace(/\.[^.]+$/, "");
+        const url = URL.createObjectURL(file);
+        video.src = url;
+        video.style.display = "block";
+        document.body.appendChild(video);
+        video.addEventListener(
+          "loadedmetadata",
+          () => {
+            canvas.width = video.videoWidth || 1920;
+            canvas.height = video.videoHeight || 1080;
+            btnCaptureFrame.disabled = false;
+            btnReset.disabled = false;
+          },
+          { once: true }
+        );
+      });
+
+      btnCaptureFrame.addEventListener("click", () => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        frameCaptured = true;
+        corners = [];
+        renderCornerList();
+        redrawOverlay();
+      });
+
+      btnReset.addEventListener("click", () => {
+        corners = [];
+        renderCornerList();
+        redrawOverlay();
+      });
+
+      canvas.addEventListener("click", (evt) => {
+        if (!frameCaptured || corners.length >= 4) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = (evt.clientX - rect.left) / rect.width;
+        const y = (evt.clientY - rect.top) / rect.height;
+        corners.push({ label: CORNER_LABELS[corners.length], x, y });
+        renderCornerList();
+        redrawOverlay();
+      });
+
+      btnDownload.addEventListener("click", () => {
+        const blob = new Blob([jsonOut.textContent], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = clipName + "_corners.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      renderCornerList();
+    </script>
+  </body>
+</html>

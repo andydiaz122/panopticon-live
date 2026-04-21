@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Bun
+node_modules/
+.next/
+.turbo/
+bun.lockb
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Vercel
+.vercel/
+
+# Data artifacts (never commit videos or large binaries)
+data/clips/*
+!data/clips/.gitkeep
+data/corners/*.json
+!data/corners/.gitkeep
+data/panopticon.duckdb
+data/panopticon.duckdb.wal
+data/probe_out.*
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+
+# YOLO weights (download on first run)
+*.pt
+!yolo11m-pose.pt.keep
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/sessions/

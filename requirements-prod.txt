@@ -1,0 +1,12 @@
+# Vercel production deploy environment.
+# MUST stay under 250MB unzipped. No torch, no ultralytics, no opencv, no scipy.
+# This set only serves FastAPI SSE endpoints + Opus orchestration; it reads
+# the pre-computed panopticon.duckdb file for signal replay.
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+anthropic>=0.40.0
+duckdb>=1.0.0
+pydantic>=2.9.0
+httpx>=0.27.0
+python-multipart>=0.0.9

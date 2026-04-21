@@ -1,0 +1,25 @@
+# Local pre-compute environment (Mac Mini M4 Pro).
+# Installed in .venv for YOLO inference, Kalman filtering, signal extraction,
+# and offline DuckDB population. NEVER deploy this set to Vercel (breaks 250MB limit).
+
+torch>=2.8.0
+torchvision>=0.19.0
+ultralytics>=8.3.0
+opencv-python-headless>=4.10.0
+filterpy>=1.4.5
+scipy>=1.14.0
+numpy>=1.26.0
+duckdb>=1.0.0
+pydantic>=2.9.0
+anthropic>=0.40.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+httpx>=0.27.0
+python-multipart>=0.0.9
+psutil>=5.9.0
+
+# Dev tooling
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+pytest-cov>=5.0.0
+ruff>=0.7.0

@@ -24,6 +24,9 @@ The 7 signals are the ALPHA of the entire product. Each must be mathematically s
 5. **Cross-player signals** (USER-CORRECTION-011, 013).
    `split_step_latency_ms` needs the OPPONENT's PRE_SERVE → ACTIVE_RALLY transition timestamp. Use the symmetric `BaseSignalExtractor` API: `ingest(target_state, opponent_state, target_kalman, opponent_kalman, ...)`.
 
+6. **Homography Z=0 Invariant** (USER-CORRECTION-017 — CRITICAL PHYSICS GUARDRAIL).
+   `CourtMapper.to_court_meters` uses `cv2.getPerspectiveTransform`, which is valid ONLY for points on the ground plane (Z=0). **NEVER project shoulders, hips, wrists, or any upper-body keypoint through `CourtMapper`** — a 1.8m player's shoulders will project several meters behind their actual ground position due to parallax, and any velocity derived from that is fiction. If you need physical velocity in court meters, use the `PhysicalKalman2D` output (`target_kalman[2]=vx_mps`, `target_kalman[3]=vy_mps`), which is anchored to `robust_foot_point` (a ground-plane point).
+
 See `temporal-kinematic-primitives` and `signal-extractor-contract` skills for details.
 
 ## Far-Court Occlusion Fallback Chain (USER-CORRECTION-003)
@@ -209,16 +212,30 @@ retreat_m = court_xy[1] - player_baseline_y_m
 
 ## Signal 6 — lateral_work_rate
 
-**Definition**: Statistical summary of X-axis COM velocity during ACTIVE_RALLY segments. Reported as p95 velocity in m/s.
+**Definition**: Statistical summary of ground-plane X-axis velocity magnitude during ACTIVE_RALLY segments. Reported as p95 velocity in m/s.
 
-**Upper-body only**: Legs are often occluded by camera angle. Use COM = weighted average of shoulder + hip keypoints.
+**⚠️ USER-CORRECTION-017 (CRITICAL — Homography Z=0 Invariant)**: Do NOT compute a "Center of Mass" from upper-body keypoints and project it through `CourtMapper`. The `cv2.getPerspectiveTransform` homography is valid ONLY for points on the ground plane (Z=0). A 1.8m-tall player's shoulders project several meters behind their actual ground position — any velocity derived from that is parallax-corrupted fiction.
 
-**Calculation**:
+**Correct input**: `target_kalman[2]` — the already-smoothed `vx_mps` from `PhysicalKalman2D`, which is anchored to `robust_foot_point` (a ground-plane point) in true court meters.
+
+**Calculation (canonical)**:
 ```python
-# Per-frame X-velocity during rally
-vx_series = np.diff(com_x_m_series) / np.diff(com_t_s_series)
-p95_vx = np.percentile(np.abs(vx_series), 95)
+# Per-frame during ACTIVE_RALLY — no homography on upper-body, no manual np.diff.
+# target_kalman = (x_m, y_m, vx_mps, vy_mps) — vx is already the ground-plane X-velocity.
+if target_state == "ACTIVE_RALLY" and target_kalman is not None:
+    vx_mps = target_kalman[2]
+    self._buffer.append(abs(vx_mps))
+
+# On flush:
+if not self._buffer:
+    return None
+p95 = float(np.percentile(self._buffer, 95))
+# emit SignalSample(value=p95, ...), then reset the buffer
 ```
+
+**Why this is immune to parallax**: the Kalman filter runs on `feet_mid_m` (from `robust_foot_point → CourtMapper.to_court_meters`), which is a ground-plane projection. The velocity output `vx_mps` therefore represents physical ground-plane motion, regardless of camera angle or player height.
+
+**Why the state gate ("ACTIVE_RALLY" only)**: during PRE_SERVE_RITUAL / DEAD_TIME, the player shuffles/walks — velocity is not a fatigue signal there. Rally-only collection is the semantically meaningful window.
 
 **Physical ranges**:
 - Elite rally: 1-4 m/s p95

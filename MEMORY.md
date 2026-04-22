@@ -360,6 +360,20 @@ Cross-session recall. Every entry is:
 - **Severity**: MEDIUM (discipline that compounds)
 - **File**: `backend/db/schema.py:22-50`.
 
+### USER-CORRECTION-017 — Homography Z=0 Invariant (CRITICAL PHYSICS GUARDRAIL)
+- **Rule**: `CourtMapper.to_court_meters()` uses `cv2.getPerspectiveTransform`, a 3x3 homography that maps a plane-to-plane transformation. It is MATHEMATICALLY VALID ONLY for points on the ground plane (Z=0). **NEVER project upper-body keypoints** (shoulders, hips, wrists, head) through `CourtMapper` — the resulting court-meters are parallax-corrupted fiction. Signals needing physical velocity in meters must consume the Kalman state (`target_kalman[2] = vx_mps`, `target_kalman[3] = vy_mps`) which is anchored to `robust_foot_point` (a ground-plane point).
+- **Why**: A 1.8m-tall player's shoulders project several meters behind their actual ground position when run through a ground-plane homography. The taller the point above Z=0, the larger the bias. A velocity time-series derived from upper-body-projected meters would show 5-10× the actual speed and drift incoherently with camera angle. Broadcast cameras change angle constantly, so the bias is non-stationary and cannot be calibrated out.
+- **How to apply**: (a) `lateral_work_rate` uses `abs(target_kalman[2])` during ACTIVE_RALLY, NOT a manually-diffed COM X series. (b) Any new signal that needs physical meters of an upper-body point should be reformulated to use (i) the Kalman velocity (already ground-plane), or (ii) image-space relative kinematics (USER-CORRECTION-012's `wrist_y - hip_y` pattern), or (iii) camera-invariant angular quantities (torso scalars, joint angles). NEVER route upper-body keypoints through `CourtMapper`.
+- **Severity**: CRITICAL (silent physics corruption of every upper-body signal)
+- **Files**: `.claude/skills/biomechanical-signal-semantics/SKILL.md` (Common Traps callout + Signal 6 rewrite); future `backend/cv/signals/lateral_work_rate.py` + any signal touching upper-body kinematics.
+
+### PATTERN-018 — Homography is a plane-to-plane map; use Kalman state for physical velocity
+- **Type**: Physics / geometry (generalizes beyond tennis)
+- **Context**: USER-CORRECTION-017. Any system using a ground-plane homography for player tracking.
+- **Lesson**: A single-camera homography `H` satisfies `[x_m, y_m, 1]^T = H @ [u, v, 1]^T` ONLY when the image point `(u, v)` corresponds to a 3D point with Z=0. For any point above the ground plane (Z > 0), the projected meters are biased by the camera's extrinsic parameters and the point's true height. The bias is NOT a constant offset — it varies with camera angle and player position within the frame. Rule of thumb: a point at height `h` in a frame captured by a camera at height `H_cam` with tilt θ will have its homography projection displaced by approximately `h / tan(θ)` meters in the direction away from the camera. For broadcast tennis (camera tilt ~20°, player shoulder height ~1.4m), this is ~3.8m of bias. The correct path for "ground-plane velocity of a player" is: `(u, v) → robust_foot_point (still image space) → CourtMapper.to_court_meters → PhysicalKalman2D → target_kalman[2:4] = (vx_mps, vy_mps)`. The Kalman output is the canonical ground-plane velocity; any further derivative/computation should consume `vx_mps/vy_mps` directly.
+- **Severity**: CRITICAL (enforces physics correctness)
+- **File**: `backend/cv/homography.py::CourtMapper`; usage convention in all future signal extractors.
+
 ---
 
 ## DAY 2 LEARNINGS (Apr 23, 2026)

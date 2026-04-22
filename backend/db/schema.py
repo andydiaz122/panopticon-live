@@ -37,6 +37,28 @@ COCO_KEYPOINTS = [
 ]
 assert len(COCO_KEYPOINTS) == 17
 
+# COCO keypoint indices (named) — used by signal extractors + robust_foot_point
+KP_LEFT_SHOULDER = 5
+KP_RIGHT_SHOULDER = 6
+KP_LEFT_WRIST = 9
+KP_RIGHT_WRIST = 10
+KP_LEFT_HIP = 11
+KP_RIGHT_HIP = 12
+KP_LEFT_KNEE = 13
+KP_RIGHT_KNEE = 14
+KP_LEFT_ANKLE = 15
+KP_RIGHT_ANKLE = 16
+
+# Court dimensions (singles). Fixed by the ITF. Do not change.
+SINGLES_COURT_LENGTH_M: float = 23.77
+SINGLES_COURT_WIDTH_M: float = 8.23
+NET_Y_M: float = SINGLES_COURT_LENGTH_M / 2.0  # = 11.885 — used by Absolute Court Half Assignment
+
+
+# ──────────────────────────── Fallback modes ────────────────────────────
+
+FallbackMode = Literal["ankle", "knee", "hip"]
+
 
 # ──────────────────────────── Pydantic base ────────────────────────────
 
@@ -44,6 +66,32 @@ class PanopticonBase(BaseModel):
     """Strict base: frozen, no surprise keys."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+# ──────────────────────────── Court corners ────────────────────────────
+
+class CornersNormalized(PanopticonBase):
+    """Four court corners in normalized [0.0, 1.0] image coordinates.
+
+    Convention (frozen):
+      top_left     = far baseline, far-left sideline
+      top_right    = far baseline, far-right sideline
+      bottom_right = near baseline, near-right sideline
+      bottom_left  = near baseline, near-left sideline
+    """
+
+    top_left: tuple[float, float]
+    top_right: tuple[float, float]
+    bottom_right: tuple[float, float]
+    bottom_left: tuple[float, float]
+
+    @field_validator("top_left", "top_right", "bottom_right", "bottom_left")
+    @classmethod
+    def _bounds(cls, v: tuple[float, float]) -> tuple[float, float]:
+        x, y = v
+        if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+            raise ValueError(f"Corner ({x}, {y}) must be in normalized [0.0, 1.0]")
+        return v
 
 
 # ──────────────────────────── Keypoints ────────────────────────────
@@ -67,6 +115,57 @@ class KeypointFrame(PanopticonBase):
             if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
                 raise ValueError(f"Keypoint ({x}, {y}) out of normalized [0.0, 1.0] bounds")
         return v
+
+
+# ──────────────────────────── Raw YOLO detection (pre-assignment) ────────────────────────────
+
+class RawDetection(PanopticonBase):
+    """One YOLO-Pose detection before we know which player it represents.
+
+    Produced by YOLO inference. Consumed by `assign_players` which splits by court half
+    (USER-CORRECTION-007) to produce PlayerDetection records.
+    """
+
+    keypoints_xyn: list[tuple[float, float]] = Field(min_length=17, max_length=17)
+    confidence: list[float] = Field(min_length=17, max_length=17)
+    bbox_conf: float = Field(ge=0.0, le=1.0)
+
+
+# ──────────────────────────── Player detection (post-assignment) ────────────────────────────
+
+class PlayerDetection(PanopticonBase):
+    """A YOLO detection attributed to a specific player via Absolute Court Half Assignment."""
+
+    player: PlayerSide
+    keypoints_xyn: list[tuple[float, float]] = Field(min_length=17, max_length=17)
+    confidence: list[float] = Field(min_length=17, max_length=17)
+    bbox_conf: float = Field(ge=0.0, le=1.0)
+    feet_mid_xyn: tuple[float, float]  # normalized [0,1], for canvas rendering
+    feet_mid_m: tuple[float, float]    # court meters, for Kalman input (USER-CORRECTION-008)
+    fallback_mode: FallbackMode        # which segment produced feet_mid (USER-CORRECTION-003)
+
+
+# ──────────────────────────── State transitions ────────────────────────────
+
+class StateTransition(PanopticonBase):
+    """Emitted by PlayerStateMachine / MatchStateMachine on every state change."""
+
+    timestamp_ms: int = Field(ge=0)
+    player: PlayerSide
+    from_state: PlayerState
+    to_state: PlayerState
+    reason: Literal["kinematic", "match_coupling", "initial"]
+
+
+# ──────────────────────────── Frame keypoints (for match_data.json) ────────────────────────────
+
+class FrameKeypoints(PanopticonBase):
+    """Per-frame keypoints for both players. Consumed by the frontend canvas loop."""
+
+    t_ms: int = Field(ge=0)
+    frame_idx: int = Field(ge=0)
+    player_a: PlayerDetection | None
+    player_b: PlayerDetection | None
 
 
 # ──────────────────────────── Signals ────────────────────────────

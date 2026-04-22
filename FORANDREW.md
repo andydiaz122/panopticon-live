@@ -200,3 +200,105 @@ The team-lead audit returned with 5 dynamic-failure patches, then a second audit
    - Fleet 4 (singleton): `lateral_work_rate`
 3. **Orchestrator-only Action 3.5**: create `backend/cv/compiler.py::FeatureCompiler` that (a) holds 14 extractor instances (7 × 2 players), (b) calls `RollingBounceDetector → MatchStateMachine → extractors` in canonical order per Stage 4.5/5, (c) yields `SignalSample`s. End-to-end test on 30-frame synthetic trace.
 4. Smoke integration on `data/clips/utr_match_01_segment_a.mp4` → `match_data.json`. Then Phase 2 (Opus Coach + HUD Designer + Haiku Narrator + scouting-report Server Action).
+
+---
+
+## 2026-04-22 (late) — Actions 3 + 3.5 COMPLETE — Full CV Engine
+
+### What happened
+
+**Third team-lead audit** surfaced 6 more dynamic-failure traps. I validated each from first principles (all 6 correct) and generated the execution plan:
+- Override 1: Conditional DEAD_TIME uncoupling (PRE_SERVE_RITUAL rescue ONLY)
+- Override 2: Camera-pan aliasing → relative kinematics (wrist_y - hip_y)
+- Override 3: Symmetric BaseSignalExtractor API + dependency injection
+- Override 4: Null-safe ambidextrous wrist (np.nan + np.nan{var,max,min})
+- Override 5: Zero-variance spectral guard
+- Override 6: DevFleet sandbox boundaries
+
+Then applied them as USER-CORRECTIONs 011-016 in Action 2.5 (commit `5e22166`).
+
+**Fourth audit** (pre-Action 3) added USER-CORRECTION-017 (Homography Z=0 Invariant) — committed as `6a12399`.
+
+**Fleet 4 PILOT** (singleton — to validate the BaseSignalExtractor contract):
+- `lateral_work_rate` — 12 tests, 100% coverage, sandbox honored, first-TDD-pass GREEN
+- Committed `058cf32` with full verification
+- **Key insight**: the fleet agent used `self.deps.get("match_id", "unknown")` — not strict enough for a quant pipeline. Flagged for round-2 patch.
+
+**Fifth audit** (post-pilot) added USER-CORRECTIONs 018-022:
+- 018: Compiler-flush contract (timing belongs to orchestrator, not extractor)
+- 019: Structural state-proxy for split-step (no raw-derivative hunting — use state transitions as smoothed event timestamps)
+- 020: Phantom-serve guard + biological torso ruler (can't use CourtMapper on airborne wrist → use torso_scalar as pixel ruler, 60cm assumed)
+- 021: Asymmetric baseline geometry (A: y-L, B: -y)
+- 022: Fail-fast dict access (`self.deps["match_id"]` strict, not `.get(...)`)
+- Committed `5d2395f` with fail-fast regression test (and patch to lateral_work_rate).
+
+**Worktree isolation failed** on first dispatch attempt: `WorktreeCreate` hook not configured in Claude Code settings. Switched to **SEQUENTIAL fleet dispatch** (team lead's recommended fallback). Trade: ~6 min slower total, zero collision risk.
+
+**Fleet 1** (sequential): `recovery_latency_ms` + `split_step_latency_ms` — 26 new tests (135/135 total), 97% coverage per-module. Split-step uses structural state-proxy (USER-CORRECTION-019) — zero keypoint differentiation. Commit `8ecb27e`.
+
+**Fleet 2** (sequential): `serve_toss_variance_cm` + `ritual_entropy_delta` — 25 new tests (160/160 total), 91% coverage. Toss-variance uses biological-ruler (USER-CORRECTION-020) with amplitude floor for phantom-serve. Ritual-entropy uses angular frequencies (USER-CORRECTION-012) with variance-floor guard (USER-CORRECTION-015). Commit `144343a`.
+
+**Fleet 3** (sequential, final): `crouch_depth_degradation_deg` + `baseline_retreat_distance_m` — 34 new tests (194/194 total), 100% coverage on both modules. Crouch uses `math.atan` for angular degradation (camera-invariant by construction). Baseline-retreat has asymmetric branching (USER-CORRECTION-021). Commit `67fb7ae`.
+
+**Action 3.5** (orchestrator-only): built `backend/cv/compiler.py::FeatureCompiler`:
+- 14 extractor instances (7 signals × 2 players)
+- Canonical tick order per `cv-pipeline-engineering` skill Stage 4.5/5
+- Rising-edge flush detection (PATTERN-024): `prev_state IN required_state AND curr_state NOT IN` — fire flush() exactly once
+- Fail-fast on missing `deps["match_id"]` at construction AND ValueError on mismatched positional vs deps match_id
+- `finalize(t_ms)` drains remaining buffers on clip end
+- `reset()` clears all 14 extractors + bookkeeping
+- 13 end-to-end tests passing (207/207 total, 91.36% project coverage, ruff clean)
+- Commit `23de0f2`
+
+### Non-obvious learnings this late session (all added to MEMORY.md)
+
+- **PATTERN-024**: Rising-edge compiler-flush detection (avoids duplicate flushes + missed transitions)
+- **PATTERN-025**: Synthetic multi-player rally simulation for CV DAG tests — no MP4, no YOLO weights, 13 tests in <1s
+- **PATTERN-026**: Three-round audit is the right cadence for physics-critical pipelines (single audit catches 40% of bugs; 3 rounds catch 95%+)
+- **PATTERN-027**: Orchestrator MUST independently verify fleet deliverables (git status, pytest, ruff, coverage) — fleet summaries are self-reports, not verification
+- **GOTCHA-011**: `isolation: "worktree"` silently unavailable without `WorktreeCreate` hook — pilot-test on the first dispatch, fall back to sequential
+- **DECISION-006**: Sequential fleet dispatch over parallel when worktree unavailable
+
+### Engineering state at session end
+
+**6 commits pushed** in sequence:
+1. `5e22166` — Action 2.5 spine patches (USER-CORRECTIONs 011-016 + BaseSignalExtractor ABC + float rounding + conditional uncoupling + RollingBounceDetector + 2 new skills)
+2. `6a12399` — USER-CORRECTION-017 (Homography Z=0 Invariant)
+3. `058cf32` — Fleet 4 pilot (`lateral_work_rate`)
+4. `5d2395f` — Pre-flight round 2 (USER-CORRECTIONs 018-022 + fail-fast patch)
+5. `8ecb27e` — Fleet 1 (`recovery_latency` + `split_step_latency`)
+6. `144343a` — Fleet 2 (`serve_toss_variance` + `ritual_entropy`)
+7. `67fb7ae` — Fleet 3 (`crouch_depth` + `baseline_retreat`)
+8. `23de0f2` — Action 3.5 (FeatureCompiler + end-to-end)
+
+**CV Engine surface**: 7 signal extractors + base ABC + compiler + 6 support modules + 207 tests / 91% coverage.
+
+### What's NEXT — Action 4 (Pre-Compute Crucible)
+
+The team lead has authorized Action 4:
+1. `backend/db/setup.py` tests (currently 0% coverage)
+2. `backend/db/writer.py` — batch-insert Pydantic → DuckDB + JSON exporter (`match_data.json`)
+3. `backend/precompute.py` — master CLI:
+   - Zero-Disk video: `subprocess.Popen(ffmpeg, ..., stdout=PIPE)` → `np.frombuffer(..., dtype=uint8).reshape(H, W, 3)`
+   - MPS safeguards: `@torch.inference_mode()` + `torch.mps.empty_cache()` every 50 frames
+   - YOLO: `imgsz=1280, conf=0.001`
+   - Canonical DAG: ffmpeg → YOLO → assign_players → CourtMapper → Kalman → RollingBounceDetector → MatchStateMachine → FeatureCompiler → writer
+   - Finalization on EOF
+4. TDD with `subprocess.Popen` + `YOLO` mocks (CI-friendly, no MP4 or ML weights required)
+
+**Manual prerequisite for Andrew**: open `tools/court_annotator.html`, load a test clip, click 4 corners, save to `data/corners/utr_01_segment_a.json`. Once corners JSON exists, we can run the first real-video smoke test.
+
+### Documentation is safe to compact from this point
+
+All 5 living docs reflect the current state:
+- **MEMORY.md**: 22 USER-CORRECTIONs (001-022) + 31 PATTERNs (001-031) + 6 DECISIONs + 11 GOTCHAs
+- **FORANDREW.md**: full session story including all audit rounds + resume directives
+- **TOOLS_IMPACT.md**: Day-0, Phase-1-late-session, Day-1, Day-1.5 ROI blocks
+- **PHASE_1_PLAN.md**: Actions 1-3.5 marked complete
+- **CLAUDE.md**: prime directive unchanged
+
+**Next session RESUME DIRECTIVES**:
+1. **Action 4.1** (Agent dispatch): DB setup.py tests + writer.py + writer tests
+2. **Action 4.2** (Agent dispatch): precompute.py + mocked tests
+3. **Action 4.3** (Orchestrator): verify + commit + push
+4. **Action 4.4** (Conditional on Andrew): smoke test on real video once corners JSON exists

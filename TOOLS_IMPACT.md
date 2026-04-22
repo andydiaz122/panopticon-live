@@ -234,3 +234,70 @@ At end of each day, answer:
 2. **Which tool did nothing?** → Move to SKILLS NOT USED with reason
 3. **Did I skip a tool I should have used?** → Anti-pattern #18; note and use tomorrow
 4. **What non-obvious pattern emerged?** → Extract to `.claude/skills/` via `/skill-create`
+
+---
+
+## Day 1.5 (Apr 22, late — Actions 3 + 3.5 COMPLETE — full CV Engine)
+
+### HIGH-IMPACT tools/patterns this session
+
+| Tool / Pattern | Outcome | ROI | Notes |
+|---|---|---|---|
+| **Three-round team-lead audit** (CTO review pattern) | Surfaced USER-CORRECTIONs 017 (Homography Z=0), 018-022 (compiler-flush, structural state-proxy, phantom-serve, asymmetric baseline, fail-fast) | **MASSIVE** — prevented ~11 silent physics/data-integrity bugs before implementation | Two-round was right for Action 2.5; three-round was right for Action 3 (pilot → pre-flight round 2 → fleet dispatch). PATTERN-026 captures this cadence. |
+| **Sequential fleet dispatch** (after worktree isolation failed) | Fleets 1, 2, 3, 4-pilot each ran in ~2 min with full gate verification between; zero collisions | **HIGH** (risk mitigation) | Trade: ~6 min extra total vs. parallel. DECISION-006 + GOTCHA-011 capture this. Pilot-test `isolation: "worktree"` on the first dispatch to detect hook availability. |
+| **Fleet 4 PILOT before scaling** (team-lead Option C) | Validated BaseSignalExtractor ABC works cleanly, sandbox discipline held, found the `.get("match_id", "unknown")` leak → fixed pre-Fleet-1 | **HIGH** | Pattern: always pilot a new contract on the SMALLEST independent unit (singleton) before scaling to the N-fleet sprint. Pilot caught a fail-fast violation that would have propagated to 6 more extractors. |
+| **Independent orchestrator verification** (PATTERN-027) | After EACH fleet, ran `git status`, `pytest tests/`, `ruff check`, + coverage. Zero fleet summaries were blindly trusted. | **CRITICAL** (trust discipline) | Cost: ~15 sec per verification. Benefit: catches silent agent self-reports. All 4 fleets passed first-try, but the verification gate would have caught regressions. |
+| **Rising-edge compiler-flush pattern** (PATTERN-024) | FeatureCompiler fires `flush()` EXACTLY ONCE on state-exit — no duplicates, no misses | **HIGH** | Generalizes to any pub/sub pipeline where one-shot emission on state transition is needed. Same structural idea as USER-CORRECTION-011 conditional uncoupling. |
+| **Synthetic rally simulation** (PATTERN-025) | 13 end-to-end tests for FeatureCompiler validate 14 extractors + DAG in <1 second, no MP4, no ML weights | **HIGH-ROI** | Build `_detection(player, hip_y, wrist_y, shoulder_y, feet_mid_m)` + `_frame(t_ms, a_kwargs, b_kwargs)` helpers. Three-phase scenario (PSR → RALLY → DEAD) exercises every extractor's state gate + flush timing. |
+| **Pydantic `@field_serializer` inheritance through nested models** (PATTERN-030) | Confirmed 4-decimal rounding propagates through `MatchData` → `SignalSample[]` automatically | HIGH (payload-bloat prevention) | Next Pydantic upgrade could silently change this — add a regression test in `test_writer.py` (Action 4.1). |
+| **ALL_EXTRACTOR_CLASSES stable-order tuple** | Deterministic per-tick sample emission order for testing; compiler instantiates `len(classes) × 2 = 14` instances | MEDIUM | Allows integration tests to assert `(signal_name, player)` tuples in a predictable order. |
+| **Fail-fast `self.deps["match_id"]`** (USER-CORRECTION-022) | Missing match_id raises `KeyError` during orchestration setup instead of silently corrupting DuckDB PKs | **HIGH** (data integrity) | Regression test uses `pytest.raises(KeyError, match="match_id")`. |
+
+### Skills that FIRED during Actions 3 + 3.5
+
+- `signal-extractor-contract` (authored in Action 2.5, USED 7× — once per signal extractor)
+- `temporal-kinematic-primitives` (referenced in Fleet 2 ritual_entropy for Lomb-Scargle angular frequencies)
+- `biomechanical-signal-semantics` (referenced + UPDATED with USER-CORRECTIONs 019-021 math contracts for Fleets 1-3)
+- `cv-pipeline-engineering` (referenced — FeatureCompiler follows Stage 4.5/5 ordering)
+- `duckdb-pydantic-contracts` (referenced for schema modifications)
+- `match-state-coupling` (referenced for USER-CORRECTION-011 conditional uncoupling)
+- `physical-kalman-tracking` (referenced for USER-CORRECTION-017 Z=0 + Kalman-meter semantics)
+- `panopticon-hackathon-rules` (prime directive)
+
+### Skills QUEUED but NOT used in Actions 3 + 3.5
+
+- `opus-47-creative-medium`, `claude-api` (Phase 2: Opus Coach + HUD Designer + Haiku Narrator)
+- `vercel-ts-server-actions`, `vercel:nextjs`, `vercel:shadcn`, `vercel:react-best-practices` (Phases 3-4)
+- `react-30fps-canvas-architecture`, `2k-sports-hud-aesthetic`, `awwwards-animations` (Phase 3)
+- `e2e-testing`, `e2e-runner` (Phase 4)
+- `hackathon-demo-director` (Phase 5 — record + submit)
+- `topological-identity-stability` (Action 2 code stable — no re-use)
+
+### Agents that FIRED during Actions 3 + 3.5
+
+- `general-purpose` agent × 4 (Fleet 4 pilot + Fleets 1/2/3, all with `mode: "acceptEdits"`)
+- Orchestrator (self) did Action 3.5 FeatureCompiler inline — no fleet needed (single file, needed full context of all 7 signal classes)
+
+### Anti-patterns dodged this session
+
+- **#33 (plan-mode inheritance)** — every fleet dispatched with `mode: "acceptEdits"`; zero plan-mode stalls
+- **#29 (redundant tool inventory)** — used system-reminder tool list directly for orchestration
+- **#18 (ignoring skills)** — 8 skills referenced across the session, including 2 authored in Action 2.5
+- **#30 (project agents without Write)** — all agents dispatched with `mode: "acceptEdits"`, not "plan"
+- **Trust-but-verify** — every fleet's self-report was independently re-verified with pytest + ruff + git status + coverage
+
+### Meta-learning this session
+
+**Three complementary engineering disciplines compounded today**:
+
+1. **Audit-first, code-second** (PATTERN-026): three audit rounds surfaced 11 subtle bugs that zero amount of unit-testing would have caught. Audit is orthogonal to tests — tests verify behavior on KNOWN inputs; audits verify the input-behavior contract itself.
+
+2. **Contracts enable parallelism even without parallel execution** (PATTERN-014, 024): the `BaseSignalExtractor` ABC + compiler-flush contract meant 4 fleets could build 7 signals INDEPENDENTLY (even though we ran them sequentially). Once the contract lands, the fleets don't need to coordinate — they inherit + obey.
+
+3. **Independent verification is free** (PATTERN-027): 15 seconds of orchestrator-level verification per fleet is negligible overhead that catches silent self-report issues. Never ship agent-written code without re-running the gates locally.
+
+---
+
+## Day 2 (Apr 23 — Action 4: Pre-Compute Crucible PENDING)
+
+(To be populated as Action 4 agents dispatch for DB writer + precompute CLI.)

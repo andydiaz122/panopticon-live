@@ -447,6 +447,96 @@ Cross-session recall. Every entry is:
 - **Severity**: HIGH (data integrity)
 - **File**: Applies to every `BaseSignalExtractor` subclass; `lateral_work_rate.py:70` is the reference.
 
+### PATTERN-024 — Rising-Edge Compiler-Flush Detection (state-exit is the trigger, not state-entry)
+- **Type**: Orchestrator architectural pattern
+- **Context**: Implementing USER-CORRECTION-018 in `backend/cv/compiler.py::FeatureCompiler.tick()`.
+- **Lesson**: When orchestrating N state-gated extractors, the flush signal is NOT "state is no longer required" (steady-state check); it's the rising EXIT edge: `prev_state IN required_state AND curr_state NOT IN required_state`. Without the `prev in` check, you'd flush every tick the player was out of state (duplicate flushes). Without the `curr not in` check, you'd never flush (steady-state required doesn't trigger). The pattern: capture `prev_states` dict BEFORE advancing, detect the edge in a single pass, call `flush(t_ms)` exactly once. Same structural pattern as USER-CORRECTION-011 (conditional DEAD_TIME uncoupling) — both use rising-edge detection to prevent repeated firing. Generalizes to any pipeline where "one-shot emission on state transition" is needed.
+- **Severity**: HIGH (architectural correctness)
+- **File**: `backend/cv/compiler.py:142-156`.
+
+### PATTERN-025 — Synthetic Multi-Player Rally Simulation for End-to-End CV Tests
+- **Type**: Testing pattern
+- **Context**: `tests/test_cv/test_feature_compiler_end_to_end.py` validates 14 extractors + DAG without real YOLO inference.
+- **Lesson**: For CV pipeline integration tests, construct a 3-phase synthetic scenario: (1) PRE_SERVE_RITUAL with Player A's wrist oscillating at 2Hz against a static hip (real toss amplitude), Player B static (phantom-serve returner); (2) transition both to ACTIVE_RALLY (10 ticks of motion); (3) transition both to DEAD_TIME. Assert SignalSamples emitted with correct `(signal_name, player)` pairs at each transition. This approach tests (a) state-gated ingest routing, (b) compiler-flush contract, (c) per-signal math correctness end-to-end, (d) target/opponent symmetry — all WITHOUT needing MP4 files or ML weights. 13 tests cover the full DAG in <1 second. Pattern: build `_detection(player, hip_y, wrist_y, shoulder_y, feet_mid_m)` + `_frame(t_ms, a_kwargs, b_kwargs)` helpers for minimal boilerplate.
+- **Severity**: HIGH-ROI (compounds all future signal/compiler changes)
+- **File**: `tests/test_cv/test_feature_compiler_end_to_end.py:45-88` (helpers), whole file (13 tests).
+
+### PATTERN-026 — Three-Round Audit is the Right Cadence for Physics-Critical CV Pipelines
+- **Type**: Meta-process (engineering discipline)
+- **Context**: Team-lead audits revealed 11 USER-CORRECTIONs (012-022) across 3 audit rounds over Actions 2.5, 3-preflight, 3-round-2-preflight, BEFORE implementation ran.
+- **Lesson**: For anything involving physics invariants (homography planes, kinematic units, camera-invariance), a single round of audit is insufficient. Round 1 catches obvious bugs (Lomb-Scargle Hz-vs-rad/s, bounce deadlock). Round 2 catches subtle bugs from round-1 fixes (conditional-uncoupling, camera pan, NaN safety). Round 3 catches integration-level bugs (Z=0 homography, fleet collision risk, fail-fast). **Each round's refinements compound** — skipping audits would have produced silent data corruption on real video. Schedule: audit → patch → test → re-audit → patch → test → re-audit. For hackathon-pace work, cap at 3 rounds and commit.
+- **Severity**: HIGH (process discipline)
+- **File**: Applies meta-level to any physics-critical work; session-log in FORANDREW.md captures the full audit chain.
+
+### PATTERN-027 — Independent Orchestrator Verification After Each Fleet (do NOT trust the agent summary)
+- **Type**: Agent orchestration discipline
+- **Context**: After each fleet returned, orchestrator ran its own `git status`, `pytest tests/`, `ruff check`, + coverage verification. All 4 fleets passed first-try, but verification discipline means this was luck, not guaranteed.
+- **Lesson**: Fleet agents return summaries describing what they wrote. The summary is the agent's SELF-REPORT, not an independent verification. Orchestrator MUST run: (1) `git diff --name-only` to verify sandbox compliance, (2) full pytest suite (not just the new file's tests — side-effects in shared fixtures can break other modules), (3) ruff on full project, (4) coverage on new modules. Zero additional token cost vs trusting the summary, and catches the cases where the agent wrote the code but didn't actually run all gates. Anti-pattern to avoid: `"agent said 100% coverage"` → ship without re-verifying.
+- **Severity**: HIGH (trust discipline)
+- **File**: Applies to every `/devfleet`-style orchestration. Session-log shows clean `git status` verification after each of Fleets 4 (pilot), 1, 2, 3.
+
+### DECISION-006 — Sequential Fleet Dispatch (trade-off: 6 min slower, zero collision risk)
+- **Type**: Decision
+- **Context**: Worktree isolation hooks (`WorktreeCreate`) unavailable on this Claude Code installation; Agent tool's `isolation: "worktree"` returns "not in a git repository and no WorktreeCreate hooks configured" despite `git rev-parse --show-toplevel` succeeding. Could configure hooks manually, but complexity exceeds ~6 min total savings.
+- **Rationale**: Parallel agents on the SAME working directory race on: (a) `pytest` reading mid-edit test files, (b) `git status` / `git diff` commands, (c) shared `__pycache__`. Each race produces false pytest failures that are hard to distinguish from real bugs. Sequential dispatch: each fleet completes (~2 min) before next starts. Total added time: ~6 min across 3 fleets. Acceptable trade-off.
+- **How to apply**: For any future `/devfleet` or multi-agent code task where worktree isolation is not confirmed working, run sequentially with `isolation: undefined`. Only switch to parallel if WorktreeCreate hooks are verified functional.
+- **Files**: Applies to orchestration policy.
+
+### GOTCHA-011 — `isolation: "worktree"` fails silently when WorktreeCreate hook is missing
+- **Type**: Gotcha
+- **Context**: Tried to dispatch Fleet 4 pilot with `isolation: "worktree"`. Error: "Cannot create agent worktree: not in a git repository and no WorktreeCreate hooks are configured."
+- **Lesson**: The `isolation: "worktree"` parameter in the Agent tool depends on a `WorktreeCreate` hook configured in Claude Code `settings.json`. Without the hook, the feature is effectively unavailable — even in a clean git repo. Workarounds: (a) configure the hook manually if you need parallel isolation; (b) dispatch sequentially without isolation (our choice); (c) manually `git worktree add` + change CWD if truly needed. Don't assume `isolation` will "just work" on a fresh machine.
+- **Severity**: MEDIUM (orchestration feature unavailable)
+- **File**: Applies to Claude Code Agent tool invocations.
+
+---
+
+## DAY 1.5 LEARNINGS (Apr 22, 2026 late — Action 3.5 FeatureCompiler + Action 4 Pre-Compute Forge)
+
+### PATTERN-028 — Mocked YOLO + Mocked subprocess.Popen for Zero-Dependency CI Tests
+- **Type**: Testing pattern (CI-friendly CV pipeline)
+- **Context**: `backend/precompute.py` integration test must run on GitHub Actions runners without ffmpeg, without MP4 files, without PyTorch MPS. Approach: pytest monkeypatches `subprocess.Popen` to yield N pre-constructed bytes of `bgr24` raw video + monkeypatches `ultralytics.YOLO` to return canned `Results` objects with synthetic keypoint tensors.
+- **Lesson**: For any CI-tested pipeline that touches external binaries (ffmpeg, ML weights, GPU drivers), the test strategy is: inject mock objects at the module-import boundary. Pattern:
+  ```python
+  def test_precompute_end_to_end(tmp_path, monkeypatch):
+      fake_proc = MagicMock()
+      fake_proc.stdout.read.side_effect = [b"\x00" * (1920*1080*3)] * 10 + [b""]
+      monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: fake_proc)
+      monkeypatch.setattr("backend.cv.pose.YOLO", FakeYOLO)
+      # ... run precompute, assert DuckDB + match_data.json emitted
+  ```
+  Gotcha: mocking MUST happen at the import site, not the source (`backend.cv.pose.YOLO`, not `ultralytics.YOLO`).
+- **Severity**: HIGH (enables CI coverage of end-to-end pipeline)
+- **File**: `tests/test_cv/test_precompute.py` (Action 4.2 target).
+
+### PATTERN-029 — Idempotent DuckDB DDL + Test Setup
+- **Type**: Database pattern
+- **Context**: `backend/db/schema.py::SCHEMA_DDL` uses `CREATE TABLE IF NOT EXISTS`. `backend/db/setup.py` runs this against a DuckDB file.
+- **Lesson**: DuckDB DDL with `IF NOT EXISTS` can run repeatedly without error — this is the correct idempotent pattern for pre-compute pipelines where the DB may already exist. Tests should (a) use `tmp_path` for isolated `.duckdb` files per test, (b) call setup TWICE in a test to verify idempotence, (c) query `information_schema.tables` to verify all expected tables exist post-setup. Never use in-memory `:memory:` for tests that verify persistence — DuckDB's in-memory mode has different concurrency semantics than file-mode.
+- **Severity**: MEDIUM (reproducibility)
+- **File**: `backend/db/setup.py`, `tests/test_db/test_setup.py` (Action 4.1 target).
+
+### PATTERN-030 — `@field_serializer` Float Rounding Propagates Through Nested Pydantic Models
+- **Type**: Pydantic v2 behavior (non-obvious on first read)
+- **Context**: `match_data.json` export uses `model_dump_json(by_alias=True)` on a root `MatchData` model that nests `SignalSample[]`, `KeypointFrame[]`, etc. Each inner model has its own `@field_serializer`s (USER-CORRECTION-015).
+- **Lesson**: Pydantic v2's `@field_serializer` fires even when the model is nested inside another model's `model_dump_json()` call — no manual work needed. The 4-decimal rounding applies to every inner float automatically. VERIFY this with a test that constructs a nested payload with full-precision floats, calls `.model_dump_json()` on the outer, parses, and asserts the inner floats are rounded. Without verification, a future Pydantic upgrade could silently change this behavior and bloat `match_data.json`.
+- **Severity**: HIGH (payload-size regression prevention)
+- **File**: `backend/db/writer.py::dump_match_data_json` (Action 4.1 target).
+
+### PATTERN-031 — Pipeline DAG Ordering Must Be Re-Verified Each Major Change
+- **Type**: Process
+- **Context**: After each of Actions 2, 2.5, 3, 3.5, the canonical per-tick DAG (ffmpeg → YOLO → assign_players → CourtMapper → Kalman → RollingBounceDetector → MatchStateMachine → FeatureCompiler) was re-checked. Each layer has preconditions that compound: Kalman requires meters (not pixels); BounceDetector requires hip+wrist availability; MatchStateMachine requires bounce bool AND speed; FeatureCompiler requires both target + opponent states simultaneously.
+- **Lesson**: Whenever a new layer is added to a multi-stage pipeline, redraw the full DAG and verify each edge. For PANOPTICON: the DAG is documented in 3 places — (a) `cv-pipeline-engineering` skill (canonical), (b) `backend/cv/compiler.py` docstring, (c) `backend/precompute.py` main loop. These MUST stay in sync; drift between them is a bug. For Action 4, `precompute.py` is the first time all 8 layers run together on a single frame — TDD validates the DAG end-to-end.
+- **Severity**: HIGH (architectural consistency)
+- **File**: Will land in `backend/precompute.py` (Action 4.2).
+
+### USER-CORRECTION-023 (implicit) — Sequential Dispatch When Worktree Unavailable
+- **Rule**: When the Agent tool's `isolation: "worktree"` fails due to missing `WorktreeCreate` hook, default to sequential fleet dispatch. Do NOT attempt parallel without isolation — file-level races (pytest mid-edit, __pycache__ contention, git index locks) produce false-negative failures.
+- **Why**: The orchestrator's trust gate is independent verification (`git status`, full `pytest`, ruff, coverage). Sequential preserves that gate; parallel without isolation would break it.
+- **How to apply**: Check `isolation: "worktree"` once on a pilot dispatch. If the error returns, switch to `mode: "acceptEdits"` only (no isolation) and run fleets sequentially. Cost: ~2 min per fleet × N fleets extra time.
+- **Severity**: MEDIUM (orchestration policy)
+- **File**: Applies to this project's `/devfleet` pattern.
+
 ---
 
 ## DAY 2 LEARNINGS (Apr 23, 2026)

@@ -1,14 +1,18 @@
 # PHASE 1 PLAN — CV Spine + 7 Signals (Revised after 2026-04-21 Team Lead Review)
 
-**Status** (updated 2026-04-21 end-of-day):
-- **Action 1**: ✅ **COMPLETE** (commit `db2a1e9`) — MEMORY.md has 10 USER-CORRECTIONs + 13 PATTERNs; 6 existing skills updated; 4 new specialized skills created (`physical-kalman-tracking`, `topological-identity-stability`, `match-state-coupling`, `vercel-ts-server-actions`); 4 agents updated; FORANDREW.md + ORCHESTRATION_PLAYBOOK.md revised.
-- **Action 2**: ✅ **CODE COMPLETE** (commit `cd52758`) — 45/45 tests GREEN, 82.75% coverage, ruff clean.
-  - `backend/cv/homography.py` (11 tests)
-  - `backend/cv/pose.py` (14 tests)
-  - `backend/cv/kalman.py` (8 tests)
-  - `backend/cv/state_machine.py` (12 tests)
-  - `backend/db/schema.py` extended with `CornersNormalized`, `RawDetection`, `PlayerDetection`, `StateTransition`, `FrameKeypoints`
-- **Action 3**: ⛔ **GATED** on team-lead review of the spine. Parallel signal sprint begins ONLY after approval.
+**Status** (updated 2026-04-22 late session):
+- **Action 1**: ✅ **COMPLETE** (commit `db2a1e9`) — MEMORY.md: 10 USER-CORRECTIONs + 13 PATTERNs; 6 existing skills updated; 4 new specialized skills created; 4 agents updated; FORANDREW.md + ORCHESTRATION_PLAYBOOK.md revised.
+- **Action 2**: ✅ **COMPLETE** (commit `cd52758`) — 45/45 tests, 82.75% coverage, ruff clean.
+- **Action 2.5** (Citadel override patch sprint): ✅ **COMPLETE** (commit `5e22166`) — USER-CORRECTIONs 011-016 integrated; BaseSignalExtractor ABC, @field_serializer float rounding, conditional DEAD_TIME uncoupling, RollingBounceDetector; 96/96 tests, 87.68% coverage, ruff clean, python-reviewer 1H+2M fixed.
+- **Action 3 pre-flight USER-CORRECTION-017** (Homography Z=0 Invariant): ✅ **COMPLETE** (commit `6a12399`).
+- **Fleet 4 PILOT** (`lateral_work_rate`): ✅ **COMPLETE** (commit `058cf32`) — 12 tests, 100% coverage.
+- **Action 3 pre-flight round 2** (USER-CORRECTIONs 018-022): ✅ **COMPLETE** (commit `5d2395f`) — compiler-flush contract, structural split-step, phantom-serve guard + biological ruler, asymmetric baseline geometry, fail-fast dict access. 109/109 tests.
+- **Action 3 sequential fleet sprint**: ✅ **COMPLETE** — 4 fleets dispatched sequentially (worktree isolation unavailable → DECISION-006).
+  - Fleet 1 (`recovery_latency_ms` + `split_step_latency_ms`, commit `8ecb27e`): 135/135 tests, 97% coverage.
+  - Fleet 2 (`serve_toss_variance_cm` + `ritual_entropy_delta`, commit `144343a`): 160/160 tests, 91% coverage.
+  - Fleet 3 (`crouch_depth_degradation_deg` + `baseline_retreat_distance_m`, commit `67fb7ae`): 194/194 tests, 100% coverage.
+- **Action 3.5** (FeatureCompiler integration): ✅ **COMPLETE** (commit `23de0f2`) — 13 end-to-end tests, 207/207 total, 91.36% project coverage, ruff clean.
+- **Action 4** (Pre-Compute Crucible): 🟡 **IN PROGRESS** — DB writer + precompute CLI with mocked tests.
 
 **Owner agents**: `documentation-librarian`, `cv-pipeline-engineer`, `test-forensic-validator`, `vercel-deployment-specialist`.
 

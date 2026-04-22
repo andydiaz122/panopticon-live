@@ -598,6 +598,27 @@ Cross-session recall. Every entry is:
 - **Lesson**: Treat Opus/Haiku output the same way you'd treat a third-party API response: hostile data. For each agent: try the API call; catch-all exception → error record. Parse JSON (if applicable); catch JSONDecodeError → fallback record. Validate via Pydantic; catch ValidationError → fallback record. Each layer has its own error marker in the text/commentary field so debugging later can identify WHICH layer failed. See `backend/agents/hud_designer.py` for the 3-layer pattern.
 - **Severity**: HIGH (resilience)
 
+### USER-CORRECTION-026 — Court-Corner Annotation Intent Must Match CourtMapper's Canonical Frame
+- **Rule**: When annotating court corners via `tools/court_annotator.html`, the operator can click EITHER the singles sideline (inner 8.23m) OR the outer doubles-alley perimeter (10.97m). These are physically different courts; the canonical rectangle `CourtMapper` maps to must match the intent. Pass `--doubles-corners` to `precompute.py` when the annotation traces the outer doubles lines.
+- **Why**: `CourtMapper` constructs a homography from `corners_pixels → [(0,0), (W,0), (W,L), (0,L)]` where `W = court_width_m`. If `W = 8.23m` (singles default) but the corners actually span 10.97m of real court, every lateral measurement compresses by a factor of 8.23/10.97 = 0.75. `baseline_retreat_distance_m` is unaffected (length is 23.77m for both), but `lateral_work_rate`, Kalman `vx_mps`, and any signal derived from `feet_mid_m[0]` are all ~25% under-reported.
+- **How to apply**: When running the pipeline, check how the corners were annotated. If the operator clicked the OUTSIDE of the doubles alleys, pass `--doubles-corners`. If they clicked the singles sideline (inside the alleys), use the default. Document the choice in `data/corners/<match_id>_corners.json` notes.
+- **Severity**: HIGH (physical-scale correctness; affects every lateral signal)
+- **File**: `backend/cv/homography.py:CourtMapper(court_width_m=)`, `backend/precompute.py:--doubles-corners`
+
+### PATTERN-037 — Per-Instance Override + Class-Attribute Default for Back-Compat
+- **Type**: Design
+- **Context**: CourtMapper had `COURT_WIDTH_M` as a CLASS attribute (8.23m). Adding a doubles option could have either (a) replaced the class attribute with an instance attribute (breaks every existing test that asserts `CourtMapper.COURT_WIDTH_M == 8.23`), (b) subclassed to `DoublesCourtMapper` (duplicates logic), or (c) added a per-instance override that defaults to the class attribute.
+- **Lesson**: Option (c) is the surgical fix. `court_width_m: float | None = None` parameter; when None, use `self.COURT_WIDTH_M` class attribute. All existing tests pass unchanged (they never pass the override), AND new tests exercise the override. Zero regression risk. Same pattern applies whenever you add a configurable dimension to an existing class that had it hardcoded.
+- **File**: `backend/cv/homography.py:CourtMapper.__init__` — 3 lines changed to add the override.
+- **Severity**: MEDIUM (reusable for any "make previously-hardcoded constant tunable" refactor)
+
+### GOTCHA-014 — Smoke Test on Real Video Reveals Player-B Starvation
+- **Symptom**: 1800-frame smoke run on `utr_match_01_segment_a.mp4` produced 37 signals ALL for Player A. Zero signals for Player B despite 381 state transitions being emitted.
+- **Root cause hypothesis**: Broadcast tennis camera angle places the far player (B) at the top of the frame with lower keypoint confidence + heavier occlusion (net blocks ankles/knees most frames). State machine may keep B in `PRE_SERVE_RITUAL` indefinitely when Kalman never converges; signals gated by `ACTIVE_RALLY` or long-window `PRE_SERVE_RITUAL` never fire for B. This is a known Phase 1 limitation (USER-CORRECTION-003 far-court occlusion fallback chain mitigates but doesn't eliminate).
+- **How to verify**: After any real-video smoke run, check `SELECT player, COUNT(*) FROM signals GROUP BY player` in DuckDB. If B is 0, either (a) the clip genuinely doesn't show B in a rally state (server's POV clip), (b) the Kalman warm-up threshold needs lowering for far-court tracks, or (c) the fallback chain is tripping on confidence floors.
+- **Severity**: MEDIUM (Phase 1 limitation carried forward; acceptable for Phase-2 demo but worth flagging in FORANDREW.md)
+- **File**: Manifests in the output of `backend/precompute.py` on real video; NOT visible in synthetic tests (which construct both players with confidence=0.9).
+
 ### DECISION-007 — HUDLayoutSpec Stays JSON-Only (No DuckDB Table)
 - **Context**: Coach and Narrator insights have DuckDB tables; HUD layouts do not.
 - **Why**: Layouts are low-frequency (one per match-state transition, ~10 per clip) and consumed exclusively by the frontend via match_data.json. Storing them in DuckDB too would be redundancy for zero read-path benefit.

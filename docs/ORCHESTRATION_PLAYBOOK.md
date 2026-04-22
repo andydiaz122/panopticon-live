@@ -106,19 +106,26 @@ They form a "virtual team" where each member owns one domain:
 
 ---
 
-## Phase 2 — Thu Apr 23 — Opus Agents + SSE Replay
+## Phase 2 — Thu Apr 23 — Opus Agents (REVISED per USER-CORRECTIONs 002, 006)
 
-**Owner**: `agent-orchestrator`
+**Owner**: `opus-coach-architect`
 
-**Activities:**
-- `backend/agents/tools.py` — deterministic signal-query tool schemas
+**Activities (OFFLINE Python, runs inside `precompute.py`):**
+- `backend/agents/tools.py` — deterministic signal-query tool schemas (Python, for offline use)
 - `backend/agents/system_prompt.py` — 5-10K biomech primer (seeded from Perplexity citations)
-- `backend/agents/opus_coach.py` — Opus 4.7 Reasoner (extended thinking + tools + prompt cache)
-- `backend/agents/hud_designer.py` — Opus 4.7 Designer (generative UI JSON)
-- `backend/agents/haiku_narrator.py` — Haiku 4.5 per-second beats
-- `backend/agents/scouting_report.py` — Claude Managed Agent (long-running PDF)
-- `backend/api/stream.py` — FastAPI SSE endpoint, wallclock-paced DuckDB replay
-- `backend/api/agents.py` — coach / HUD-designer / scouting-report endpoints
+- `backend/agents/opus_coach.py` — Opus 4.7 Reasoner pre-computes `CoachInsight` records tagged `timestamp_ms`
+- `backend/agents/hud_designer.py` — Opus 4.7 Designer pre-computes `HUDLayoutSpec` records tagged `timestamp_ms`
+- `backend/agents/haiku_narrator.py` — Haiku 4.5 pre-computes per-second `NarratorBeat` records
+
+**Activities (LIVE on Vercel TypeScript, Phase 3+4):**
+- `dashboard/app/actions/scouting-report.ts` — Next.js Server Action using `@anthropic-ai/sdk`
+- `dashboard/app/api/scouting-report-status/route.ts` — polling endpoint for long-running Managed Agent
+- See `vercel-ts-server-actions` skill for canonical implementation
+
+**Activities REMOVED (cancelled per USER-CORRECTION-006):**
+- ~~`backend/api/stream.py`~~ — no FastAPI SSE at runtime
+- ~~`backend/api/agents.py`~~ — no Python agent endpoints on Vercel
+- ~~`requirements-prod.txt`~~ — Python vanished from Vercel deploy
 
 **Tools that fire:**
 - `claude-api` skill — prompt caching + extended thinking patterns

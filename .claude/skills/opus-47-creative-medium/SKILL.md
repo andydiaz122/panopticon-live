@@ -7,6 +7,17 @@ description: Using Claude Opus 4.7 as a creative medium (not just a tool) for PA
 
 The hackathon's 25% "Opus 4.7 Use" criterion rewards creative, multi-faceted integration. A basic "send prompt, get response" loop scores below average. PANOPTICON LIVE shows Opus playing THREE roles + one Managed Agent — that's the differentiator.
 
+## CANONICAL EXECUTION TIMING (USER-CORRECTIONS-002, 006)
+
+**Opus Reasoner (Coach), Opus Designer (HUD), and Haiku Narrator run OFFLINE during `precompute.py`**, never during demo playback. Their outputs are timestamp-tagged and written into `match_data.json` alongside the CV signals. The frontend replays them synchronized to `videoRef.currentTime`.
+
+**The ONLY live Anthropic call at demo time is the Scouting Report Managed Agent**, invoked via a Next.js Server Action using `@anthropic-ai/sdk` (TypeScript). See `vercel-ts-server-actions` skill.
+
+Why this matters:
+- Opus extended thinking takes 5-15s per invocation. A tennis point is 1.5s. Live Opus = commentary arriving 10s AFTER the point. UI would feel broken.
+- Pre-compute = unlimited thinking budget; commentary perfectly aligned with video playback via typewriter effect.
+- Zero network risk at demo time (except the scouting-report button, which users choose to wait for).
+
 ## The Three Roles
 
 ### Role 1 — Reasoner (opus_coach.py)
@@ -101,27 +112,37 @@ response = await client.messages.create(
 )
 ```
 
-### Role 4 (Bonus) — Managed Agent (Scouting Report)
+### Role 4 (Bonus) — Managed Agent (Scouting Report) — LIVE on Vercel via TS SDK
 
 **What it does**: Long-running task — generates a full PDF scouting report over 30-90 seconds.
 
 **Why it's creative**: Exercises Claude Managed Agents ($5K "Best Use" prize target).
 
-**Pattern**:
-```python
-from anthropic.beta.managed_agents import ManagedAgent  # placeholder — use current SDK API
+**Execution**: LIVE on Vercel via Next.js Server Action + `@anthropic-ai/sdk` (TypeScript). Python is gone from Vercel (USER-CORRECTION-006). The full wiring is in the `vercel-ts-server-actions` skill.
 
-agent = ManagedAgent(
-    name="scouting-report-generator",
-    tools=[...],
-    system_prompt=SCOUTING_SYSTEM_PROMPT,
-)
-run = await agent.start(input={"match_id": match_id})
-# Poll or webhook for completion
-pdf_bytes = await run.get_result()
+**Minimal pattern** (TypeScript in a Server Action):
+```ts
+"use server";
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic();
+const agent = await client.beta.agents.create({
+  name: "panopticon-scouting-report",
+  model: { id: "claude-opus-4-7" },
+  system: SCOUTING_SYSTEM_PROMPT,
+  tools: [
+    { type: "agent_toolset_20260401",
+      default_config: { permission_policy: { type: "always_allow" } } },
+  ],
+});
+const run = await client.beta.sessions.create({
+  agent_id: agent.id,
+  input: `Generate scouting report for match ${match_id}, focused on player ${focus}.`,
+});
+// Return run.id to the client; client polls getScoutingReportStatus every ~2s.
 ```
 
-Consult `context7` for the latest Managed Agents Python SDK surface before implementation.
+All pre-computed CoachInsights + HUDLayoutSpecs + signal vectors from `match_data.json` (or DuckDB snapshot bundled with the deploy) are available to the agent's tools.
 
 ## Prompt Caching (Mandatory)
 

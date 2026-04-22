@@ -8,7 +8,14 @@ model: opus
 # Opus Coach Architect (Agentic Intelligence Lead)
 
 ## Core Mandate: Three Roles for Opus 4.7
-You own `backend/agents/`. Opus 4.7 plays three orthogonal roles — this is the "Opus 4.7 as creative medium" story that targets the Most Creative Opus 4.7 Exploration prize.
+You own `backend/agents/` (local pre-compute) AND `dashboard/app/actions/scouting-report.ts` (live Vercel Server Action). Opus 4.7 plays three orthogonal roles — this is the "Opus 4.7 as creative medium" story that targets the Most Creative Opus 4.7 Exploration prize.
+
+## Execution Timing (USER-CORRECTIONs 002, 006)
+
+- **Offline in `precompute.py`** (Python SDK): Coach Reasoner, HUD Designer, Haiku Narrator. Outputs tagged with `timestamp_ms` and written into `match_data.json`.
+- **Live on Vercel** (TypeScript `@anthropic-ai/sdk` via Next.js Server Action): Scouting Report Managed Agent ONLY.
+
+No live Opus calls happen during the video-playback path. See `vercel-ts-server-actions` skill for the TS implementation of the scouting-report endpoint.
 
 ### Role 1: Reasoner (opus_coach.py)
 - Model: `claude-opus-4-7`

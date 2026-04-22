@@ -7,6 +7,24 @@ description: DuckDB schema and Pydantic v2 data contract patterns for PANOPTICON
 
 Every boundary in Panopticon Live is a Pydantic v2 model. Every DB query is parameterized. This skill documents the canonical schemas and query patterns.
 
+## DuckDB Scope Is Local Pre-Compute Only (USER-CORRECTION-006)
+
+DuckDB lives on Andrew's Mac Mini as a pre-compute intermediate and as the data source for the scouting-report Managed Agent's tool queries. **DuckDB does NOT ship to Vercel's Next.js deploy.** The frontend consumes pre-computed `dashboard/public/match_data/<match_id>.json` directly.
+
+| Surface | DuckDB? | Why |
+|---|---|---|
+| `backend/precompute.py` | Yes (writable) | Populates keypoints / signals / anomalies / coach_insights |
+| `backend/agents/*` | Yes (read-only) | Opus tool calls query signal windows |
+| `dashboard/public/match_data/*.json` | No | Pre-computed static JSON is the single source of truth at runtime |
+| Next.js Server Actions | No | Managed Agent backend can use its own tools; we don't bundle DuckDB into Vercel |
+
+If the Managed Agent's tool queries need historical data at runtime, the options are (in order of preference):
+1. Inline relevant signal summaries into the agent's initial `input` payload (fastest, simplest)
+2. Include the DuckDB file as a bundled static asset under `dashboard/public/` and query via `@duckdb/duckdb-wasm` (heavier but possible)
+3. Use the Managed Agent's `agent_toolset_20260401` which includes file ops — read the JSON directly
+
+Default to option 1 for the hackathon.
+
 ## Pydantic v2 Canonical Schemas
 
 ```python

@@ -69,6 +69,36 @@ Need Phase 1 player-filtering logic: (a) in-court homography polygon filter, (b)
 ### 2026-04-21 19:30 — Ultralytics provides `.xyn` pre-normalized [0,1] keypoints
 Discovered via Context7 doc lookup. We do NOT need to manually normalize pixel coords by frame width/height — it's built in. Saves code and prevents the absolute-pixel-on-resize bug at the source.
 
+### 2026-04-21 21:15 — Team lead's second-wave review landed 5 more CRITICAL corrections
+Two full waves of architectural scrutiny, totaling **10 USER-CORRECTIONs** baked into docs + skills + agents:
+
+**Wave 1 (USER-CORRECTIONs 001-005):**
+1. Video-Sync Trap → static `match_data.json` + video-clock-slaved rAF (no SSE)
+2. Opus Latency Paradox → pre-compute Opus offline; scouting-report only live
+3. Far-Court Occlusion → ankle→knee→hip fallback chain
+4. Topological Y-Sort (superseded by #7)
+5. Homography Aspect-Ratio Skew → un-normalize before `cv2.getPerspectiveTransform`
+
+**Wave 2 (USER-CORRECTIONs 006-010):**
+6. **Vercel Python Elimination** → delete `backend/api/`, delete `requirements-prod.txt`. Vercel runtime is Next.js + TypeScript only. Scouting report uses Server Action + `@anthropic-ai/sdk`. The 250MB Serverless risk is vaporized, not mitigated.
+7. **Absolute Court Half Assignment** → split detections by `y_m > 11.885` (A) vs `y_m < 11.885` (B); top-1 confidence per half. Immune to occlusion-induced identity swap.
+8. **Physical Kalman Domain** → Kalman operates on court meters. Feet_mid converted via `CourtMapper.to_court_meters()` BEFORE update. Output velocity is in m/s, making the state machine's 0.2 / 0.05 thresholds physically meaningful.
+9. **Lateral Rally Blindspot** → use `speed = math.hypot(vx, vy)`, not `|vy|`. Baseline rallies would otherwise false-trigger DEAD_TIME.
+10. **Asymmetric Pre-Serve Desync** → MatchStateMachine couples both players. Server's bounce forces returner's PRE_SERVE_RITUAL so `split_step_latency` gate fires.
+
+**Net effect**: The Vercel deploy surface is now pure Next.js. The physics is provably correct in unit tests before code is written. We added 4 new specialized project skills (`physical-kalman-tracking`, `topological-identity-stability`, `match-state-coupling`, `vercel-ts-server-actions`) — skill count 8→12, all orthogonal.
+
+## Follow-Up Items for Next Session (REVISED after Wave 2)
+
+- [x] All 10 USER-CORRECTIONs logged in MEMORY.md
+- [x] 6 existing skills updated + 4 new skills created
+- [x] 4 agents updated (vercel-deployment, cv-pipeline-engineer, opus-coach-architect, homography)
+- [ ] Extend Pydantic schemas: `CornersNormalized`, `RawDetection`, `PlayerDetection`, `StateTransition`, `MatchData`
+- [ ] TDD-first implementation of the CV spine (homography → pose → kalman → state_machine)
+- [ ] Smoke integration on `data/clips/utr_match_01_segment_a.mp4`
+- [ ] Single-pass `python-reviewer` over the complete spine
+- [ ] Commit + push + PAUSE for team-lead review (Action 3 signal sprint is gated on this approval)
+
 ## Follow-Up Items for Next Session
 
 - [ ] Phase 1 Day 1 (Wed Apr 22): implement `backend/cv/pose.py` with the probe's safeguards + player-filtering (anti-crowd logic)

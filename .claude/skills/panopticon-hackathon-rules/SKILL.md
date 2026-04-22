@@ -11,6 +11,18 @@ This skill encodes the inviolable rules for every task in this repo. If your pro
 
 Win the Demo criterion (25%) + Opus 4.7 Use criterion (25%) with visible craft. Judges evaluate a 3-minute video. The demo IS the product. Optimize for visual Cool Factor + creative Opus usage + engineering craft — NOT predictive accuracy or backtest R².
 
+## Additional Hard Rules (second-wave review)
+
+- **No Python on Vercel.** Python is a LOCAL Mac Mini pre-compute tool. The Vercel runtime is Next.js + TypeScript only. See `vercel-ts-server-actions` skill.
+- **No live SSE streaming.** Keypoints, signals, and Opus commentary are pre-computed offline into `dashboard/public/match_data/<match_id>.json`. Frontend fetches once; canvas rAF loop indexes via `videoRef.currentTime × clip_fps`.
+- **No live Opus at playback.** Coach insights and HUD layouts are pre-computed with `timestamp_ms` tags during `precompute.py`. The ONLY live Anthropic call at demo time is the scouting-report Managed Agent Server Action.
+- **Kalman operates on physical meters.** Not normalized xyn. Not pixels. Always court meters, via `CourtMapper.to_court_meters()`. See `physical-kalman-tracking` skill.
+- **Player identity uses Court Half Assignment.** Not Hungarian, not Top-2-by-confidence. Split by `y_m > 11.885 m` (near) vs `y_m < 11.885 m` (far); top-1 per half. See `topological-identity-stability` skill.
+- **State machine uses 2D hypot speed.** `speed = math.hypot(vx, vy)`. Not `|vy|`. Intense baseline rallies involve lateral motion with near-zero Y change.
+- **State machine couples the two players via bounce.** Server's bounce forces returner's PRE_SERVE_RITUAL so `split_step_latency` fires. See `match-state-coupling` skill.
+- **Homography un-normalizes first.** `cv2.getPerspectiveTransform` receives pixel coords (normalized × W, H), not normalized coords.
+- **Far-court occlusion fallback chain.** `ankle → knee → hip` when ankle confidence < 0.3. All leg-dependent signals use this helper.
+
 ## The Three Critical Gotchas
 
 ### Gotcha 1 — ABORTED: Batch 11 ML Forge (STRATEGIC)

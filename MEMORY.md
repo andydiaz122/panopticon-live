@@ -141,6 +141,106 @@ Cross-session recall. Every entry is:
 - **Lesson**: Phase 1 needs player-filtering logic: (a) restrict to detections whose feet fall inside the court homography polygon, (b) keep the 2 highest-confidence detections per frame in court-zone, (c) use Kalman track continuity to stabilize player-A vs player-B identity across frames (Hungarian assignment).
 - **Severity**: HIGH — without this, signals will contaminate with crowd noise
 
+### USER-CORRECTION-001 — Video-Sync Trap (Vercel SSE timeout + buffering desync)
+- **Type**: User-Correction (CRITICAL)
+- **Context**: Team-lead review 2026-04-21
+- **Lesson**: ABORT FastAPI SSE streaming for 30 FPS keypoints. Vercel Serverless severs long connections at 10-60s, and HTML5 video buffering would desync the skeleton from the player. Canonical shape: `precompute.py` writes `dashboard/public/match_data.json` (keypoints + signals + Opus commentary + HUD layouts, all tagged `timestamp_ms`). Frontend fetches once. `requestAnimationFrame` loop indexes via `videoRef.currentTime × clip_fps`. Perfect sync, zero network jitter, $0 compute.
+- **Severity**: CRITICAL
+
+### USER-CORRECTION-002 — Opus Latency Paradox (5-15s thinking vs 1.5s rally)
+- **Type**: User-Correction (CRITICAL)
+- **Context**: Team-lead review 2026-04-21
+- **Lesson**: Live Opus during demo produces "prediction after the fact" because extended-thinking calls take 5-15s. Pre-compute all Opus intelligence offline during `precompute.py`. Store `CoachInsight` + `HUDLayoutSpec` with `timestamp_ms`. Replay at playback time. The ONLY live Opus at demo time is the Managed Agents scouting-report pipeline (Best Use of Managed Agents prize).
+- **Severity**: CRITICAL
+
+### USER-CORRECTION-003 — Far-Court Net Occlusion
+- **Type**: User-Correction (HIGH)
+- **Context**: Team-lead review 2026-04-21
+- **Lesson**: The broadcast camera's perspective places the tennis net IN FRONT of Player B's ankles ~80% of frames. Signal extractors MUST implement an asymmetric fallback chain when ankle confidence < 0.3: ankle → knee → hip/pelvis, with torso-scalar re-normalized to the lower body segment actually in use. Applies to: `crouch_depth`, `baseline_retreat`, feet-position homography projection, `split_step` zero-crossing.
+- **Severity**: HIGH
+
+### USER-CORRECTION-004 — Topological Y-Sorting (not Hungarian)
+- **Type**: User-Correction (HIGH)
+- **Context**: Team-lead review 2026-04-21 — SUPERSEDED by USER-CORRECTION-007
+- **Lesson**: Original guidance was "filter by court polygon → top-2 confidence → max-Y = A, min-Y = B." **This was refined in USER-CORRECTION-007 to use Absolute Court Half Assignment (top-1 per court half), which is stronger against occlusion-induced identity swapping.** Keep this entry for the lineage; the canonical rule lives in USER-CORRECTION-007.
+- **Severity**: HIGH (superseded)
+
+### USER-CORRECTION-005 — Homography Aspect-Ratio Skew
+- **Type**: User-Correction (HIGH)
+- **Context**: Team-lead review 2026-04-21
+- **Lesson**: `tools/court_annotator.html` outputs normalized [0,1] corners. `cv2.getPerspectiveTransform` operates in whatever coordinate space you feed it. Feeding normalized coords directly produces a matrix that assumes a 1:1 aspect ratio — a 1m lateral move registers as larger than a 1m vertical move on 16:9 footage. Backend MUST un-normalize first:
+  ```python
+  corners_pixels = corners_normalized * np.array([[frame_width, frame_height]])
+  cv2.getPerspectiveTransform(corners_pixels.astype(np.float32), court_meters.astype(np.float32))
+  ```
+  Feed keypoints to the mapper as pixel coords (multiply `.xyn` by W, H before projection).
+- **Severity**: HIGH
+
+### USER-CORRECTION-006 — Vercel Python Elimination (Deployment Moat)
+- **Type**: User-Correction (CRITICAL)
+- **Context**: Team-lead review 2026-04-21 (second wave)
+- **Lesson**: DELETE `backend/api/` FastAPI entirely. Since `precompute.py` exports a static `dashboard/public/match_data.json` containing CV features + pre-computed Opus insights, we DO NOT need Python on Vercel at all. The Next.js frontend fetches the static JSON natively. For the live "Generate Scouting Report" button, use a **Next.js Server Action with the TypeScript `@anthropic-ai/sdk`**. Python becomes STRICTLY a local Mac Mini pre-compute tool. This vaporizes the 250MB Vercel Serverless limit risk, eliminates Python cold-start latency, and makes the frontend architecture bulletproof.
+- **Severity**: CRITICAL
+- **Architectural impact**: Delete `requirements-prod.txt`, `backend/api/`, Python `vercel.ts` runtime config. The only Vercel surface is the Next.js `dashboard/`.
+
+### USER-CORRECTION-007 — Absolute Court Half Assignment (Anti-Identity-Swap)
+- **Type**: User-Correction (HIGH)
+- **Context**: Team-lead review 2026-04-21 (second wave) — **SUPERSEDES USER-CORRECTION-004**
+- **Lesson**: The original "top-2 by confidence, sort by Y" is vulnerable: if Player B is occluded by the net → low confidence → a ballboy with higher confidence steals Player B's identity. Even worse, Kalman tracking then rubber-bands between locations. CANONICAL RULE:
+  ```
+  1. Project ALL in-polygon detections to physical court meters via CourtMapper.
+  2. Split by absolute court half: the net is at Y = 23.77 / 2 = 11.885 m.
+     - Detections with y_m > 11.885 belong to Player A's half (near camera).
+     - Detections with y_m < 11.885 belong to Player B's half (far camera).
+  3. Take the highest-confidence detection WITHIN each half.
+  ```
+  This is mathematically immune to occlusion-induced swapping because a ballboy on Player A's half cannot steal Player B's identity regardless of confidence.
+- **Severity**: HIGH
+- **Pattern skill**: see `.claude/skills/topological-identity-stability/SKILL.md`
+
+### USER-CORRECTION-008 — Physical Kalman Domain (Unit Mismatch)
+- **Type**: User-Correction (HIGH)
+- **Context**: Team-lead review 2026-04-21 (second wave)
+- **Lesson**: You cannot feed normalized `xyn` coordinates into `KalmanTracker2D` if the state machine expects m/s. Normalized-velocity is in "screen-percentages/second" and the 0.2 m/s threshold will never fire correctly. CANONICAL PIPELINE:
+  ```
+  YOLO .xyn → feet_mid_xyn (with ankle→knee→hip fallback per USER-CORRECTION-003)
+      → CourtMapper.to_court_meters(feet_mid_xyn)   [MUST happen BEFORE Kalman update]
+      → KalmanTracker2D.update(feet_mid_meters)
+      → (x_m, y_m, vx_mps, vy_mps)                  [true physical units]
+      → state_machine.update(vx_mps, vy_mps)         [thresholds in m/s are now meaningful]
+  ```
+  If `CourtMapper.to_court_meters` returns `None` (off-court), Kalman coasts via `predict()` without `update()`.
+- **Severity**: HIGH
+- **Pattern skill**: see `.claude/skills/physical-kalman-tracking/SKILL.md`
+
+### USER-CORRECTION-009 — Lateral Rally Blindspot
+- **Type**: User-Correction (HIGH)
+- **Context**: Team-lead review 2026-04-21 (second wave)
+- **Lesson**: `|vy|` (Y-axis velocity magnitude) is blind to baseline rallies, which involve massive X-axis movement with near-zero Y-axis movement. A state machine using only `|vy|` will false-trigger `DEAD_TIME` mid-rally, chopping rallies into fragments and corrupting `recovery_latency`. CANONICAL RULE:
+  ```python
+  speed_mps = math.hypot(vx, vy)   # 2D speed magnitude
+  # PRE_SERVE_RITUAL → ACTIVE_RALLY: speed_mps > 0.2 for 5+ frames
+  # ACTIVE_RALLY → DEAD_TIME:       speed_mps < 0.05 for 15+ frames
+  ```
+  Do NOT evaluate axes independently.
+- **Severity**: HIGH
+
+### USER-CORRECTION-010 — Asymmetric Pre-Serve Desync (Returner stays in DEAD_TIME)
+- **Type**: User-Correction (HIGH)
+- **Context**: Team-lead review 2026-04-21 (second wave)
+- **Lesson**: Only the SERVER bounces the ball; the RETURNER stands still. If state is evaluated purely independently per player, the Returner never enters `PRE_SERVE_RITUAL` (they never move enough to exit DEAD_TIME). Consequence: `split_step_latency` signal — which gates on `PRE_SERVE_RITUAL → ACTIVE_RALLY` transition — never fires for the Returner. CANONICAL RULE:
+  ```
+  Match-level state machine wraps two PlayerStateMachine instances.
+  When either player emits a BOUNCE_DETECTED event (Server signature),
+  the MatchStateMachine forces the OTHER player into PRE_SERVE_RITUAL,
+  regardless of that player's own kinematic state.
+  ```
+  The server's bounce is the match's clock; both players synchronize to it.
+- **Severity**: HIGH
+- **Pattern skill**: see `.claude/skills/match-state-coupling/SKILL.md`
+
+---
+
 ### PATTERN-008 — Claude Managed Agents API (2026-04-01 beta)
 - **Type**: Pattern
 - **Context**: Perplexity research Apr 21, 2026 on Anthropic beta managed-agents endpoint

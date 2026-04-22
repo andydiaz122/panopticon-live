@@ -7,13 +7,20 @@ description: CV pipeline architectural patterns for PANOPTICON LIVE. Use when bu
 
 This skill documents the architectural patterns for the Panopticon CV pipeline. Use when touching `backend/cv/` or `backend/precompute.py`.
 
-## Pipeline Stages (left to right)
+## Pipeline Stages (left to right) — REVISED 2026-04-21
 
 ```
 Video → ffmpeg stdout → BytesIO → YOLO11m-Pose (MPS) → keypoints.xyn
-       → Kalman smoother (per player) → State Machine (per player)
-       → Signal Extractors (7) → Pydantic FatigueVector → DuckDB
+       → robust_foot_point (ankle→knee→hip fallback per USER-CORRECTION-003)
+       → CourtMapper.to_court_meters (un-normalized per USER-CORRECTION-005)
+       → Absolute Court Half Assignment (USER-CORRECTION-007: y_m > 11.885 = A)
+       → PhysicalKalman2D (meters-in, m/s-out per USER-CORRECTION-008)
+       → MatchStateMachine (2D hypot speed + bounce coupling per USER-CORRECTIONS-009, 010)
+       → Signal Extractors (7) → Pydantic FatigueVector + CoachInsight + HUDLayoutSpec
+       → match_data.json (static, per USER-CORRECTION-001/002/006)
 ```
+
+**Note on the output shape**: The pipeline's end artifact is `dashboard/public/match_data/<match_id>.json`, NOT a DuckDB file served over SSE. DuckDB is retained for Opus Managed Agent tool queries (scouting-report only), operated locally during pre-compute and bundled into the Vercel Next.js deploy if needed.
 
 ## Stage 1 — Video Ingestion (Zero-Disk)
 
@@ -84,30 +91,40 @@ def make_kalman_2d() -> KalmanFilter:
 
 **Spike Suppression (SP5)**: The first 10 frames after init have noisy velocity estimates. Signal extractors that depend on velocity/acceleration MUST return `None` for those frames. Track `frames_since_init` per player.
 
-## Stage 4 — Kinematic State Machine
+## Stage 4 — Kinematic State Machine (REVISED per USER-CORRECTIONS-009, 010)
 
 ```
-PER-PLAYER STATE (independent):
+MATCH-LEVEL COUPLING (wraps two PlayerStateMachines):
 
-  ┌────────────────┐   velocity ↑   ┌──────────────┐
-  │ PRE_SERVE_     │────────────────►│ ACTIVE_RALLY │
-  │ RITUAL         │                 │              │
-  └──────▲─────────┘                 └─────┬────────┘
-         │ stillness                        │ stillness
-         │ after rally                      │
-         │                                  ▼
-         │                         ┌──────────────┐
-         └─────────────────────────┤ DEAD_TIME    │
-                     extended      │              │
-                     stillness     └──────────────┘
+  Per-player independent kinematics:
+     ┌────────────────┐  speed↑  ┌──────────────┐
+     │ PRE_SERVE_     │─────────►│ ACTIVE_RALLY │
+     │ RITUAL         │          │              │
+     └──────▲─────────┘          └─────┬────────┘
+            │ stillness                 │ stillness
+            │ after rally               │
+            │                           ▼
+            │                   ┌──────────────┐
+            └───────────────────┤ DEAD_TIME    │
+                   extended     │              │
+                   stillness    └──────────────┘
+
+  Match-level coupling:
+     if Player A emits BOUNCE_DETECTED:
+         force both A and B into PRE_SERVE_RITUAL
+     if Player B emits BOUNCE_DETECTED:
+         force both A and B into PRE_SERVE_RITUAL
 ```
 
-**Transition rules (Kalman-smoothed vy as primary signal):**
-- PRE_SERVE_RITUAL → ACTIVE_RALLY: `|vy| > 0.2 m/s` for 5+ consecutive frames
-- ACTIVE_RALLY → DEAD_TIME: `|vy| < 0.05 m/s` for 15+ consecutive frames
-- DEAD_TIME → PRE_SERVE_RITUAL: small bounce cadence detected in Y-position
+**Transition rules — use 2D speed magnitude (USER-CORRECTION-009):**
+- `speed_mps = math.hypot(vx, vy)` (NOT `|vy|` alone)
+- PRE_SERVE_RITUAL → ACTIVE_RALLY: `speed_mps > 0.2 m/s` for 5+ consecutive frames
+- ACTIVE_RALLY → DEAD_TIME: `speed_mps < 0.05 m/s` for 15+ consecutive frames
+- DEAD_TIME → PRE_SERVE_RITUAL: bounce signature (Lomb-Scargle peak 1-4 Hz) detected on either player — coupling applies
 
-**Asymmetric evaluation**: Each player evaluated independently. One player walking off-camera does NOT gate the other player's state.
+**Match-level sync (USER-CORRECTION-010):** When either player emits a bounce signature, the `MatchStateMachine` forces BOTH into PRE_SERVE_RITUAL. This ensures the returner's `split_step_latency` signal (which gates on PRE_SERVE_RITUAL → ACTIVE_RALLY) fires correctly. See `match-state-coupling` skill for the algorithm.
+
+**Velocity input must be in m/s.** The state machine receives `speed_mps` from the `PhysicalKalman2D` — which operates on court meters. See `physical-kalman-tracking` skill.
 
 ## Stage 5 — Signal Extractor Dispatch
 
@@ -123,16 +140,30 @@ See `biomechanical-signal-semantics` skill for per-signal math. State-gating mat
 | lateral_work_rate | ACTIVE_RALLY |
 | split_step_latency_ms | PRE_SERVE_RITUAL → ACTIVE_RALLY (opponent serve contact → own first velocity) |
 
-## Stage 6 — DuckDB Write (per segment)
+## Stage 6 — match_data.json Export (REVISED per USER-CORRECTIONs 001/002/006)
 
-Segments are ~1-second windows where state is stable. At segment end:
+The pre-compute pipeline's end artifact is a single static JSON file per match, consumed directly by the Next.js frontend. NO SSE, NO FastAPI, NO Python on Vercel.
+
+Output path: `dashboard/public/match_data/<match_id>.json`
+
+Shape (top-level Pydantic model `MatchData`):
 ```python
-compiler = FeatureCompiler(match_id, player)
-for frame in segment_frames:
-    compiler.ingest(frame, kalman.state, state_machine.state)
-vec = compiler.flush()  # FatigueVector Pydantic model
-db.write(vec)
+class MatchData(PanopticonBase):
+    meta: MatchMeta
+    keypoints: list[FrameKeypoints]             # per-frame A + B xyn (for canvas)
+    signals: list[SignalSample]                  # 7 × 2 players × timestamps
+    anomalies: list[AnomalyEvent]
+    coach_insights: list[CoachInsight]           # Opus reasoning, pre-computed offline
+    hud_layouts: list[HUDLayoutSpec]             # Opus designer, pre-computed offline
+    narrator_beats: list[NarratorBeat]           # Haiku per-second, pre-computed offline
+
+    def to_json(self) -> str:
+        return self.model_dump_json(exclude_none=True)
 ```
+
+Frontend fetches once; rAF loop indexes via `videoRef.currentTime × clip_fps`. See `react-30fps-canvas-architecture` skill.
+
+DuckDB is retained as a LOCAL pre-compute intermediate (for Opus Managed-Agent tool queries during the scouting-report pipeline). It does NOT ship to Vercel.
 
 ## Async Concurrency Rules
 

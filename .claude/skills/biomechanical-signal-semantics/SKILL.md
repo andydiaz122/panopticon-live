@@ -7,6 +7,51 @@ description: Mathematical definitions, academic thresholds, and test-case patter
 
 The 7 signals are the ALPHA of the entire product. Each must be mathematically sound and grounded in literature. This skill is the reference.
 
+## Far-Court Occlusion Fallback Chain (USER-CORRECTION-003)
+
+The broadcast camera's perspective places the tennis net in front of Player B's ankles ~80% of frames. All leg-dependent signals MUST use the helper below, NOT raw ankle keypoints.
+
+```python
+from typing import Sequence
+
+def robust_foot_point(
+    keypoints_xyn: Sequence[tuple[float, float]],
+    confidence: Sequence[float],
+    threshold: float = 0.3,
+) -> tuple[float, float] | None:
+    """Return the most reliable lower-body reference point.
+
+    Tries ankle → knee → hip midpoint in that order, falling through when confidence
+    falls below `threshold` on either side of the body.
+
+    COCO indices:
+      11 left_hip    12 right_hip
+      13 left_knee   14 right_knee
+      15 left_ankle  16 right_ankle
+    """
+    def _try(idx_l: int, idx_r: int) -> tuple[float, float] | None:
+        if confidence[idx_l] < threshold or confidence[idx_r] < threshold:
+            return None
+        return (
+            (keypoints_xyn[idx_l][0] + keypoints_xyn[idx_r][0]) / 2.0,
+            (keypoints_xyn[idx_l][1] + keypoints_xyn[idx_r][1]) / 2.0,
+        )
+
+    return _try(15, 16) or _try(13, 14) or _try(11, 12)
+```
+
+**Torso scalar re-normalization**: when we fall back from ankle to knee (or hip), signals that depend on vertical body segments must normalize against the SAME segment:
+- Full ankle-to-shoulder torso scalar when ankles present
+- Knee-to-shoulder scalar when knee fallback
+- Hip-to-shoulder scalar when hip fallback
+
+Each signal module exposes its own `torso_scalar_for_mode(mode)` helper. Do NOT mix scalars across fallback modes within a single signal.
+
+**Per-signal implications:**
+- `crouch_depth_degradation_deg`: falls back gracefully; the metric measures *angle change from that player's own baseline*, so long as we compute baseline in the same fallback mode as the current sample, the delta is still meaningful.
+- `baseline_retreat_distance_m`: falls back via `robust_foot_point` → knee midpoint → hip midpoint. Homography still projects the midpoint into court meters (with some accuracy loss for hip fallback).
+- `split_step_latency_ms`: velocity-based, derived from Kalman of `feet_mid` which already uses this fallback chain.
+
 ## Signal 1 — recovery_latency_ms
 
 **Definition**: Time elapsed between `ACTIVE_RALLY` exit and player's Kalman-smoothed velocity magnitude dropping below 0.5 m/s.

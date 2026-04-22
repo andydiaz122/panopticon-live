@@ -12,6 +12,15 @@ You own `backend/cv/` end-to-end. Broadcast video → per-frame keypoints → st
 
 ## Engineering Constraints
 
+### Reference the 10 USER-CORRECTIONs
+
+Before any CV code change, re-read `MEMORY.md` USER-CORRECTIONs 001–010 and the skills they reference:
+- `physical-kalman-tracking` — Kalman in court meters, not xyn
+- `topological-identity-stability` — Absolute Court Half Assignment
+- `match-state-coupling` — server bounce forces returner PRE_SERVE
+- `biomechanical-signal-semantics` — far-court fallback chain
+- `cv-pipeline-engineering` — canonical pipeline ordering
+
 ### MPS Safeguards (every inference path)
 - `@torch.inference_mode()` decorator on all inference functions
 - `torch.mps.empty_cache()` every 50 frames (prevents unified-memory accumulation)
@@ -35,10 +44,19 @@ You own `backend/cv/` end-to-end. Broadcast video → per-frame keypoints → st
 - First 10 frames of tracking return `None` from acceleration-dependent signals
 - Kalman needs convergence; early acceleration values are hallucinations
 
-### State Machine Rules
-- 3 states per player (independent evaluation): `PRE_SERVE_RITUAL` | `ACTIVE_RALLY` | `DEAD_TIME`
-- Use Kalman-smoothed Y-velocity for state transitions
-- Gating: `recovery_latency` only during ACTIVE_RALLY exit; `ritual_entropy` only during PRE_SERVE_RITUAL; `serve_toss_variance` only during PRE_SERVE_RITUAL → ACTIVE_RALLY transition
+### State Machine Rules (REVISED per USER-CORRECTIONs 009, 010)
+- 3 states per player: `PRE_SERVE_RITUAL` | `ACTIVE_RALLY` | `DEAD_TIME`
+- **MatchStateMachine wraps two PlayerStateMachines.** Server's bounce forces BOTH into PRE_SERVE_RITUAL.
+- **Transitions use 2D speed magnitude**: `speed = math.hypot(vx, vy)` in m/s — NOT `|vy|`.
+- **Kalman state is in court meters**: velocity is in m/s (per `physical-kalman-tracking` skill).
+- Gating: `recovery_latency` at ACTIVE_RALLY→DEAD_TIME transition; `ritual_entropy`/`serve_toss_variance` during PRE_SERVE_RITUAL (server only); `split_step_latency` at returner's PRE_SERVE_RITUAL→ACTIVE_RALLY (enabled by match-level coupling).
+
+### Identity Attribution Rules (USER-CORRECTION-007)
+- Use **Absolute Court Half Assignment** via `topological-identity-stability` skill
+- Project all in-polygon detections to physical court meters FIRST
+- Split: `y_m > 11.885 m` = Player A (near), `y_m < 11.885 m` = Player B (far)
+- Take top-1 by mean confidence within each half
+- NEVER use Hungarian assignment; NEVER use "top-2 by overall confidence then sort by Y"
 
 ## TDD Discipline
 Every new signal module gets a `tests/test_signals/test_<name>.py` BEFORE implementation. Minimum 3 test cases per signal: (1) happy path on synthetic keypoints, (2) edge case (occlusion / short buffer), (3) state-gate violation (should return None).

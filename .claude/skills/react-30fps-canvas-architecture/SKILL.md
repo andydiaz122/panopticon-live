@@ -7,6 +7,60 @@ description: The ref + requestAnimationFrame + ResizeObserver + canvas pattern r
 
 Per-frame keypoint data (30 FPS × ~20 keypoints × 2 players = 1200 updates/sec) CANNOT go through React state. This skill documents the enforced architecture for every high-frequency rendering component in `dashboard/`.
 
+## Canonical Data Source (USER-CORRECTIONs 001/006)
+
+**The data source is the static `dashboard/public/match_data/<match_id>.json` file, NOT an SSE stream.**
+
+Fetch sequence:
+1. On mount: `fetch(/match_data/<id>.json)` → parse → cache in ref
+2. `<video>` begins playing (HTML5 native controls)
+3. `requestAnimationFrame` loop computes `frameIdx = Math.floor(videoRef.current.currentTime * clip_fps)`
+4. Paint `matchData.keypoints[frameIdx]` to canvas
+5. Render `matchData.coach_insights` whose `timestamp_ms` brackets `currentTime * 1000`
+6. Apply `matchData.hud_layouts` active at `currentTime`
+
+Benefits: frame-perfect sync (videoClock drives everything), zero network at playback, Vercel serverless not touched.
+
+## The Video-Clock-Slaved rAF Pattern
+
+```tsx
+// dashboard/hooks/useVideoClockLoop.ts
+"use client";
+import { useEffect, useRef } from "react";
+
+export function useVideoClockLoop(
+  videoRef: React.RefObject<HTMLVideoElement>,
+  clipFps: number,
+  onFrame: (frameIdx: number, currentTimeS: number) => void,
+) {
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const tick = () => {
+      const t = video.currentTime;
+      const frameIdx = Math.floor(t * clipFps);
+      onFrame(frameIdx, t);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [videoRef, clipFps, onFrame]);
+}
+```
+
+The `onFrame` callback:
+- Reads keypoints from the cached `matchDataRef.current.keypoints[frameIdx]` (NOT state)
+- Paints to the canvas directly
+- Optionally updates low-frequency React state (match-phase banner) on transitions
+
+**Crucial**: `onFrame` is stable across renders (`useCallback`) so the effect doesn't re-run. Keypoint data is accessed via a ref inside the callback — never a state value.
+
 ## The Cardinal Rule
 
 **Per-frame data goes into `useRef`, not `useState`.**

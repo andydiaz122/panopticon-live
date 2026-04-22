@@ -168,6 +168,60 @@ Tracks skills we evaluated and consciously skipped. Prevents anti-pattern #18 (i
 
 **Agents that FIRED during Action 2**: `cv-pipeline-engineer` (spine), `test-forensic-validator` (tests), `data-integrity-guard` (schema extensions), `homography-geometry-specialist` (CourtMapper aspect-ratio), `mps-performance-engineer` (safeguards in pose.py), `documentation-librarian` (pre-compact save — blocked by plan-mode inheritance, recovered by inline execution).
 
+---
+
+## Day 1 (Phase-1 Action 2.5 — Citadel Override Patch Sprint, Apr 22 2026)
+
+### HIGH-IMPACT tools / patterns this session
+
+| Tool / Pattern | Outcome | ROI | Notes |
+|---|---|---|---|
+| **Two-round team-lead audit** (CTO review) | 11 runtime-failure modes prevented at design time (5 in audit 1 + 6 in audit 2) | **MASSIVE** — each failure would cost hours of on-video debugging on real broadcast footage | Pattern: don't ship an architectural change until an external reviewer has stressed dynamic failure modes that static unit tests cannot catch. Even with 45/45 green, 2 audit rounds found 11 gaps. |
+| **TDD-first (5 patches, RED→GREEN)** | Each patch RED→GREEN in minutes. No post-hoc bug hunt. | **HIGH** | Patch 1 wrote 12 ABC tests BEFORE `base.py`. Patch 2 wrote 16 serializer tests BEFORE `@field_serializer`. Patch 3 wrote 6 uncoupling tests BEFORE modifying state_machine. Patch 4 wrote 17 bounce tests BEFORE temporal_signals. All caught API shape issues during test authoring. |
+| **`python-reviewer` agent (orthogonal-to-tests lens)** | Caught 1 HIGH (`_round_dict` type too loose) + 2 MEDIUM (stringly-typed dispatch, untyped `info`) — NONE caught by 96 tests | **HIGH** | Code-reviewer lens is orthogonal to test lens: tests prove correctness on TESTED inputs; reviewer catches type-drift risks on FUTURE inputs. Using both is the Citadel-rigor pattern. |
+| **First-principles override validation** | Validated all 6 audit-round-2 overrides from first principles BEFORE accepting | **HIGH (trust-building)** | User explicitly instructed "don't take team lead as gospel, validate first principles." All 6 were correct — but going through the exercise catches the 1-in-10 case where the reviewer misreads. |
+| **Orthogonal skill architecture** (2 new skills) | `signal-extractor-contract` (INTERFACE) + `temporal-kinematic-primitives` (TIME-SERIES + camera invariance) — orthogonal to `biomechanical-signal-semantics` (SEMANTICS) + `cv-pipeline-engineering` (ORCHESTRATION). 4-node DAG, zero overlap. | **COMPOUNDS across Phase 1-5** | Each skill owns one concern slice; future sessions load only what's relevant. Adding skills MUST preserve the DAG. |
+| **`abc.ABC` + symmetric target/opponent API** | `BaseSignalExtractor` becomes a pluggable interface 4 parallel fleets in Action 3 implement INDEPENDENTLY | **HIGH-ROI** | Pattern generalizes: any future parallel-agent task where N agents produce one module each should start with an ABC. Prevents fleet-invented API divergence. |
+| **Pydantic v2 `@field_serializer` + typed helpers** | 13 float fields across 5 models round to 4 decimals at JSON-only; in-memory precision preserved | **HIGH-ROI** — prevents 10MB+ JSON browser-OOM on `match_data.json` | `_round_float`, `_round_pair`, `_round_pair_list`, `_round_list`, `_round_dict` + multi-field decoration `@field_serializer("v1", "v2", ...)` scale cleanly. |
+| **`ruff --fix` then targeted RUF002 manual fix** | 9 errors → 6 auto-fixed → 3 remaining (Unicode minus in docstrings) manually fixed in <1 min | MEDIUM | The 3 manual fixes caught real issues: team-lead spec prose contained `−` (U+2212) looking identical to `-` but blocking grep / causing ambiguity. |
+| **`mode: "acceptEdits"` on every sub-agent dispatch** | python-reviewer returned actionable review in 51 seconds, zero plan-mode stalls | CRITICAL | Anti-pattern #33 (subagent plan-mode inheritance) consistently applied. ZERO round-trips wasted. |
+
+### Skills that FIRED during Action 2.5
+
+- `signal-extractor-contract` (NEW — authored + applied)
+- `temporal-kinematic-primitives` (NEW — authored + applied)
+- `cv-pipeline-engineering` (updated Stage 4.5 + USER-CORRECTIONs 011/013)
+- `biomechanical-signal-semantics` (updated Common-Traps callout + Lomb-Scargle fix)
+- `match-state-coupling` (referenced for USER-CORRECTION-011 logic check)
+- `panopticon-hackathon-rules` (prime directive)
+- `duckdb-pydantic-contracts` (serializer scope)
+
+### Skills QUEUED but NOT USED in Action 2.5
+
+- `opus-47-creative-medium`, `claude-api`, `agent-harness-construction` (Phase 2: Opus wiring)
+- `vercel-ts-server-actions`, `vercel:nextjs`, `vercel:shadcn`, `vercel:react-best-practices` (Phase 3+4)
+- `react-30fps-canvas-architecture`, `2k-sports-hud-aesthetic`, `awwwards-animations`, `top-design`, `frontend-design` (Phase 3: dashboard)
+- `e2e-testing`, `e2e-runner` (Phase 4: regression)
+- `hackathon-demo-director` (Phase 5: submission)
+- `vercel:deployments-cicd`, `vercel:env-vars`, `vercel:vercel-functions` (Phase 4)
+- `continuous-learning-v2` (meta)
+- `topological-identity-stability`, `physical-kalman-tracking` (Action 2 stable — no re-use needed)
+
+### Agents that FIRED during Action 2.5
+
+- `python-reviewer` (one pass over all 5 patches, `mode: "acceptEdits"`) — **1 HIGH + 2 MEDIUM findings, all fixed pre-commit**
+
+### Anti-patterns dodged this session
+
+- **#18 (ignoring skills)** — 7 skills explicitly referenced in code comments
+- **#33 (plan-mode inheritance)** — every sub-agent dispatched with `mode: "acceptEdits"`
+- **#29 (redundant tool inventory)** — used system-reminder tool list directly
+- **#32 (bypassing quality commands)** — used `python-reviewer` agent directly (no `/review` wrapper exists for it)
+
+### Meta-learning
+
+**Two-round audit is the right unit of review for architectural changes.** Round 1 catches obvious bugs (Lomb-Scargle Hz-vs-rad/s, bounce deadlock). Round 2 catches subtle bugs that only show up on real data (camera pan, ACTIVE_RALLY truncation, NaN-safety). For anything shipping to production video, plan on TWO rounds of external review between "code complete" and "code committed." Single-round review is acceptable only for isolated bug fixes.
+
 ### Meta-lesson
 Agent plan-mode inheritance (anti-pattern #33) re-surfaced when dispatching the `documentation-librarian` without `mode: "acceptEdits"`. The agent produced a comprehensive plan file but executed zero edits. Recovery: read the agent's plan file and apply the edits inline (Write/Edit tools). Net cost: ~2 min of round-trip but saved because the plan was high-quality. Future: every sub-agent that should write files MUST pass `mode: "acceptEdits"` or `"bypassPermissions"`.
 

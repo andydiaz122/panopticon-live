@@ -124,11 +124,61 @@ MATCH-LEVEL COUPLING (wraps two PlayerStateMachines):
 
 **Match-level sync (USER-CORRECTION-010):** When either player emits a bounce signature, the `MatchStateMachine` forces BOTH into PRE_SERVE_RITUAL. This ensures the returner's `split_step_latency` signal (which gates on PRE_SERVE_RITUAL → ACTIVE_RALLY) fires correctly. See `match-state-coupling` skill for the algorithm.
 
+**Conditional DEAD_TIME uncoupling (USER-CORRECTION-011):** If EITHER player transitions into DEAD_TIME and the OPPONENT is in `PRE_SERVE_RITUAL` (the Ace/Fault deadlock — they never moved), the opponent is forced into `DEAD_TIME`. **CRITICAL: only rescue PRE_SERVE_RITUAL opponents.** ACTIVE_RALLY opponents (sprinting for a retrieve) must be left alone, otherwise their natural deceleration curve is truncated and `recovery_latency_ms` + `lateral_work_rate` become corrupted.
+
 **Velocity input must be in m/s.** The state machine receives `speed_mps` from the `PhysicalKalman2D` — which operates on court meters. See `physical-kalman-tracking` skill.
 
-## Stage 5 — Signal Extractor Dispatch
+## Stage 4.5 — Temporal Kinematic Primitives (pre-state-machine)
 
-See `biomechanical-signal-semantics` skill for per-signal math. State-gating matrix:
+Per USER-CORRECTION-013 (Bounce Deadlock resolution), bounce detection and split-step cueing are NOT signal extractors (extractors run post-state-transition). They must run UNCONDITIONALLY every frame, BEFORE `MatchStateMachine.update()`. Implemented in `backend/cv/temporal_signals.py` (`RollingBounceDetector`).
+
+Per USER-CORRECTION-012 (Camera-Pan Aliasing), primitives operate on **relative kinematics** (`wrist_y − hip_y`), which removes broadcast camera pan/tilt as a common-mode component.
+
+Per USER-CORRECTION-014 (Null-Safety + Ambidextrous), primitives are NaN-safe: they ingest `np.nan` when keypoints are occluded / low-confidence and evaluate buffers via `np.nan{var, max, min, mean}`. Wrist selection is ambidextrous — pick the confident wrist with the max-y (lower screen position, closer to the ball at bounce).
+
+Per USER-CORRECTION-015 (Zero-Variance Guard), primitives short-circuit when `np.nanvar(buffer) < 1e-5`, preventing divide-by-zero in downstream Lomb-Scargle computations.
+
+**Canonical per-tick ordering**:
+```python
+# Stage 4.5 — BEFORE state machine
+bounce_detector.ingest_player_frame("A", l_wrist_y, l_wrist_conf, r_wrist_y, r_wrist_conf, hip_y, hip_conf)
+bounce_detector.ingest_player_frame("B", ...)
+a_bounce, b_bounce = bounce_detector.evaluate()
+
+# Stage 4 — state machine consumes the bounce events
+match_fsm.update(a_speed_mps, b_speed_mps, a_bounce, b_bounce, t_ms)
+
+# Stage 5 — signal extractors gate on state
+for ext in compiler.extractors:
+    if compiler.states[ext.target_player] in ext.required_state:
+        ext.ingest(frame, target_state, opponent_state, target_kalman, opponent_kalman, t_ms)
+```
+
+See `temporal-kinematic-primitives` skill for the RollingBounceDetector algorithm.
+
+## Stage 5 — Signal Extractor Dispatch (REVISED per USER-CORRECTION-011, 013)
+
+The `FeatureCompiler` consumes BOTH players' state simultaneously per tick. A per-player compiler cannot compute `split_step_latency_ms` (needs opponent's PRE_SERVE → ACTIVE_RALLY transition timestamp).
+
+**Symmetric extractor API** (USER-CORRECTION-013): every signal extractor inherits from `BaseSignalExtractor` (`backend/cv/signals/base.py`). The compiler instantiates each extractor twice — once for `target_player="A"`, once for `"B"` — and passes `(target_state, opponent_state, target_kalman, opponent_kalman)` consistently. Subclasses write pure math on "target" / "opponent" without branching on self-identity.
+
+**Dependency injection**: extractors that need `CourtMapper` (e.g., `baseline_retreat_distance_m`) or `clip_fps` receive them via `dependencies: dict` in `__init__`. The compiler holds the canonical deps and passes them to every extractor.
+
+**Dispatch shape**:
+```python
+compiler = FeatureCompiler(match_id, dependencies={"court_mapper": cm, "clip_fps": 30.0})
+# compiler internally holds 7×2 = 14 extractor instances.
+compiler.ingest(frame, match_states, kalman_a, kalman_b, t_ms)
+for sample in compiler.pending_samples():
+    # SignalSample with player=target_player, signal_name from class attr
+    db.write(sample)
+```
+
+See `signal-extractor-contract` skill for the ABC contract and DI pattern.
+
+### State-gating matrix
+
+See `biomechanical-signal-semantics` skill for per-signal math. The compiler gates each extractor's `ingest()` / `flush()` on `required_state`:
 
 | Signal | Active during |
 |---|---|

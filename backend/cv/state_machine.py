@@ -153,13 +153,19 @@ class PlayerStateMachine:
 
 
 class MatchStateMachine:
-    """Couples two PlayerStateMachines via bounce-detected match phase (USER-CORRECTION-010).
+    """Couples two PlayerStateMachines via match-level events.
 
     Contract (per `match-state-coupling` skill):
       1. Each tick, both per-player FSMs update on their own kinematics first.
-      2. If EITHER player emits a BOUNCE_DETECTED event, force BOTH into PRE_SERVE_RITUAL.
-         (The bouncer is implicitly the server; the non-bouncer is the returner who needs to sync.)
-      3. Consumers drain transitions via `drain_transitions()`.
+      2. USER-CORRECTION-011 (Conditional DEAD_TIME uncoupling): if EITHER player transitions
+         into DEAD_TIME this tick AND the opponent is in PRE_SERVE_RITUAL (the Ace/Fault
+         deadlock — standing still, never moved), force the opponent into DEAD_TIME.
+         CRITICAL: only rescue PRE_SERVE_RITUAL opponents — NEVER force ACTIVE_RALLY
+         opponents into DEAD_TIME, as that would truncate their legitimate deceleration
+         curve and destroy recovery_latency_ms + lateral_work_rate.
+      3. USER-CORRECTION-010: if EITHER player emits a BOUNCE_DETECTED event, force BOTH
+         into PRE_SERVE_RITUAL (bouncer is server, non-bouncer is returner re-syncing).
+      4. Consumers drain transitions via `drain_transitions()`.
     """
 
     def __init__(self) -> None:
@@ -174,13 +180,31 @@ class MatchStateMachine:
         b_bounce: bool,
         t_ms: int,
     ) -> dict[PlayerSide, PlayerState]:
-        """Advance both players one tick, applying match-level bounce coupling."""
+        """Advance both players one tick, applying match-level coupling.
+
+        Coupling order per tick:
+          i.  Per-player kinematic update (independent).
+          ii. USER-CORRECTION-011: Conditional DEAD_TIME uncoupling (PRE_SERVE_RITUAL-only rescue).
+          iii. USER-CORRECTION-010: Bounce → PRE_SERVE_RITUAL (runs last; a simultaneous
+               DEAD_TIME + bounce event correctly lands everyone in PRE_SERVE_RITUAL).
+        """
+        a_prev, b_prev = self._a.state, self._b.state
         self._a.update(a_speed_mps, t_ms)
         self._b.update(b_speed_mps, t_ms)
 
+        # USER-CORRECTION-011: Conditional DEAD_TIME uncoupling.
+        # Only rescue a player stuck in PRE_SERVE_RITUAL (the Ace/Fault deadlock).
+        # Do NOT force ACTIVE_RALLY players into DEAD_TIME — that would truncate
+        # legitimate deceleration curves and destroy recovery_latency_ms / lateral_work_rate.
+        a_entered_dead = (a_prev != "DEAD_TIME" and self._a.state == "DEAD_TIME")
+        b_entered_dead = (b_prev != "DEAD_TIME" and self._b.state == "DEAD_TIME")
+        if a_entered_dead and self._b.state == "PRE_SERVE_RITUAL":
+            self._b.force_state("DEAD_TIME", t_ms)
+        if b_entered_dead and self._a.state == "PRE_SERVE_RITUAL":
+            self._a.force_state("DEAD_TIME", t_ms)
+
         if a_bounce or b_bounce:
-            # Force both into PRE_SERVE_RITUAL; the bouncer is the server, non-bouncer is returner.
-            # This is the canonical USER-CORRECTION-010 coupling.
+            # USER-CORRECTION-010: bouncer is server, non-bouncer is returner re-syncing.
             self._a.force_state("PRE_SERVE_RITUAL", t_ms)
             self._b.force_state("PRE_SERVE_RITUAL", t_ms)
 

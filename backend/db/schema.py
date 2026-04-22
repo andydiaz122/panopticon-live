@@ -11,7 +11,38 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_serializer, field_validator
+
+# ──────────────────────────── Serialization precision ────────────────────────────
+
+FLOAT_SERIALIZE_DECIMALS: int = 4
+"""Decimal places for JSON serialization (USER-CORRECTION-015 payload hygiene).
+
+4 decimals ≈ 0.0001 precision. At 1920-wide normalized coords that's ~0.2 px
+(below YOLO keypoint jitter ~2-3 px); in court meters that's 0.1 mm (far below
+measurement noise). Prevents 10MB+ JSON bloat from full-precision float streams.
+"""
+
+
+def _round_float(v: float | None) -> float | None:
+    return None if v is None else round(v, FLOAT_SERIALIZE_DECIMALS)
+
+
+def _round_pair(v: tuple[float, float]) -> tuple[float, float]:
+    return (round(v[0], FLOAT_SERIALIZE_DECIMALS), round(v[1], FLOAT_SERIALIZE_DECIMALS))
+
+
+def _round_pair_list(v: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    return [(round(x, FLOAT_SERIALIZE_DECIMALS), round(y, FLOAT_SERIALIZE_DECIMALS)) for x, y in v]
+
+
+def _round_list(v: list[float] | None) -> list[float] | None:
+    return None if v is None else [round(x, FLOAT_SERIALIZE_DECIMALS) for x in v]
+
+
+def _round_dict(v: dict[str, float | None]) -> dict[str, float | None]:
+    """Round dict values (None passes through). Tightly typed per python-reviewer HIGH finding."""
+    return {k: (None if val is None else round(val, FLOAT_SERIALIZE_DECIMALS)) for k, val in v.items()}
 
 # ──────────────────────────── Type aliases ────────────────────────────
 
@@ -116,6 +147,14 @@ class KeypointFrame(PanopticonBase):
                 raise ValueError(f"Keypoint ({x}, {y}) out of normalized [0.0, 1.0] bounds")
         return v
 
+    @field_serializer("keypoints_xyn")
+    def _ser_keypoints(self, v: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        return _round_pair_list(v)
+
+    @field_serializer("confidence")
+    def _ser_conf(self, v: list[float] | None) -> list[float] | None:
+        return _round_list(v)
+
 
 # ──────────────────────────── Raw YOLO detection (pre-assignment) ────────────────────────────
 
@@ -143,6 +182,26 @@ class PlayerDetection(PanopticonBase):
     feet_mid_xyn: tuple[float, float]  # normalized [0,1], for canvas rendering
     feet_mid_m: tuple[float, float]    # court meters, for Kalman input (USER-CORRECTION-008)
     fallback_mode: FallbackMode        # which segment produced feet_mid (USER-CORRECTION-003)
+
+    @field_serializer("keypoints_xyn")
+    def _ser_keypoints(self, v: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        return _round_pair_list(v)
+
+    @field_serializer("confidence")
+    def _ser_conf(self, v: list[float]) -> list[float]:
+        return [round(x, FLOAT_SERIALIZE_DECIMALS) for x in v]
+
+    @field_serializer("bbox_conf")
+    def _ser_bbox(self, v: float) -> float:
+        return round(v, FLOAT_SERIALIZE_DECIMALS)
+
+    @field_serializer("feet_mid_xyn")
+    def _ser_feet_xyn(self, v: tuple[float, float]) -> tuple[float, float]:
+        return _round_pair(v)
+
+    @field_serializer("feet_mid_m")
+    def _ser_feet_m(self, v: tuple[float, float]) -> tuple[float, float]:
+        return _round_pair(v)
 
 
 # ──────────────────────────── State transitions ────────────────────────────
@@ -181,6 +240,14 @@ class SignalSample(PanopticonBase):
     baseline_z_score: float | None = Field(default=None, ge=-10.0, le=10.0)
     state: PlayerState
 
+    @field_serializer("value")
+    def _ser_value(self, v: float | None) -> float | None:
+        return _round_float(v)
+
+    @field_serializer("baseline_z_score")
+    def _ser_z_score(self, v: float | None) -> float | None:
+        return _round_float(v)
+
 
 class FatigueVector(PanopticonBase):
     """Aggregated signal state for a ~1-second window during which player state is stable."""
@@ -194,11 +261,15 @@ class FatigueVector(PanopticonBase):
 
     @field_validator("window_end_ms")
     @classmethod
-    def _window_order(cls, v: int, info) -> int:
+    def _window_order(cls, v: int, info: ValidationInfo) -> int:
         start = info.data.get("window_start_ms")
         if start is not None and v <= start:
             raise ValueError("window_end_ms must be strictly greater than window_start_ms")
         return v
+
+    @field_serializer("signals")
+    def _ser_signals(self, v: dict[SignalName, float | None]) -> dict:
+        return _round_dict(v)
 
 
 # ──────────────────────────── Anomalies ────────────────────────────
@@ -216,6 +287,10 @@ class AnomalyEvent(PanopticonBase):
     baseline_std: float = Field(ge=0.0)
     z_score: float = Field(ge=-10.0, le=10.0)
     severity: float = Field(ge=0.0, le=1.0)
+
+    @field_serializer("value", "baseline_mean", "baseline_std", "z_score", "severity")
+    def _ser_metric(self, v: float) -> float:
+        return round(v, FLOAT_SERIALIZE_DECIMALS)
 
 
 # ──────────────────────────── Opus outputs ────────────────────────────

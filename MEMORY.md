@@ -294,9 +294,71 @@ Cross-session recall. Every entry is:
 - **Severity**: HIGH
 - **Files**: `backend/cv/kalman.py`, `tests/test_cv/test_kalman.py::test_input_units_are_assumed_meters_not_normalized`
 
-## DAY 1 LEARNINGS (Apr 22, 2026)
+## DAY 1 LEARNINGS (Apr 22, 2026) — Action 2.5 Citadel Override Patch Sprint
 
-(To be populated when Phase 1 Action 3 begins)
+### USER-CORRECTION-011 — Conditional DEAD_TIME Uncoupling (PRE_SERVE_RITUAL-only rescue)
+- **Rule**: In `MatchStateMachine.update()`, when EITHER player transitions into `DEAD_TIME` this tick, force the opponent into `DEAD_TIME` ONLY if the opponent is in `PRE_SERVE_RITUAL`. Never force an `ACTIVE_RALLY` opponent into `DEAD_TIME`.
+- **Why**: The original blanket "force opponent to DEAD_TIME on any entry" would truncate legitimate deceleration curves. If Player A hits a winner and stops while Player B is still sprinting for the ball (ACTIVE_RALLY), instantly forcing B to DEAD_TIME destroys `recovery_latency_ms` and `lateral_work_rate` signals. The ONLY case we need to rescue is the Ace/Fault deadlock where the returner never moved (standing-still PRE_SERVE_RITUAL after an ace).
+- **How to apply**: Use `if a_entered_dead and self._b.state == "PRE_SERVE_RITUAL"` (symmetric for B). Tests `test_active_rally_opponent_preserved_when_server_stops` and `test_ace_forces_standing_returner_to_dead_time` lock both halves.
+- **File**: `backend/cv/state_machine.py:178-187`
+
+### USER-CORRECTION-012 — Lomb-Scargle Angular-Frequency Trap + Relative Kinematics for Camera Invariance
+- **Rule**: (a) `scipy.signal.lombscargle` expects ANGULAR frequencies (rad/s), not Hz — multiply by `2*np.pi`. (b) For any Y-position oscillation analysis on broadcast video, operate on `wrist_y - hip_y` (relative kinematics), NOT raw `wrist_y`.
+- **Why**: (a) Tennis bounce cadence is 1-3 Hz = 6.28-18.8 rad/s. Passing raw Hz silently samples the wrong band (0.08-0.8 Hz) and returns wrong spectral entropy. (b) Broadcast cameras pan/tilt during serves. Absolute `wrist_y` carries biomechanics + camera motion superposed. The difference removes the common-mode camera drift, isolating pure arm-swing oscillation.
+- **How to apply**: Always `freqs_rad = freqs_hz * (2 * np.pi)` before `lombscargle`. In `RollingBounceDetector` and any wrist-oscillation signal, store `wrist_y - hip_y` in the buffer. Tests `test_camera_pan_rejected_via_relative_kinematics` and `test_camera_pan_with_superposed_bounce_still_detects` lock both cases.
+- **Files**: `backend/cv/temporal_signals.py`; `.claude/skills/biomechanical-signal-semantics/SKILL.md` (Common Traps callout at top).
+
+### USER-CORRECTION-013 — Symmetric BaseSignalExtractor API + Dependency Injection + Bounce Deadlock Resolution
+- **Rule**: (a) Every signal extractor inherits from `BaseSignalExtractor` in `backend/cv/signals/base.py`. (b) Constructor takes `target_player: PlayerSide` + `dependencies: dict[str, Any]`. (c) `ingest()` receives `(target_state, opponent_state, target_kalman, opponent_kalman, t_ms)` — symmetric around target. (d) Bounce detection runs UNCONDITIONALLY before the state machine (via `RollingBounceDetector`, not inside any signal extractor).
+- **Why**: (a-c) An asymmetric `a_state/b_state` API forces every extractor to branch on `self.target_player`, leaking compiler-routing logic into every module. Symmetric "target/opponent" + DI is clean — cross-player signals (like `split_step_latency_ms`) naturally read `opponent_state` / `opponent_kalman`. (d) If bounce detection lived inside signal extractors that only run AFTER state transitions, there'd be a Chicken-and-Egg deadlock. Promoting bounce to a continuous rolling primitive resolves it.
+- **How to apply**: Fleet agents in Action 3 MUST subclass `BaseSignalExtractor` and access `self.target_player` + `self.deps["court_mapper"]`/`self.deps["clip_fps"]`. Compiler instantiates each extractor TWICE (target="A" then target="B"). `RollingBounceDetector.evaluate()` runs BEFORE `MatchStateMachine.update()` every tick.
+- **Files**: `backend/cv/signals/base.py`, `backend/cv/temporal_signals.py`; `.claude/skills/signal-extractor-contract/SKILL.md`.
+
+### USER-CORRECTION-014 — Null-Safe Ambidextrous Wrist Selection (np.nan + np.nanvar/nanmax/nanmin)
+- **Rule**: For any rolling buffer of image-space keypoints subject to occlusion: (a) ingest `np.nan` when keypoints are `None` or below confidence threshold; (b) evaluate via `np.nan{var, max, min, mean}` (silently skip NaN); (c) pick the confident wrist with MAX y (lower screen position = closer to ball at bounce) as the ambidextrous reference.
+- **Why**: YOLO outputs `None` or low-confidence values during occlusion. `deque[float | None]` fed to `max()` crashes `TypeError`. Casting `None → 0.0` fabricates data. NaN + numpy's nan-aware ops is the canonical pattern. MAX-y selection handles lefty/righty servers whose non-dominant wrist is often out of frame.
+- **How to apply**: Always add an all-NaN early exit (`np.sum(~np.isnan(arr)) < MIN_SAMPLES → return False`) to suppress `RuntimeWarning: Degrees of freedom <= 0` and avoid inf/nan propagation. Tests `test_occlusion_nan_does_not_crash`, `test_ambidextrous_wrist_selection_right_hand`, `test_hip_occlusion_yields_nan_rejection` lock the cases.
+- **File**: `backend/cv/temporal_signals.py::_pick_wrist`, `::_has_bounce`.
+
+### USER-CORRECTION-015 — Zero-Variance Spectral Guard + Pydantic @field_serializer Float Rounding
+- **Rule**: (a) Before calling `scipy.signal.lombscargle(normalize=True)`, check `np.nanvar(buf) < 1e-5` — if true, return `None` (no spectral content). (b) Every float-bearing Pydantic model has `@field_serializer` rounding to 4 decimal places at JSON serialization only (in-memory retains full precision).
+- **Why**: (a) `lombscargle(normalize=True)` divides by buffer variance. A constant / all-nan buffer explodes to `inf`/`nan`, corrupting downstream entropy. `1e-5` is below YOLO's squared-normalized jitter floor (~1e-4²), so it catches "genuinely nothing" without false-negating on noise. (b) 1800 frames × 2 players × 17 keypoints × 2 coords = 122,400 floats. At default 15-decimal precision → ~2.5 MB for keypoints alone. 4-decimal rounding → ~850 KB. Prevents mobile-Safari browser-OOM on static `match_data.json`.
+- **How to apply**: Always guard `lombscargle` with the variance floor. Use `@field_serializer("field")` (NOT `@field_validator`) — serializer runs on `model_dump()` only, preserving in-memory precision for downstream math. Tests `test_zero_variance_returns_no_bounce`, `test_in_memory_values_retain_full_precision`, `test_round_trip_drift_is_bounded` lock behavior.
+- **Files**: `backend/db/schema.py` (13 fields across 5 models), `backend/cv/temporal_signals.py::_has_bounce`.
+
+### USER-CORRECTION-016 — DevFleet Sandbox Boundaries (Action 3 orchestration discipline)
+- **Rule**: `/devfleet` fleet agents may edit ONLY `backend/cv/signals/<signal_name>.py` and `tests/test_cv/test_signal_<signal_name>.py`. FORBIDDEN: `schema.py`, `compiler.py`, `signals/__init__.py`, `signals/base.py`, `state_machine.py`, `kalman.py`, `homography.py`, `pose.py`, `temporal_signals.py`. Integration of all 7 signals into `FeatureCompiler` happens SEQUENTIALLY in Action 3.5 by the orchestrator, post-merge.
+- **Why**: Parallel Git worktrees where each agent "helpfully" edits shared infrastructure (compiler wiring, schema additions, `__init__.py` exports) produce unresolvable merge conflicts. The only safe parallelism is one-file-per-agent on new files.
+- **How to apply**: Every fleet dispatch prompt includes the sandbox constraint VERBATIM. After each fleet returns, orchestrator runs `git diff --name-only` and REJECTS any diff touching forbidden paths. If a fleet discovers a schema change is needed → return with a description; orchestrator lands it in Action 3.5 before wiring.
+- **File**: Applies to Action 3 orchestration; no production-code impact.
+
+### PATTERN-014 — ABC + Symmetric API is the clean pattern for pluggable fleet-built modules
+- **Type**: Architectural (Python idiom for parallel agent sprints)
+- **Context**: Designed for Action 3 `/devfleet` where 4 parallel fleets each build 1-2 signal extractors.
+- **Lesson**: `abc.ABC` + `@abstractmethod` + class-level contract attributes (`signal_name`, `required_state`) + dependency-injected resources gives each fleet a COMPLETE written contract. Extractors write pure math on `target_*`/`opponent_*` inputs — no branching on `self.target_player`. Compiler handles routing once; every extractor benefits. When the ABC is stateless except for `self.deps`, it's trivially serializable / swappable / testable.
+- **Severity**: HIGH — this is the scaffold that lets 4 parallel fleets merge cleanly.
+- **Files**: `backend/cv/signals/base.py`; `.claude/skills/signal-extractor-contract/SKILL.md`.
+
+### PATTERN-015 — Common-Mode Rejection via Relative Kinematics generalizes beyond wrist-hip
+- **Type**: Signal processing pattern (from EE / DSP)
+- **Context**: USER-CORRECTION-012 — broadcast cameras drift during serves.
+- **Lesson**: Any time an input has "signal + shared-noise" (biomech + camera pan, limb + torso orientation, court-frame + body-frame), subtracting a CO-MOVING reference removes the noise in one operation. Generalizes to: `shoulder_y - hip_y` for torso lean; `ankle_x - hip_x` for lateral foot placement relative to body; `wrist_z - chest_z` for vertical reach. **Useful anywhere the camera is not locked down.**
+- **Severity**: MEDIUM (applies across future signals)
+- **File**: Applies to `backend/cv/signals/*` going forward.
+
+### PATTERN-016 — Rising-Edge Detection prevents redundant coupling in multi-FSM systems
+- **Type**: FSM coupling pattern
+- **Context**: USER-CORRECTION-011 conditional DEAD_TIME uncoupling — must fire ONCE on transition INTO DEAD_TIME, not every tick thereafter.
+- **Lesson**: Capture `a_prev, b_prev = self._a.state, self._b.state` BEFORE advancing either FSM. Then `entered_X = (prev != "X" and self.state == "X")` isolates the rising edge. No steady-state retriggering. Generalizes to any cross-FSM coupling in multi-agent environments. Alternative (passing boolean events out of each FSM) is more complex and error-prone.
+- **Severity**: HIGH (prevents subtle double-fire bugs)
+- **File**: `backend/cv/state_machine.py:172-175`.
+
+### PATTERN-017 — Pydantic v2 `@field_serializer` with typed `_round_*` helpers scales to N models
+- **Type**: Pydantic v2 idiom
+- **Context**: USER-CORRECTION-015 float rounding across 5 models with 13+ fields.
+- **Lesson**: Extract helpers `_round_float(v: float | None)`, `_round_pair(v: tuple[float, float])`, `_round_pair_list(v: list[tuple])`, `_round_list(v: list[float] | None)`, `_round_dict(v: dict[str, float | None])`. Each model uses the appropriate helper. Tight helper signatures catch future misuse at type-check time. `@field_serializer` supports multi-field decoration: `@field_serializer("value", "baseline_mean", "baseline_std", ...)`.
+- **Severity**: MEDIUM (discipline that compounds)
+- **File**: `backend/db/schema.py:22-50`.
 
 ---
 

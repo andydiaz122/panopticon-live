@@ -7,6 +7,25 @@ description: Mathematical definitions, academic thresholds, and test-case patter
 
 The 7 signals are the ALPHA of the entire product. Each must be mathematically sound and grounded in literature. This skill is the reference.
 
+## ⚠️ Common Mathematical Traps (CHECK BEFORE WRITING ANY SIGNAL)
+
+1. **`scipy.signal.lombscargle` requires ANGULAR frequencies (rad/s), NOT Hz** (USER-CORRECTION-012).
+   Tennis bounce cadence is 1-3 Hz = 6.28-18.8 rad/s. Passing raw Hz silently analyzes the wrong band and returns wrong entropy. Always multiply by `2*np.pi`.
+
+2. **`lombscargle(normalize=True)` divides by buffer variance** (USER-CORRECTION-015).
+   A constant / all-NaN buffer produces inf / NaN. Guard with `np.nanvar(buf) < 1e-5 → return None`.
+
+3. **Relative kinematics defeat camera pan/tilt** (USER-CORRECTION-012).
+   Broadcast cameras pan during serves. Raw `wrist_y` = biomech + camera. Use `wrist_y − hip_y` to isolate biomech.
+
+4. **YOLO outputs `None` / low-confidence keypoints** (USER-CORRECTION-014).
+   Use `np.nan` + `np.nan{var, max, min, mean}` in buffers. Ambidextrous wrist selection: pick the confident wrist with max y (lower screen position = closer to ball at bounce).
+
+5. **Cross-player signals** (USER-CORRECTION-011, 013).
+   `split_step_latency_ms` needs the OPPONENT's PRE_SERVE → ACTIVE_RALLY transition timestamp. Use the symmetric `BaseSignalExtractor` API: `ingest(target_state, opponent_state, target_kalman, opponent_kalman, ...)`.
+
+See `temporal-kinematic-primitives` and `signal-extractor-contract` skills for details.
+
 ## Far-Court Occlusion Fallback Chain (USER-CORRECTION-003)
 
 The broadcast camera's perspective places the tennis net in front of Player B's ankles ~80% of frames. All leg-dependent signals MUST use the helper below, NOT raw ankle keypoints.
@@ -110,12 +129,24 @@ variance_cm = np.std(apex_heights[-N:]) * court_scale_cm_per_unit
 **Calculation**:
 ```python
 from scipy.signal import lombscargle
+import numpy as np
 
 # Buffer: COM Y-position samples during PRE_SERVE_RITUAL
-if len(buffer) < 10:
+if len(buffer_y) < 10:
     return None  # SP3 guard
-freqs = np.linspace(0.5, 5.0, 100)  # bounce cadence range (Hz)
-power = lombscargle(buffer_t, buffer_y, freqs, normalize=True)
+
+# USER-CORRECTION-015: Zero-variance guard — lombscargle(normalize=True) divides by
+# variance; constant / all-nan buffers explode to inf/nan. Below the YOLO jitter
+# noise floor, declare "no spectral content."
+if np.nanvar(buffer_y) < 1e-5:
+    return None
+
+# USER-CORRECTION-012: scipy.signal.lombscargle requires ANGULAR frequencies (rad/s),
+# NOT Hz. Tennis bounce cadence is 1-3 Hz = 6.28-18.8 rad/s. Passing raw Hz looks at
+# the wrong band (0.08-0.8 Hz) and silently returns wrong spectral entropy.
+freqs_hz = np.linspace(0.5, 5.0, 100)          # physical cadence range
+freqs_rad = freqs_hz * (2 * np.pi)             # ANGULAR frequencies for lombscargle
+power = lombscargle(buffer_t, buffer_y, freqs_rad, normalize=True)
 spectral_entropy = -np.sum(power * np.log(power + 1e-10))
 delta = spectral_entropy - baseline_entropy
 ```

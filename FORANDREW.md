@@ -161,3 +161,42 @@ When this session resumes (or after compact):
 
 ### Documentation is safe to compact from this point
 All 5 living docs reflect current state. MEMORY.md has 10 USER-CORRECTIONs + 13 PATTERNs + 5 DECISIONs + 8 GOTCHAs. TOOLS_IMPACT.md has Day-0 and Phase-1-late-session ROI blocks. PHASE_1_PLAN.md status line reflects where we are. CLAUDE.md prime directive unchanged. All agents + skills on main branch.
+
+---
+
+## 2026-04-22 — Action 2.5 Citadel Override Patch Sprint (post-resume)
+
+### What happened
+The team-lead audit returned with 5 dynamic-failure patches, then a second audit added 6 refinements (renamed **USER-CORRECTIONs 011-016** per team-lead directive). I validated each override from first principles before accepting, wrote an updated plan, got approval, then executed the 5-patch sprint TDD-first.
+
+**Pre-sprint state**: 45 tests / 82.75% coverage (Action 2 baseline).
+**Post-sprint state**: **96 tests / 87.68% coverage / ruff clean / python-reviewer 1H + 2M fixed.**
+
+### 5 patches landed (chronological)
+1. **Patch 1 — BaseSignalExtractor ABC with symmetric DI** (+12 tests). New file `backend/cv/signals/base.py`. Symmetric `target/opponent` API + `dependencies: dict` constructor. Fleet agents MUST subclass this in Action 3.
+2. **Patch 2 — Pydantic `@field_serializer` float rounding** (+16 tests). `backend/db/schema.py` now rounds 13 float-bearing fields to 4 decimals at JSON-dump ONLY. In-memory retains full precision. New helpers `_round_float / _round_pair / _round_pair_list / _round_list / _round_dict` with tight type signatures.
+3. **Patch 3 — Conditional DEAD_TIME uncoupling** (+6 tests). `backend/cv/state_machine.py::MatchStateMachine.update` now rescues PRE_SERVE_RITUAL opponents ONLY — never forces ACTIVE_RALLY opponents into DEAD_TIME. Preserves legitimate deceleration curves.
+4. **Patch 4 — RollingBounceDetector** (+17 tests). New file `backend/cv/temporal_signals.py`. Relative kinematics (`wrist_y - hip_y`), NaN-safety (`np.nan` + `nanvar/nanmax/nanmin`), ambidextrous wrist (max-y among confident), variance floor `1e-5`. Runs BEFORE the state machine each tick.
+5. **Patch 5 — Skill updates + 2 new orthogonal skills**: fixed Lomb-Scargle Hz→rad/s in `biomechanical-signal-semantics` + added Common-Traps callout at skill top; `cv-pipeline-engineering` gained Stage 4.5 + USER-CORRECTION-011/013 annotations; created `signal-extractor-contract` (API discipline) and `temporal-kinematic-primitives` (time-series / camera-invariance discipline).
+
+### Non-obvious learnings (PATTERNs 014-017 in MEMORY.md)
+1. **PATTERN-014** — ABC + symmetric API is the CLEAN pattern for pluggable fleet-built modules. When base class is stateless except for `self.deps`, fleets build independently against a written contract with no routing logic leaking into their math.
+2. **PATTERN-015** — Common-mode rejection via relative kinematics generalizes: `shoulder_y - hip_y` for torso lean, `ankle_x - hip_x` for lateral foot placement, etc. Useful wherever the camera is not locked down.
+3. **PATTERN-016** — Rising-edge detection (`prev != X and curr == X`) prevents redundant coupling in multi-FSM systems. Capture prev state BEFORE advancing either FSM.
+4. **PATTERN-017** — Pydantic v2 `@field_serializer` + typed `_round_*` helpers scale cleanly. Multi-field decoration `@field_serializer("v1", "v2", "v3")` is supported natively.
+
+### Bug journal (2026-04-22)
+- **numpy `nanvar` DoF warning on all-NaN buffers**: 4 `RuntimeWarning: Degrees of freedom <= 0` silenced by adding early-exit `non_nan_count < MIN_SAMPLES → return False` in `_has_bounce`. Cleaner than `warnings.filterwarnings`.
+- **Unicode MINUS SIGN (U+2212)**: ruff RUF002 flagged `−` in docstrings/comments. The ambiguous char crept in from the team-lead's spec prose. Replaced with ASCII `-`.
+- **python-reviewer caught 3 issues**: (a) `_round_dict(v: dict)` too loose — tightened to `dict[str, float | None]`; (b) untyped `info` in `_window_order` — added `ValidationInfo` import + annotation; (c) stringly-typed `buffer_key == "A" else "B"` — refactored to `dict["A"/"B"] → deque` so unknown keys raise `KeyError` instead of silently routing to B.
+
+### What's NEXT (resume directives for next session)
+
+1. **COMMIT + PUSH** Action 2.5 once Andrew approves. Single commit: `feat(cv): Action 2.5 spine patches — USER-CORRECTIONs 011-016 + BaseSignalExtractor ABC + float rounding + conditional uncoupling + RollingBounceDetector + 2 new skills`.
+2. **DISPATCH `/devfleet`** with USER-CORRECTION-016 sandbox constraint VERBATIM in every fleet prompt. 4 fleets, 7 signals, each fleet TDD-first via `test-forensic-validator`:
+   - Fleet 1 (cross-player): `recovery_latency_ms`, `split_step_latency_ms`
+   - Fleet 2 (Lomb-Scargle): `serve_toss_variance_cm`, `ritual_entropy_delta` — variance guard mandatory
+   - Fleet 3 (homography): `crouch_depth_degradation_deg`, `baseline_retreat_distance_m` — CourtMapper injected via deps
+   - Fleet 4 (singleton): `lateral_work_rate`
+3. **Orchestrator-only Action 3.5**: create `backend/cv/compiler.py::FeatureCompiler` that (a) holds 14 extractor instances (7 × 2 players), (b) calls `RollingBounceDetector → MatchStateMachine → extractors` in canonical order per Stage 4.5/5, (c) yields `SignalSample`s. End-to-end test on 30-frame synthetic trace.
+4. Smoke integration on `data/clips/utr_match_01_segment_a.mp4` → `match_data.json`. Then Phase 2 (Opus Coach + HUD Designer + Haiku Narrator + scouting-report Server Action).

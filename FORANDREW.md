@@ -302,3 +302,53 @@ All 5 living docs reflect the current state:
 2. **Action 4.2** (Agent dispatch): precompute.py + mocked tests
 3. **Action 4.3** (Orchestrator): verify + commit + push
 4. **Action 4.4** (Conditional on Andrew): smoke test on real video once corners JSON exists
+
+---
+
+## 2026-04-22 (late, post-compact) — Phase 2 Opus Agent Layer
+
+### What we shipped (commit `c981773`)
+
+Three Anthropic models orchestrated OFFLINE inside `precompute.py`:
+- **Opus 4.7 Coach Reasoner** — anomaly/rally-end triggered `CoachInsight` with extended thinking + tool-use loop (4 deterministic tools over in-memory ToolContext)
+- **Opus 4.7 HUD Designer** — state-transition triggered `HUDLayoutSpec` via pure JSON generation (no tools, Opus arranges React widget primitives)
+- **Haiku 4.5 Narrator** — per-N-second `NarratorBeat` color commentary (cheap model in the multi-model orchestration story)
+
+Phase 2 commit contents:
+- `backend/agents/__init__.py`, `tools.py`, `system_prompt.py`, `opus_coach.py`, `hud_designer.py`, `haiku_narrator.py`
+- Schema additions: `NarratorBeat` Pydantic model + `narrator_beats` DDL table + writer queue/flush/export plumbing
+- `precompute.run_agent_phase` + new CLI flags: `--skip-agents`, `--coach-cap`, `--design-cap`, `--beat-cap`, `--beat-period-sec`
+- 83 new tests: 25 tool executors + 14 coach + 15 designer + 12 narrator + 17 precompute-agent-phase + 5 NarratorBeat writer tests. 349/349 total green, ruff clean.
+
+### Non-obvious engineering decisions (logged to MEMORY.md)
+
+1. **In-memory ToolContext (not DuckDB queries)** — Phase 2 runs inside precompute.py where signals are already in Python. DuckDB round-trip per tool call = latency + SQL-injection surface for zero benefit. Phase 3's live scouting-report agent can swap in a DuckDB-backed impl behind the same `TOOL_EXECUTORS` registry. (PATTERN-032)
+
+2. **Anthropic tool schemas from `Pydantic.model_json_schema()`** — single source of truth for validation. Hand-writing schema JSON drifts from runtime validation. (PATTERN-033)
+
+3. **Token accumulation across tool-use loop iterations** — `response.usage` is per-API-call. A coach insight that does 3 tool round-trips consumes 3x the tokens of the last response. `_TokenAcc` dataclass accumulates across all rounds so `CoachInsight.*_tokens` fields report TRUE per-insight cost. (PATTERN-034)
+
+4. **Structural `Protocol` client typing** — `AnthropicClientLike` Protocol with just `.messages.create`; fakes are `SimpleNamespace`. Real `AsyncAnthropic` import lives only in `main()`. (PATTERN-035)
+
+5. **Every agent's 3 failure modes land as valid Pydantic records** — API exception / JSON parse error / Pydantic validation error. Each gets a distinct error marker (`[coach_error:]`, `[designer_parse_error]`, `[designer_validation_error:]`, `[narrator_error:]`). Agents NEVER raise into precompute.py. (PATTERN-036)
+
+### Two HIGH bugs caught by python-reviewer (post-implementation)
+
+- **HIGH-1**: Greedy `\{.*\}` regex on Opus JSON output extends to the LAST `}` in the text — silently corrupts matches when trailing prose contains stray braces. Fix: `json.JSONDecoder.raw_decode` after fence stripping. Parses ONE complete object and stops. (USER-CORRECTION-025, GOTCHA-013)
+
+- **HIGH-2**: Narrator had NO cap while Coach/Designer did (inconsistency = the bug). A 15-min clip at 1/sec cadence would fire 900 concurrent Haiku calls, trip the rate limiter, and produce mostly `[narrator_error]` beats. Fix: `beat_cap` parameter (default 20, mirrors coach_cap/design_cap). (USER-CORRECTION-024)
+
+### GOTCHAs caught in-flight
+
+- **GOTCHA-012** (fake-client `messages[]` list mutation): The scripted Anthropic fake captured `kwargs` by reference, and since the coach mutates the messages list in-place across iterations, the log showed the FINAL state on every call. Fix: snapshot via `{**kwargs, "messages": list(kwargs["messages"])}` before logging. Two tests failed before this fix, silently (wrong lookup, not runtime error).
+
+### Meta-learning
+
+The python-reviewer's ROI on Phase 2 was very high: 2 HIGH bugs + 3 MEDIUM in <2 minutes of agent time. Both HIGHs were cases where the author's ATTENTION had drifted — greedy regex is a classic trap, and cap asymmetry is something you only see once you review from the outside. **Always dispatch python-reviewer after writing a new agent layer, before the commit.**
+
+### Next session RESUME DIRECTIVES (post-Phase 2)
+
+1. **Action 4.4** (optional, gated on Andrew): smoke test on real UTR clip with `--skip-agents` first (CV only), then with agents enabled + `ANTHROPIC_API_KEY` set
+2. **Phase 3** (Fri Apr 24 target): Next.js HUD scaffold + canvas rAF loop + typewriter coach panel + Motion animations + scouting-report Managed Agent Server Action
+3. **Phase 4** (Sat Apr 25): Vercel deploy + multi-agent review panel + second match clip
+4. **Phase 5** (Sun Apr 26 8pm EST): demo video + submission

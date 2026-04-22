@@ -539,6 +539,73 @@ Cross-session recall. Every entry is:
 
 ---
 
+## PHASE 2 LEARNINGS (Apr 22-23, 2026) — Opus Agent Layer
+
+### USER-CORRECTION-024 — Narrator Beat Cap Parity with Coach/Design Caps
+- **Rule**: Every async agent that fires N-per-clip MUST have a hard cap parameter, even if its per-call cost is low. Haiku beats at 1/sec over a 15-min clip = 900 concurrent Anthropic calls via `asyncio.gather` → hit the rate limiter → 429s → the `except Exception` fallback turns every beat into `[narrator_error: ...]` text → demo looks broken.
+- **Why**: Discovered by python-reviewer HIGH-2 in Phase 2. Coach had `coach_cap=5`, Designer had `design_cap=10`, Narrator had NONE. Asymmetry was the bug — the existence of the other caps was tacit evidence the author already understood the need.
+- **How to apply**: When adding an async agent to an orchestrator, audit ALL peer agents for the cap parameter. If any has a cap, ALL must. Default value should be "fits inside the demo budget" — for PANOPTICON that's ~20 beats (3 minutes @ 10s cadence).
+- **Severity**: HIGH (rate-limiter + cost)
+
+### USER-CORRECTION-025 — JSONDecoder.raw_decode over Greedy Regex for LLM JSON Extraction
+- **Rule**: When parsing JSON from LLM output that may contain preamble prose, markdown fences, OR trailing commentary with stray braces, use `json.JSONDecoder.raw_decode(text, start_idx)` — NEVER a greedy `re.compile(r"\{.*\}", re.DOTALL)`.
+- **Why**: Greedy regex matches from the FIRST `{` to the LAST `}` in the text. Opus sometimes wraps JSON in ```fences``` and adds trailing commentary like "(Note: fallback uses {curly} braces in the tail.)". The greedy regex extends to the `}` in the tail prose, corrupting the match — `json.loads` fails, silently falls through to a default. The bug is invisible: no exception, just wrong output. `raw_decode` parses ONE complete object starting at a given index and returns both the value + the index where it stopped, so trailing prose is ignored entirely.
+- **How to apply**: Strip markdown fences first, then `first_brace = text.find("{")`, then `json.JSONDecoder().raw_decode(text[first_brace:])`. See `backend/agents/hud_designer.py:_extract_json_object`.
+- **Severity**: HIGH (silent correctness)
+
+### PATTERN-032 — In-Memory ToolContext for Offline Agents (Defer DuckDB to Live Path)
+- **Type**: Architecture
+- **Context**: Phase 2 runs Opus agents INSIDE `precompute.py`, which already holds all signals + transitions in Python memory. A DuckDB-backed tool would require a round-trip to disk per tool call, add an SQL-injection surface, and provide zero reasoning benefit.
+- **Lesson**: For offline agent pipelines, implement tools as pure Python functions over an in-memory `@dataclass(frozen=True)` context. Declare the interface as `TOOL_EXECUTORS: dict[str, Callable]` so Phase 3's live path (scouting-report Managed Agent on Vercel) can swap in a DuckDB-backed implementation behind the same dispatch without changing tool names or schemas.
+- **File**: `backend/agents/tools.py` (ToolContext frozen dataclass + TOOL_EXECUTORS registry).
+- **Severity**: MEDIUM (pattern reusable for future offline agent pipelines)
+
+### PATTERN-033 — Anthropic-Format Tool Schemas Generated from Pydantic `model_json_schema()`
+- **Type**: Architecture
+- **Context**: Anthropic's tool API expects `{"name", "description", "input_schema"}` per tool. Hand-writing `input_schema` JSON drifts from runtime validation. Generating it from `ToolInput.model_json_schema()` gives a SINGLE source of truth: Opus sees the schema, the executor validates the payload via the same Pydantic model.
+- **Lesson**: Always generate Anthropic tool schemas from Pydantic input models, never by hand. Use a small helper: `_make_schema(name, description, PydanticModel) -> dict`. See `backend/agents/tools.py:TOOL_SCHEMAS`.
+- **Severity**: MEDIUM (drift-prevention)
+
+### PATTERN-034 — Token Accumulation Across Tool-Use Loop Iterations
+- **Type**: Correctness
+- **Context**: `response.usage` is per-API-call, not per-logical-insight. A coach insight that requires 3 tool round-trips consumes 3× the tokens of the last response. Naively storing `response.usage.input_tokens` in `CoachInsight` would under-report cost by 2/3.
+- **Lesson**: Accumulate `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` via a `_TokenAcc` dataclass across ALL iterations of the tool-use loop. Expose on the final Pydantic record. Judges reading the dev panel see TRUE cost, not last-call cost. See `backend/agents/opus_coach.py:_TokenAcc`.
+- **Severity**: MEDIUM (observability correctness)
+
+### PATTERN-035 — Structural `Protocol` Client Typing Avoids SDK Import at Test Time
+- **Type**: Testing
+- **Context**: `generate_coach_insight(client, ...)` needs to type-check the Anthropic client. Importing `AsyncAnthropic` directly for the annotation would force tests to mock the full SDK surface area.
+- **Lesson**: Declare an `AnthropicClientLike` `Protocol` with just `.messages.create` (duck-typed). Tests pass `SimpleNamespace`-based fakes with the same shape. The real `AsyncAnthropic` import stays in `precompute.main()` (a call site), never in the reasoning layer. See `backend/agents/opus_coach.py:AnthropicClientLike`.
+- **Severity**: MEDIUM (test-isolation)
+
+### GOTCHA-012 — Scripted Fake Client Must Snapshot `messages[]` List in Tests
+- **Symptom**: A test that inspects `call_log[N]["messages"]` sees the FINAL mutated state of the messages list on every call — not the state at the time of the call.
+- **Root cause**: The coach mutates the `messages` list in-place across tool-use iterations (`messages.append(assistant_turn)`, `messages.append(tool_result)`). The fake's `call_log` stores a reference to the same list object.
+- **Fix**: In the scripted client's `_create(**kwargs)`, snapshot via `snap = {**kwargs}; snap["messages"] = list(snap["messages"])` before logging. Shallow list copy is enough because inner message dicts are never mutated in-place.
+- **Severity**: HIGH (silent test correctness — tests may PASS with wrong assertions)
+- **File**: `tests/test_agents/test_opus_coach.py:_ScriptedClient`
+
+### GOTCHA-013 — Greedy `{.*}` Regex on LLM JSON Output Corrupts on Tail Prose
+- See USER-CORRECTION-025. Captured here because the SYMPTOM is distinctive:
+  - Test with "clean JSON" passes
+  - Test with "JSON in markdown fence" passes (fences don't contain `}`)
+  - Test with "prose containing `{curly}` after JSON" FAILS — fallback layout returned silently
+- **Severity**: HIGH (silent correctness)
+
+### PATTERN-036 — Defense-in-Depth for Agent Failure Modes
+- **Type**: Architecture
+- **Context**: Every agent (Coach/Designer/Narrator) has THREE potential failure modes: (a) API exception, (b) parse error (for JSON-emitting agents), (c) Pydantic validation error (hallucinated enum values). All three must be caught and converted to a valid Pydantic record with an error marker — NEVER raise into the caller.
+- **Lesson**: Treat Opus/Haiku output the same way you'd treat a third-party API response: hostile data. For each agent: try the API call; catch-all exception → error record. Parse JSON (if applicable); catch JSONDecodeError → fallback record. Validate via Pydantic; catch ValidationError → fallback record. Each layer has its own error marker in the text/commentary field so debugging later can identify WHICH layer failed. See `backend/agents/hud_designer.py` for the 3-layer pattern.
+- **Severity**: HIGH (resilience)
+
+### DECISION-007 — HUDLayoutSpec Stays JSON-Only (No DuckDB Table)
+- **Context**: Coach and Narrator insights have DuckDB tables; HUD layouts do not.
+- **Why**: Layouts are low-frequency (one per match-state transition, ~10 per clip) and consumed exclusively by the frontend via match_data.json. Storing them in DuckDB too would be redundancy for zero read-path benefit.
+- **File**: `backend/db/writer.py` — `queue_coach_insight` + `queue_narrator_beat` exist; no `queue_hud_layout`. Layouts go straight into `all_hud_layouts: list[HUDLayoutSpec]` → `_MatchData` → JSON.
+- **Severity**: LOW (schema design — don't forget this when Phase 3 wonders why layouts aren't queryable via SQL)
+
+---
+
 ## DAY 2 LEARNINGS (Apr 23, 2026)
 
 (To be populated)

@@ -298,6 +298,43 @@ At end of each day, answer:
 
 ---
 
-## Day 2 (Apr 23 — Action 4: Pre-Compute Crucible PENDING)
+## Day 2 (Apr 22-23 — Phase 2 Opus Agent Layer) — HIGH ROI
 
-(To be populated as Action 4 agents dispatch for DB writer + precompute CLI.)
+### Python-reviewer agent (post-Phase-2 dispatch) — HIGHEST ROI of the week
+
+Dispatched once, ~2 minutes of agent wall time. Returned 2 HIGH + 3 MEDIUM findings, each actionable:
+
+| Finding | Severity | Root cause | Cost if shipped |
+|---|---|---|---|
+| HIGH-1: Greedy `\{.*\}` regex extends to LAST `}` in tail prose | HIGH | Classic greedy-regex trap on LLM output | Silent fallback layouts on any Opus response with trailing prose |
+| HIGH-2: Narrator had no `beat_cap` while coach/design did | HIGH | Attention drift; asymmetry = the bug | 900 concurrent Haiku calls on a 15-min clip → rate limiter → `[narrator_error]` beats dominating demo |
+| MEDIUM-1: bare `list` parameter types in `_safe_gather` | MEDIUM | Missed type annotation | mypy noise + future-refactor hazard |
+| MEDIUM-2: no length guard on caller-supplied `signal_snapshot` | MEDIUM | Future-proofing gap | Unbounded Haiku input cost if a future caller passes unvalidated data |
+| MEDIUM-3: `asyncio.run` inside sync function — not documented | MEDIUM | Future-refactor hazard | `RuntimeError: event loop already running` if moved into FastAPI |
+
+All 5 actioned with 3 regression tests added (markdown-fence test, beat_cap test, signal-snapshot-truncation test + its complement). 349/349 tests pass after hardening, ruff clean. Total hardening effort: ~15 minutes.
+
+**ROI calculus**: reviewer's 2 minutes of attention caught 2 silent-correctness bugs that unit tests alone missed (because the tests I wrote didn't exercise the failure-mode inputs — fence + tail-prose JSON, and clips with >50 beats). This is orthogonal coverage — tests verify behavior on KNOWN inputs; reviewers verify the input space ITSELF.
+
+### Pattern worth entrenching
+
+**Always dispatch `python-reviewer` after writing a new agent layer, before the commit.** The commit message should credit the findings. This is now part of my mental "definition of done" for agent-facing code.
+
+### Other tools that fired during Phase 2
+
+- `TodoWrite` — 8-item Phase 2 plan from P2.0 to P2.6, updated in real-time as each action completed. Prevented scope drift across 6 sub-actions and 83 tests.
+- `Write` + `Edit` — 6 new files in `backend/agents/` and 5 new test files, plus surgical edits to `schema.py`/`writer.py`/`precompute.py`
+- `Bash` for `pytest` + `ruff check` as a tight feedback loop — ran 8+ times across Phase 2, each <4 seconds
+- `Read` for checking existing test patterns (`test_writer.py`, `test_precompute.py`) before writing new ones — prevented duplication of helper code
+
+### Tools NOT used in Phase 2 (by design)
+
+- `context7` — didn't need it; Pydantic v2 and Anthropic SDK 0.96.0 behavior was well-known
+- `perplexity_*` — Phase 2 was pure implementation, no external research needed
+- Any Vercel tool — Phase 2 is offline Python; Vercel surface is Phase 3+
+- `e2e-runner` / Playwright — no UI yet (Phase 3)
+- `devfleet` / parallel agents — Phase 2 was a single coherent author-one-file-at-a-time task, not parallelizable in the way Phase 1's 7 signals were
+
+### Meta-learning on the hackathon ROI curve
+
+The hackathon's tool-ROI peak is when **orthogonal specialists fire at the right moment**. Phase 2's single most valuable decision was NOT dispatching a swarm, but running ONE python-reviewer at the hand-off between "author wrote it" and "committed to main." The HIGH-1 fence bug would have survived every unit test I wrote — it needed a fresh set of eyes that understood the JSON-extraction-from-LLM problem space. That's a different skill from "author the code" or "write tests for the code." Right tool, right moment.

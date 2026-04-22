@@ -14,6 +14,7 @@ import pytest
 
 from backend.cv.homography import CourtMapper
 from backend.db.schema import (
+    DOUBLES_COURT_WIDTH_M,
     NET_Y_M,
     SINGLES_COURT_LENGTH_M,
     SINGLES_COURT_WIDTH_M,
@@ -245,3 +246,68 @@ def test_in_polygon_rejects_bleachers(
     m = CourtMapper(corners_normalized=trapezoid_corners, frame_width=W, frame_height=H)
     assert m.is_in_court_polygon((0.5, 0.02), margin_m=0.0) is False
     assert m.is_in_court_polygon((0.99, 0.5), margin_m=0.0) is False
+
+
+# ──────────────────────────── court_width_m override (USER-CORRECTION-026) ────────────────────────────
+
+
+def test_doubles_width_override_maps_corners_to_10_97m(
+    perfect_rectangle_corners: CornersNormalized, frame_dims: tuple[int, int],
+) -> None:
+    """When corners trace the outside of the doubles alleys, court_width_m must be
+    overridden to 10.97m; otherwise lateral signals are compressed by ~25% on the x-axis."""
+    W, H = frame_dims
+    m = CourtMapper(
+        corners_normalized=perfect_rectangle_corners,
+        frame_width=W, frame_height=H,
+        court_width_m=DOUBLES_COURT_WIDTH_M,
+    )
+    # top_right corner should project to (10.97, 0), not (8.23, 0)
+    tr = m.to_court_meters(perfect_rectangle_corners.top_right)
+    assert tr is not None
+    assert tr == pytest.approx((DOUBLES_COURT_WIDTH_M, 0.0), abs=1e-3)
+    # Instance width attribute exposed for any downstream consumer
+    assert m.court_width_m == DOUBLES_COURT_WIDTH_M
+
+
+def test_default_court_width_is_singles(
+    perfect_rectangle_corners: CornersNormalized, frame_dims: tuple[int, int],
+) -> None:
+    """No override -> singles width (back-compat; existing tests must pass unchanged)."""
+    W, H = frame_dims
+    m = CourtMapper(corners_normalized=perfect_rectangle_corners, frame_width=W, frame_height=H)
+    assert m.court_width_m == SINGLES_COURT_WIDTH_M
+    tr = m.to_court_meters(perfect_rectangle_corners.top_right)
+    assert tr is not None
+    assert tr == pytest.approx((SINGLES_COURT_WIDTH_M, 0.0), abs=1e-3)
+
+
+def test_doubles_width_expands_lateral_scale(
+    perfect_rectangle_corners: CornersNormalized, frame_dims: tuple[int, int],
+) -> None:
+    """The same normalized point projects to a LARGER x_m under doubles mapping than singles.
+
+    This is the whole point of the override: if corners trace the outer doubles alleys,
+    every lateral measurement needs to be ~33% larger (10.97/8.23 - 1 = 33%) to reflect
+    the true physical width. Without the override, lateral signals are compressed.
+    """
+    W, H = frame_dims
+    m_singles = CourtMapper(
+        corners_normalized=perfect_rectangle_corners, frame_width=W, frame_height=H,
+    )
+    m_doubles = CourtMapper(
+        corners_normalized=perfect_rectangle_corners, frame_width=W, frame_height=H,
+        court_width_m=DOUBLES_COURT_WIDTH_M,
+    )
+    # Interior point that's clearly inside both mappings (avoid boundary float imprecision)
+    interior = (0.75, 0.5)
+    pt_singles = m_singles.to_court_meters(interior, margin_m=0.0)
+    pt_doubles = m_doubles.to_court_meters(interior, margin_m=0.0)
+    assert pt_singles is not None and pt_doubles is not None
+    # Doubles gives LARGER x_m under scale factor 10.97/8.23 ≈ 1.333
+    assert pt_doubles[0] > pt_singles[0]
+    assert pt_doubles[0] == pytest.approx(
+        pt_singles[0] * DOUBLES_COURT_WIDTH_M / SINGLES_COURT_WIDTH_M, abs=1e-3,
+    )
+    # y_m (length) is unchanged by the width override
+    assert pt_doubles[1] == pytest.approx(pt_singles[1], abs=1e-3)

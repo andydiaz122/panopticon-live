@@ -44,13 +44,27 @@ class CourtMapper:
         corners_normalized: CornersNormalized,
         frame_width: int,
         frame_height: int,
+        court_width_m: float | None = None,
     ) -> None:
+        """
+        Args:
+            corners_normalized: 4 corners in [0,1] normalized image coords.
+            frame_width, frame_height: source frame pixel dimensions (for un-normalization).
+            court_width_m: canonical court width to map corners to. Defaults to
+                SINGLES_COURT_WIDTH_M (8.23m). Pass DOUBLES_COURT_WIDTH_M (10.97m)
+                when the corners trace the OUTSIDE of the doubles alleys — otherwise
+                lateral signals are compressed by ~25% on the x-axis.
+        """
         if frame_width <= 0 or frame_height <= 0:
             raise ValueError(
                 f"frame_width and frame_height must be positive; got {frame_width}x{frame_height}"
             )
         self._frame_wh = (frame_width, frame_height)
         self._corners_normalized = corners_normalized
+        # Per-instance override (preserves class attribute for back-compat with existing tests).
+        self.court_width_m: float = (
+            court_width_m if court_width_m is not None else self.COURT_WIDTH_M
+        )
 
         # USER-CORRECTION-005: un-normalize BEFORE cv2.getPerspectiveTransform
         corners_pixels = (
@@ -69,8 +83,8 @@ class CourtMapper:
         court_corners_m = np.array(
             [
                 [0.0, 0.0],
-                [self.COURT_WIDTH_M, 0.0],
-                [self.COURT_WIDTH_M, self.COURT_LENGTH_M],
+                [self.court_width_m, 0.0],
+                [self.court_width_m, self.COURT_LENGTH_M],
                 [0.0, self.COURT_LENGTH_M],
             ],
             dtype=np.float32,
@@ -96,7 +110,7 @@ class CourtMapper:
         x_m, y_m = float(mapped[0, 0, 0]), float(mapped[0, 0, 1])
 
         if (
-            -margin_m <= x_m <= self.COURT_WIDTH_M + margin_m
+            -margin_m <= x_m <= self.court_width_m + margin_m
             and -margin_m <= y_m <= self.COURT_LENGTH_M + margin_m
         ):
             return (x_m, y_m)

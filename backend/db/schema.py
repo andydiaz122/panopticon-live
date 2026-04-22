@@ -83,6 +83,13 @@ KP_RIGHT_ANKLE = 16
 # Court dimensions (singles). Fixed by the ITF. Do not change.
 SINGLES_COURT_LENGTH_M: float = 23.77
 SINGLES_COURT_WIDTH_M: float = 8.23
+DOUBLES_COURT_WIDTH_M: float = 10.97
+"""Outer-sideline width of a doubles court. Court length is identical to singles (23.77m).
+
+When the court-corner annotation traces the OUTSIDE of the doubles alleys (the outermost
+sidelines), CourtMapper should canonicalize to 10.97m wide instead of 8.23m. Otherwise
+lateral signal values are ~25% compressed on the x-axis."""
+
 NET_Y_M: float = SINGLES_COURT_LENGTH_M / 2.0  # = 11.885 — used by Absolute Court Half Assignment
 
 

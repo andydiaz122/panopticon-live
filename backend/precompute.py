@@ -53,6 +53,7 @@ from backend.cv.kalman import PhysicalKalman2D
 from backend.cv.state_machine import MatchStateMachine
 from backend.cv.temporal_signals import RollingBounceDetector
 from backend.db.schema import (
+    DOUBLES_COURT_WIDTH_M,
     CoachInsight,
     CornersNormalized,
     FrameKeypoints,
@@ -449,6 +450,7 @@ def run_precompute(
     pose_extractor: PoseExtractor | None = None,
     device: str = "mps",
     *,
+    court_width_m: float | None = None,
     anthropic_client: AnthropicClientLike | None = None,
     coach_cap: int = DEFAULT_COACH_CAP,
     design_cap: int = DEFAULT_DESIGN_CAP,
@@ -479,8 +481,10 @@ def run_precompute(
 
     clip_sha = compute_clip_sha256(clip_path)
 
-    # 2. Initialize pipeline components.
-    court_mapper = CourtMapper(corners, width, height)
+    # 2. Initialize pipeline components. court_width_m=None defaults to singles (8.23m);
+    #    pass DOUBLES_COURT_WIDTH_M (10.97m) when the annotation traces the outside of
+    #    the doubles alleys instead of the singles sidelines.
+    court_mapper = CourtMapper(corners, width, height, court_width_m=court_width_m)
     dt = 1.0 / fps
     kalman_a = PhysicalKalman2D(dt=dt)
     kalman_b = PhysicalKalman2D(dt=dt)
@@ -655,6 +659,14 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("dashboard/public/match_data/match.json"),
     )
     parser.add_argument("--device", default="mps", choices=["mps", "cuda", "cpu"])
+    parser.add_argument(
+        "--doubles-corners", action="store_true",
+        help=(
+            "Interpret the corner annotation as tracing the outside of the doubles alleys "
+            "(10.97m wide canonical court) instead of the singles sidelines (8.23m). "
+            "Required when court_annotator.html is clicked on the outermost court lines."
+        ),
+    )
     # Phase 2 agent flags
     parser.add_argument(
         "--skip-agents", action="store_true",
@@ -689,6 +701,7 @@ def main(argv: list[str] | None = None) -> int:
         db_path=args.db,
         match_data_json_path=args.out_json,
         device=args.device,
+        court_width_m=(DOUBLES_COURT_WIDTH_M if args.doubles_corners else None),
         anthropic_client=anthropic_client,
         coach_cap=args.coach_cap,
         design_cap=args.design_cap,

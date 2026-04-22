@@ -361,6 +361,36 @@ def test_coach_no_tool_uses_despite_non_end_turn_exits_loop() -> None:
     assert insight.commentary == "partial commentary"
 
 
+def test_coach_binds_player_names_into_user_prompt() -> None:
+    """Explicit player names from run_agent_phase must reach Opus's user message,
+    with an anti-hallucination instruction. Prevents Opus from inventing famous
+    tennis names (Djokovic, Federer, etc.) from its training data."""
+    client = _ScriptedClient([_response(_text_block("ok"), stop_reason="end_turn")])
+    _run(generate_coach_insight(
+        client, _ctx_with_signal(),
+        t_ms=42_000, match_id="utr_01", insight_id="ins1",
+        trigger_description="test",
+        player_a_name="Serena Williams",
+        player_b_name="Naomi Osaka",
+    ))
+    user_msg = client.call_log[0]["messages"][0]["content"]
+    assert "Serena Williams" in user_msg
+    assert "Naomi Osaka" in user_msg
+    assert "Do NOT invent any other names" in user_msg
+
+
+def test_coach_falls_back_to_generic_names_when_not_supplied() -> None:
+    """Defaults keep unit tests terse; production via run_agent_phase always supplies real names."""
+    client = _ScriptedClient([_response(_text_block("ok"), stop_reason="end_turn")])
+    _run(generate_coach_insight(
+        client, _ctx_with_signal(),
+        t_ms=0, match_id="utr_01", insight_id="ins1", trigger_description="t",
+    ))
+    user_msg = client.call_log[0]["messages"][0]["content"]
+    assert "Player A" in user_msg
+    assert "Player B" in user_msg
+
+
 def test_coach_multi_tool_use_in_one_response() -> None:
     """Opus can request >1 tool per turn. All must be dispatched + tool_results returned."""
     tu1 = _tool_use_block("get_match_phase", {"t_ms": 500}, tool_id="t1")

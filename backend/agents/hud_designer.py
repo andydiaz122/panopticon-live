@@ -154,6 +154,8 @@ async def generate_hud_layout(
     client: AnthropicClientLike,
     *,
     t_ms: int,
+    player_a_name: str = "Player A",
+    player_b_name: str = "Player B",
     layout_id: str | None = None,
     trigger_description: str,
     state_summary: str,
@@ -184,9 +186,12 @@ async def generate_hud_layout(
     ]
     user_prompt = (
         f"Current match time: {t_ms} ms.\n"
+        f"Match: Player A = {player_a_name}, Player B = {player_b_name}.\n"
         f"Trigger: {trigger_description}\n\n"
         f"State snapshot:\n{state_summary}\n\n"
-        f"Emit a single JSON object matching the schema. No preamble, no markdown fences."
+        f"Emit a single JSON object matching the schema. No preamble, no markdown fences. "
+        f"Widget props use 'A' / 'B' as player identifiers, not the real names — the frontend "
+        f"resolves names from MatchMeta."
     )
 
     try:

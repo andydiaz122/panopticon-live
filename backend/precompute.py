@@ -88,6 +88,39 @@ asyncio.gather, tripping Anthropic's rate limiter — output becomes mostly [nar
 beats and the demo looks broken. 20 beats covers ~3 minutes at 10s, which matches the
 demo-video budget."""
 
+DEFAULT_WARMUP_MS: int = 10_000
+"""Skip ACTIVE_RALLY-exit / PRE_SERVE_RITUAL-entry transitions that fire in the first
+10s of a clip — the CV pipeline emits warm-up noise during Kalman convergence +
+RollingBounceDetector buffer fill. Without this filter, `coach_cap` and `design_cap`
+are consumed by spurious early transitions and the ACTUAL rally later in the clip
+gets zero Coach/Designer coverage — the "demo killer" GOTCHA-015 scenario.
+
+10s is conservative; most broadcast clips open with ≥3-5s of crowd/setup before play
+starts, plus we need to let the FeatureCompiler's state machine settle."""
+
+DEFAULT_MIN_TRIGGER_GAP_MS: int = 2_000
+"""Companion to DEFAULT_WARMUP_MS: dedupe rapid-fire triggers by requiring ≥2s between
+consecutive kept triggers for the SAME player. Observed in the Apr 22 smoke run:
+post-warmup noise bursts at 150ms cadence still exist (PRE_SERVE_RITUAL↔ACTIVE_RALLY
+flapping via match_coupling). Without this, the coach_cap is consumed by a
+11.5-13s flicker instead of spreading across real rallies at 20s, 40s, etc.
+2s = roughly one natural rally cadence (serve-to-next-serve)."""
+
+
+def _dedupe_close_triggers(
+    triggers: list[StateTransition], min_gap_ms: int,
+) -> list[StateTransition]:
+    """Drop each trigger that is within `min_gap_ms` of the previously kept trigger
+    for the SAME player. Preserves chronological order. O(n) single pass."""
+    out: list[StateTransition] = []
+    last_t_by_player: dict[str, int] = {}
+    for tr in triggers:
+        prev = last_t_by_player.get(tr.player)
+        if prev is None or tr.timestamp_ms - prev >= min_gap_ms:
+            out.append(tr)
+            last_t_by_player[tr.player] = tr.timestamp_ms
+    return out
+
 
 # ──────────────────────────── Video metadata ────────────────────────────
 
@@ -366,6 +399,8 @@ async def run_agent_phase(
     client: AnthropicClientLike,
     *,
     match_id: str,
+    player_a_name: str,
+    player_b_name: str,
     signals: list[SignalSample],
     transitions: list[StateTransition],
     duration_ms: int,
@@ -373,6 +408,8 @@ async def run_agent_phase(
     design_cap: int = DEFAULT_DESIGN_CAP,
     beat_period_sec: float = DEFAULT_BEAT_PERIOD_SEC,
     beat_cap: int = DEFAULT_BEAT_CAP,
+    warmup_ms: int = DEFAULT_WARMUP_MS,
+    min_trigger_gap_ms: int = DEFAULT_MIN_TRIGGER_GAP_MS,
 ) -> tuple[list[CoachInsight], list[HUDLayoutSpec], list[NarratorBeat]]:
     """Run Coach + Designer + Narrator agents concurrently against pre-computed signals.
 
@@ -387,12 +424,21 @@ async def run_agent_phase(
     """
     ctx = ToolContext(match_id=match_id, signals=signals, transitions=transitions)
 
-    # Coach: rally-end moments — that's when a coach has something to say
-    coach_triggers = [t for t in transitions if t.from_state == "ACTIVE_RALLY"][:coach_cap]
+    # Coach: rally-end moments — GOTCHA-015 fix: skip warm-up noise (t <= warmup_ms) so the
+    # cap isn't consumed by Kalman-convergence / bounce-buffer-fill artifacts in the first
+    # ~10s of the clip. Then dedupe rapid-fire triggers (min_trigger_gap_ms) so a 150ms-cadence
+    # noise burst post-warmup can't still consume the cap. Without dedupe, observed 5 coaches
+    # all firing in an 1.2s window in the Apr 22 smoke run.
+    coach_candidates = [
+        t for t in transitions
+        if t.from_state == "ACTIVE_RALLY" and t.timestamp_ms > warmup_ms
+    ]
+    coach_triggers = _dedupe_close_triggers(coach_candidates, min_trigger_gap_ms)[:coach_cap]
     coach_tasks = [
         generate_coach_insight(
             client, ctx,
             t_ms=tr.timestamp_ms, match_id=match_id,
+            player_a_name=player_a_name, player_b_name=player_b_name,
             insight_id=f"coach_{tr.timestamp_ms}_{tr.player}",
             trigger_description=(
                 f"Player {tr.player} exits ACTIVE_RALLY at t={tr.timestamp_ms}ms "
@@ -402,12 +448,17 @@ async def run_agent_phase(
         for tr in coach_triggers
     ]
 
-    # Designer: new-point moments — layouts refresh on ritual entry
-    design_triggers = [t for t in transitions if t.to_state == "PRE_SERVE_RITUAL"][:design_cap]
+    # Designer: new-point moments — same warm-up + dedupe as Coach.
+    design_candidates = [
+        t for t in transitions
+        if t.to_state == "PRE_SERVE_RITUAL" and t.timestamp_ms > warmup_ms
+    ]
+    design_triggers = _dedupe_close_triggers(design_candidates, min_trigger_gap_ms)[:design_cap]
     design_tasks = [
         generate_hud_layout(
             client,
             t_ms=tr.timestamp_ms,
+            player_a_name=player_a_name, player_b_name=player_b_name,
             trigger_description=f"Player {tr.player} enters PRE_SERVE_RITUAL ({tr.reason})",
             state_summary=_build_state_summary(signals, transitions, tr.timestamp_ms),
         )
@@ -424,6 +475,7 @@ async def run_agent_phase(
                 generate_narrator_beat(
                     client,
                     t_ms=t_ms, match_id=match_id,
+                    player_a_name=player_a_name, player_b_name=player_b_name,
                     signal_snapshot=_build_signal_snapshot(signals, t_ms),
                 ),
             )
@@ -456,6 +508,8 @@ def run_precompute(
     design_cap: int = DEFAULT_DESIGN_CAP,
     beat_period_sec: float = DEFAULT_BEAT_PERIOD_SEC,
     beat_cap: int = DEFAULT_BEAT_CAP,
+    warmup_ms: int = DEFAULT_WARMUP_MS,
+    min_trigger_gap_ms: int = DEFAULT_MIN_TRIGGER_GAP_MS,
 ) -> tuple[int, int]:
     """Run the full pre-compute pipeline on one clip.
 
@@ -607,6 +661,8 @@ def run_precompute(
                 run_agent_phase(
                     anthropic_client,
                     match_id=match_id,
+                    player_a_name=player_a_name,
+                    player_b_name=player_b_name,
                     signals=all_signals,
                     transitions=all_transitions,
                     duration_ms=effective_duration,
@@ -614,6 +670,8 @@ def run_precompute(
                     design_cap=design_cap,
                     beat_period_sec=beat_period_sec,
                     beat_cap=beat_cap,
+                    warmup_ms=warmup_ms,
+                    min_trigger_gap_ms=min_trigger_gap_ms,
                 ),
             )
             all_coach_insights = list(coach_list)
@@ -680,6 +738,22 @@ def main(argv: list[str] | None = None) -> int:
         "--beat-period-sec", type=float, default=DEFAULT_BEAT_PERIOD_SEC,
         help="Narrator cadence; 0 disables Narrator",
     )
+    parser.add_argument(
+        "--warmup-ms", type=int, default=DEFAULT_WARMUP_MS,
+        help=(
+            "Skip state transitions in the first N ms when selecting Coach/Designer "
+            "triggers (default 10000). Prevents cap exhaustion on CV warm-up noise. "
+            "See GOTCHA-015."
+        ),
+    )
+    parser.add_argument(
+        "--min-trigger-gap-ms", type=int, default=DEFAULT_MIN_TRIGGER_GAP_MS,
+        help=(
+            "Minimum ms between consecutive Coach/Designer triggers for the same player "
+            "(default 2000). Dedupes rapid-fire CV transitions so the cap spreads across "
+            "real rallies instead of a single noise burst. See GOTCHA-015."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # Build Anthropic client lazily — only if agents are enabled AND key is present
@@ -707,6 +781,8 @@ def main(argv: list[str] | None = None) -> int:
         design_cap=args.design_cap,
         beat_period_sec=args.beat_period_sec,
         beat_cap=args.beat_cap,
+        warmup_ms=args.warmup_ms,
+        min_trigger_gap_ms=args.min_trigger_gap_ms,
     )
     print(f"processed {frames} frames -> {signals} signals")
     print(f"  DuckDB: {args.db}")

@@ -640,6 +640,20 @@ Cross-session recall. Every entry is:
 - **Severity**: LOW-MEDIUM (demo-quality issue, not correctness)
 - **File**: Emerges from `backend/precompute.py:run_agent_phase:coach_triggers`
 
+### USER-CORRECTION-028 — Warm-Up Filter ALONE Is Insufficient; Add Dedup on Top
+- **Rule**: `warmup_ms` (skip transitions in first N ms) catches the INITIAL CV convergence window, but Kalman/BounceDetector can continue emitting flicker bursts at 150ms cadence AFTER the warmup boundary. To prevent `coach_cap` / `design_cap` from being consumed by a single post-warmup noise burst, add a secondary `min_trigger_gap_ms` dedup filter (default 2000ms per player). Together the two filters ensure triggers SPREAD across the clip timeline.
+- **Why**: Observed in the Apr 22 v3 smoke run. With `warmup_ms=10000` alone, triggers shifted from 700ms to 11500ms — technically "past warmup" — but all 5 caps were consumed by a 1.2s noise burst at 11500-12700ms. Opus correctly identified these as artifacts ("10+ back-to-back match_coupling flips every 167ms"), but burning the entire budget on warmup-aftermath means ZERO coverage of real rallies at 20s, 40s, etc. After adding dedup with 2000ms gap, v4 spread triggers across 11500-26133ms (12x wider time coverage).
+- **How to apply**: Any time an agent cap is consumed by a rapid-fire trigger burst after the primary filter, add a per-entity gap filter BEFORE the cap slice. Pattern: `dedup(filter(candidates))[:cap]` not `filter(candidates)[:cap]`.
+- **Severity**: HIGH (the original "demo killer" ruled insufficient; dedup is the true fix)
+- **File**: `backend/precompute.py:_dedupe_close_triggers`, `DEFAULT_MIN_TRIGGER_GAP_MS`, `--min-trigger-gap-ms` CLI flag
+
+### USER-CORRECTION-029 — LLM Player-Name Hallucination Requires Prompt Binding AND Anti-Hallucination Instruction
+- **Rule**: When asking an LLM to generate commentary about generic actors ("Player A", "Player B"), it will hallucinate famous names ("Djokovic", "Federer", "Nadal") from its training data UNLESS you both (a) inject the real names in the user message AND (b) explicitly instruct: *"Refer to players ONLY by {name_a}, {name_b}, or 'Player A' / 'Player B'. Do NOT invent other names."* Just providing the names without the anti-hallucination clause is insufficient — the model will still "enrich" the output with famous names it has seen associated with tennis in training.
+- **Why**: Observed in the Apr 22 v1 Haiku Narrator output: `"Djokovic catches his breath at the baseline, towel in hand"` when we passed `"Player A"`. After adding both the name binding AND the anti-hallucination clause to user prompt, v4 output is 100% "Player A"/"Player B" — zero invented names across 6 narrator beats + 5 coach insights + 5 designer layouts.
+- **How to apply**: For any LLM generation involving generic/anonymized actors, always bind real identifiers in the USER message (never the system prompt if it's cached — dynamic values belong in user). Pair with an explicit DO-NOT-INVENT instruction. Verify in the first integration test run by grepping the output for unexpected proper nouns.
+- **Severity**: MEDIUM (demo quality — wrong names make the HUD look untrustworthy)
+- **File**: `backend/agents/opus_coach.py`, `hud_designer.py`, `haiku_narrator.py` — all three have the pattern
+
 ### DECISION-007 — HUDLayoutSpec Stays JSON-Only (No DuckDB Table)
 - **Context**: Coach and Narrator insights have DuckDB tables; HUD layouts do not.
 - **Why**: Layouts are low-frequency (one per match-state transition, ~10 per clip) and consumed exclusively by the frontend via match_data.json. Storing them in DuckDB too would be redundancy for zero read-path benefit.

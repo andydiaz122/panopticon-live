@@ -188,6 +188,22 @@ def test_narrator_short_snapshot_not_truncated() -> None:
     assert short in user_msg
 
 
+def test_narrator_binds_player_names_into_user_prompt() -> None:
+    """Player names from run_agent_phase must reach Haiku's user message.
+    Prevents the observed hallucination of famous-player names in narrator beats."""
+    client = _ScriptedClient([_response("ok")])
+    _run(generate_narrator_beat(
+        client, t_ms=10_000, match_id="utr_01",
+        signal_snapshot="A serving",
+        player_a_name="Coco Gauff",
+        player_b_name="Iga Swiatek",
+    ))
+    user_msg = client.call_log[0]["messages"][0]["content"]
+    assert "Coco Gauff" in user_msg
+    assert "Iga Swiatek" in user_msg
+    assert "Do NOT invent other names" in user_msg
+
+
 def test_narrator_usage_missing_tokens_defaults_zero() -> None:
     """If the API response has a usage object missing some fields, treat them as 0."""
     response = SimpleNamespace(

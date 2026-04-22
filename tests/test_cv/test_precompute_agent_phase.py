@@ -107,6 +107,9 @@ def _tr(t_ms: int, player: str = "A", from_state: str = "ACTIVE_RALLY", to_state
 
 
 def _run_phase(**kwargs: Any) -> tuple[list, list, list]:
+    # Fill in required player names with generic defaults so each test doesn't have to.
+    kwargs.setdefault("player_a_name", "A")
+    kwargs.setdefault("player_b_name", "B")
     return asyncio.run(precompute.run_agent_phase(**kwargs))
 
 
@@ -121,6 +124,7 @@ def test_run_agent_phase_fires_coach_on_active_rally_exit() -> None:
         client=client, match_id="utr_01",
         signals=[_sig(500)], transitions=transitions,
         duration_ms=0, beat_period_sec=0,  # disable narrator for focused test
+        warmup_ms=0,  # disable warm-up filter for this trigger-selection test
     )
     assert client.coach_calls == 2
     assert len(coach) == 2
@@ -141,6 +145,7 @@ def test_run_agent_phase_fires_designer_on_pre_serve_entry() -> None:
         client=client, match_id="utr_01",
         signals=[], transitions=transitions,
         duration_ms=0, beat_period_sec=0,
+        warmup_ms=0,
     )
     assert client.design_calls == 2
     assert len(design) == 2
@@ -171,7 +176,7 @@ def test_run_agent_phase_respects_coach_cap() -> None:
         client=client, match_id="utr_01",
         signals=[], transitions=transitions,
         duration_ms=0, beat_period_sec=0,
-        coach_cap=3,
+        coach_cap=3, warmup_ms=0,
     )
     assert client.coach_calls == 3
     assert len(coach) == 3
@@ -187,10 +192,124 @@ def test_run_agent_phase_respects_design_cap() -> None:
         client=client, match_id="utr_01",
         signals=[], transitions=transitions,
         duration_ms=0, beat_period_sec=0,
-        design_cap=2,
+        design_cap=2, warmup_ms=0,
     )
     assert client.design_calls == 2
     assert len(design) == 2
+
+
+# ──────────────────────────── GOTCHA-015 warmup filter ────────────────────────────
+
+
+def test_warmup_filter_excludes_coach_triggers_under_threshold() -> None:
+    """GOTCHA-015: transitions in the first 10s (default) must NOT be selected for Coach.
+
+    The CV pipeline emits ACTIVE_RALLY-exit noise during Kalman warm-up; without this
+    filter, coach_cap is consumed on warm-up artifacts and the actual rally later in
+    the clip gets zero coverage.
+    """
+    client = _PatternedClient()
+    transitions = [
+        _tr(500, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),   # warm-up noise
+        _tr(5000, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),  # still warm-up
+        _tr(9999, "B", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),  # boundary
+        _tr(10001, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"), # REAL rally
+        _tr(25000, "B", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"), # REAL rally
+    ]
+    coach, _, _ = _run_phase(
+        client=client, match_id="utr_01",
+        signals=[], transitions=transitions,
+        duration_ms=30_000, beat_period_sec=0,
+        # Use default warmup_ms=10000 (don't override)
+    )
+    # Only the 2 post-warm-up triggers fire
+    assert len(coach) == 2
+    coach_timestamps = {c.timestamp_ms for c in coach}
+    assert coach_timestamps == {10001, 25000}
+    # The 3 warm-up transitions were NOT dispatched to the API
+    assert client.coach_calls == 2
+
+
+def test_warmup_filter_excludes_designer_triggers_under_threshold() -> None:
+    """Designer must apply the same warm-up filter as Coach."""
+    client = _PatternedClient()
+    transitions = [
+        _tr(500, "A", from_state="DEAD_TIME", to_state="PRE_SERVE_RITUAL"),   # warm-up
+        _tr(12000, "A", from_state="DEAD_TIME", to_state="PRE_SERVE_RITUAL"), # real
+    ]
+    _, design, _ = _run_phase(
+        client=client, match_id="utr_01",
+        signals=[], transitions=transitions,
+        duration_ms=30_000, beat_period_sec=0,
+    )
+    assert len(design) == 1
+    assert design[0].timestamp_ms == 12000
+
+
+def test_warmup_filter_custom_value() -> None:
+    """warmup_ms is configurable — a 5s filter keeps t=6000 triggers."""
+    client = _PatternedClient()
+    transitions = [
+        _tr(3000, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+        _tr(6000, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+    ]
+    coach, _, _ = _run_phase(
+        client=client, match_id="utr_01",
+        signals=[], transitions=transitions,
+        duration_ms=30_000, beat_period_sec=0,
+        warmup_ms=5000, min_trigger_gap_ms=0,  # disable dedupe to isolate warmup behavior
+    )
+    assert [c.timestamp_ms for c in coach] == [6000]
+
+
+def test_min_trigger_gap_ms_dedupes_burst() -> None:
+    """Post-warmup noise burst: 6 rapid ACTIVE_RALLY exits in a 1.5s window.
+    With min_trigger_gap_ms=2000, only the first survives; the cap then spreads."""
+    client = _PatternedClient()
+    transitions = [
+        # Noise burst right after warmup
+        _tr(11500, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+        _tr(11666, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+        _tr(12000, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+        _tr(12500, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+        _tr(13000, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+        # Real rallies later
+        _tr(20000, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+        _tr(40000, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+    ]
+    coach, _, _ = _run_phase(
+        client=client, match_id="utr_01",
+        signals=[], transitions=transitions,
+        duration_ms=60_000, beat_period_sec=0,
+        warmup_ms=10_000, min_trigger_gap_ms=2000,
+    )
+    # Burst collapses to just t=11500; real rallies at 20000 and 40000 also kept
+    assert [c.timestamp_ms for c in coach] == [11500, 20000, 40000]
+
+
+def test_min_trigger_gap_ms_is_per_player() -> None:
+    """Dedupe is PER player — A and B can both fire within the gap window."""
+    client = _PatternedClient()
+    transitions = [
+        _tr(11000, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),
+        _tr(11500, "B", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),  # different player, kept
+        _tr(11800, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),  # A again within 2s, skip
+        _tr(12000, "B", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),  # B again within 2s, skip
+        _tr(14000, "A", from_state="ACTIVE_RALLY", to_state="DEAD_TIME"),  # A gap=3000, keep
+    ]
+    coach, _, _ = _run_phase(
+        client=client, match_id="utr_01",
+        signals=[], transitions=transitions,
+        duration_ms=60_000, beat_period_sec=0,
+        warmup_ms=10_000, min_trigger_gap_ms=2000,
+    )
+    kept = [(c.timestamp_ms, c.insight_id) for c in coach]
+    assert [t for t, _ in kept] == [11000, 11500, 14000]
+
+
+# (Player-name prompt binding is tested at the agent-function level in
+# tests/test_agents/test_opus_coach.py, test_hud_designer.py, test_haiku_narrator.py
+# where the scripted clients capture full messages for inspection.)
 
 
 def test_run_agent_phase_respects_beat_cap() -> None:

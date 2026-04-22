@@ -272,6 +272,22 @@ def test_designer_strips_fence_with_trailing_prose_containing_brace() -> None:
     assert layout.widgets[0].widget == "PlayerNameplate"
 
 
+def test_designer_binds_player_names_into_user_prompt() -> None:
+    """Player names from run_agent_phase should reach Designer's user message even
+    though Designer's widget props use 'A' / 'B' — future Designer prompt variants
+    might reference names in the `reason` field."""
+    client = _ScriptedClient([_response_with_text(
+        '{"reason": "ok", "widgets": [{"widget": "PlayerNameplate", "slot": "top-left", "props": {"player": "A"}}]}',
+    )])
+    _run(generate_hud_layout(
+        client, t_ms=0, trigger_description="t", state_summary="s",
+        player_a_name="Rafael Nadal", player_b_name="Carlos Alcaraz",
+    ))
+    user_msg = client.call_log[0]["messages"][0]["content"]
+    assert "Rafael Nadal" in user_msg
+    assert "Carlos Alcaraz" in user_msg
+
+
 def test_designer_empty_widgets_array_is_valid() -> None:
     """Opus might decide 'no overlay' is the right answer. Empty widgets is a legitimate layout."""
     client = _ScriptedClient([_response_with_text(

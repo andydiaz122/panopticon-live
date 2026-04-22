@@ -54,6 +54,8 @@ async def generate_narrator_beat(
     t_ms: int,
     match_id: str,
     signal_snapshot: str,
+    player_a_name: str = "Player A",
+    player_b_name: str = "Player B",
     beat_id: str | None = None,
     model: str = DEFAULT_MODEL,
     max_tokens: int = DEFAULT_MAX_TOKENS,
@@ -73,10 +75,14 @@ async def generate_narrator_beat(
     # arbitrary sources, and an unbounded string would balloon Haiku input cost.
     if len(signal_snapshot) > MAX_SNAPSHOT_CHARS:
         signal_snapshot = signal_snapshot[:MAX_SNAPSHOT_CHARS] + "..."
+    # Bind real player names into the user message to stop Haiku hallucinating
+    # famous-player names ("Djokovic", "Federer") from its training data.
     user_prompt = (
         f"Match time: {t_ms} ms.\n"
+        f"Match: Player A = {player_a_name}, Player B = {player_b_name}.\n"
         f"Moment: {signal_snapshot}\n\n"
-        f"One short beat, please."
+        f"One short beat. Refer to players ONLY by {player_a_name}, {player_b_name}, "
+        f"or 'Player A' / 'Player B'. Do NOT invent other names."
     )
 
     try:

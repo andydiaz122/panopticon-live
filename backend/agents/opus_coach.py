@@ -135,6 +135,8 @@ async def generate_coach_insight(
     match_id: str,
     insight_id: str,
     trigger_description: str,
+    player_a_name: str = "Player A",
+    player_b_name: str = "Player B",
     model: str = DEFAULT_MODEL,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
@@ -160,10 +162,16 @@ async def generate_coach_insight(
     system_blocks = [
         {"type": "text", "text": BIOMECH_PRIMER, "cache_control": {"type": "ephemeral"}},
     ]
+    # Player names go in the USER message (not system) so the static primer stays cached.
+    # Explicit instruction "do NOT invent other names" — Opus has been trained on famous
+    # tennis matches and will otherwise hallucinate Djokovic/Federer/Nadal in commentary.
     user_prompt = (
         f"Match time: {t_ms} ms.\n"
+        f"Match: Player A = {player_a_name}, Player B = {player_b_name}.\n"
         f"Trigger: {trigger_description}\n\n"
-        f"Produce your 3-paragraph coach insight now. Use tools to ground your claims."
+        f"Produce your 3-paragraph coach insight now. Use tools to ground your claims. "
+        f"Refer to the players ONLY by their assigned names ({player_a_name}, {player_b_name}) "
+        f"or 'Player A' / 'Player B'. Do NOT invent any other names."
     )
     messages: list[dict[str, Any]] = [
         {"role": "user", "content": user_prompt},

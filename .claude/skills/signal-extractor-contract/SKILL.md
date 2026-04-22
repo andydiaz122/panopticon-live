@@ -72,6 +72,27 @@ def ingest(self, frame, target_state, opponent_state, target_kalman, opponent_ka
     self._last_opp_state = opponent_state
 ```
 
+### The Flush Contract (USER-CORRECTION-018)
+
+The `FeatureCompiler` is responsible for calling `flush(t_ms)` EXACTLY ONCE, when the target player transitions OUT of the extractor's `required_state`. Extractors do NOT track their own state exits — they simply:
+
+1. Check the state gate in `ingest()` (return early if `target_state not in self.required_state`)
+2. Accumulate data in a buffer
+3. Wait passively; when the compiler notices a state exit (from tick N's state vs tick N-1's state), it calls `flush(t_ms)` on the extractor ONCE
+4. In `flush()`, emit the summary `SignalSample` and clear the buffer
+
+This is the canonical separation of concerns:
+- **Extractor** = math + buffer
+- **Compiler** = orchestration + timing
+
+**Do NOT**: have the extractor track `_last_target_state` internally and flush itself. That couples timing to each extractor and every fleet agent re-implements the same logic. Let the compiler own it.
+
+### Fail-Fast Dependency Lookup (USER-CORRECTION-022)
+
+Use strict dict access for required keys: `self.deps["match_id"]`, NOT `self.deps.get("match_id", "unknown")`. Quantitative systems must fail LOUDLY when deps are missing — silent defaults would corrupt the DuckDB primary key `(timestamp_ms, match_id, player, signal_name)` and poison downstream analysis.
+
+The corresponding regression test asserts `pytest.raises(KeyError, match="match_id")` on a `flush()` called with `dependencies={}`.
+
 ### Dependency Injection (USER-CORRECTION-013)
 
 Shared resources travel through `dependencies: dict[str, Any]` in `__init__`. The FeatureCompiler owns the canonical deps and passes them verbatim to every extractor:

@@ -212,3 +212,17 @@ def test_two_instances_for_a_and_b_accumulate_independently() -> None:
     # the p95 would not be the pure |vx| of the target.
     assert sample_a.value == pytest.approx(5.0, abs=1e-12)
     assert sample_b.value == pytest.approx(1.0, abs=1e-12)
+
+
+# ──────────────────────────── USER-CORRECTION-022: Fail-fast dependency lookup ────────────────────────────
+
+
+def test_missing_match_id_raises_keyerror_on_flush() -> None:
+    """Quantitative systems must fail LOUDLY. If the orchestrator forgets to
+    inject match_id, flush() must raise KeyError — NOT silently default to 'unknown'
+    which would corrupt the DuckDB primary key and pollute downstream analysis.
+    """
+    ext = LateralWorkRate(target_player="A", dependencies={})  # no match_id
+    simulate_ticks(ext, [("ACTIVE_RALLY", 2.0, 0.0, 33)])
+    with pytest.raises(KeyError, match="match_id"):
+        ext.flush(t_ms=100)

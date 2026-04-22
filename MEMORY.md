@@ -374,6 +374,79 @@ Cross-session recall. Every entry is:
 - **Severity**: CRITICAL (enforces physics correctness)
 - **File**: `backend/cv/homography.py::CourtMapper`; usage convention in all future signal extractors.
 
+### USER-CORRECTION-018 — Compiler Flush Contract (timing belongs to the orchestrator, not the extractor)
+- **Rule**: The `FeatureCompiler` calls `flush(t_ms)` on each extractor EXACTLY ONCE when the target player transitions OUT of that extractor's `required_state`. Extractors do NOT track their own state exits — they simply check the state gate in `ingest()`, accumulate data in a buffer, and wait passively.
+- **Why**: If every extractor has to track `_last_target_state` and decide when to self-flush, each fleet re-implements the same logic 7 times and bugs proliferate. Timing belongs to ONE place (the compiler), math belongs to ONE place per signal (the extractor). Clean separation of concerns.
+- **How to apply**: In extractors, `ingest()` checks `if target_state not in self.required_state: return` and buffers only. Never self-flush. In the compiler (Action 3.5), detect `prev_target_state in ext.required_state and target_state not in ext.required_state` and call `ext.flush(t_ms)` once. Extractors `reset()` at match start only.
+- **Severity**: HIGH (architectural separation of concerns for fleet-parallel development)
+- **Files**: `.claude/skills/signal-extractor-contract/SKILL.md` (Flush Contract section); future `backend/cv/compiler.py`.
+
+### USER-CORRECTION-019 — Structural State-Proxy for split_step_latency_ms (no raw-derivative hunting)
+- **Rule**: `split_step_latency_ms` is computed from MatchStateMachine TRANSITIONS, not from raw keypoint peak-velocity hunting. Track `_last_target_state` + `_last_opponent_state`. On opponent's PRE_SERVE_RITUAL → ACTIVE_RALLY transition, record `opp_t_ms`. On target's PRE_SERVE_RITUAL → ACTIVE_RALLY transition, record `target_t_ms`. At flush, emit `target_t_ms - opp_t_ms` if the opponent transitioned first (opponent was server); else return `None` (target was server).
+- **Why**: Raw-derivative detection of "opponent wrist peak velocity" on jittery YOLO keypoints is catastrophic — signal drowned in noise. But the state machine ALREADY provides smoothed transition timestamps (5 consecutive frames above threshold). Server ACTIVE_RALLY entry = visible serve motion. Returner ACTIVE_RALLY entry = split-step + commit. Typical delta is 150-250 ms fresh, 300-500 ms fatigued — matches literature.
+- **How to apply**: Fleet 1's `split_step_latency.py` uses `required_state = ("PRE_SERVE_RITUAL", "ACTIVE_RALLY")` so it sees both states. Tracks `_last_*_state` to detect rising-edge transitions. Gate with "opp transitioned first" check to skip emitting for server side.
+- **Severity**: HIGH (prevents unusable signal from raw-derivative noise)
+- **File**: `.claude/skills/biomechanical-signal-semantics/SKILL.md` (Signal 7 rewrite).
+
+### USER-CORRECTION-020 — Phantom-Serve Guard + Biological Ruler for serve_toss_variance_cm
+- **Rule**: Two combined constraints. (a) **Amplitude floor**: buffer's `(max_y - min_y)` must exceed `0.05` normalized units to qualify as a "real toss"; otherwise return `None` (filters returner's wrist-jitter phantom-serve). (b) **Biological ruler (Z=0 compliant)**: convert normalized → cm using the player's own torso `abs(shoulder_y - hip_y)` as a pixel ruler, assuming a 60 cm pro-tennis torso. Camera-invariant (common-mode rejection) and bypasses the forbidden `CourtMapper.to_court_meters` upper-body projection.
+- **Why**: (a) Both players live in PRE_SERVE_RITUAL simultaneously; only the server tosses. Static returner wrist jitter (~0.005-0.01 normalized) must not register. 0.05 threshold is ~3× YOLO jitter and well below pro toss range (~0.15-0.25). (b) CourtMapper is Z=0 only; airborne wrist at toss apex projects to fiction. Torso scalar solves this: `wrist_cm ≈ wrist_norm × (60 cm / torso_norm)`. 60 cm avg for pro torso (bounded error ~10% across sexes); fine for relative-fatigue signal.
+- **How to apply**: Fleet 2's `serve_toss_variance_cm.py` buffers `(ambi_wrist_y - hip_y)` and `abs(shoulder_y - hip_y)` pairs during PRE_SERVE_RITUAL. On flush: check amplitude floor first; if below, return None; else compute `std_norm × (60 / mean_torso_norm)`. Apex extraction uses MIN relative_y (image `y=0` is TOP of frame).
+- **Severity**: HIGH (prevents both false-positive phantom serves AND wrong-units physics bugs)
+- **File**: `.claude/skills/biomechanical-signal-semantics/SKILL.md` (Signal 2 rewrite).
+
+### USER-CORRECTION-021 — Asymmetric Baseline Geometry for baseline_retreat_distance_m
+- **Rule**: Player A's baseline is at y=23.77 m, Player B's baseline is at y=0.0 m. Retreat MUST branch on `self.target_player`:
+  - A: `retreat_m = max(0.0, y_m - SINGLES_COURT_LENGTH_M)` (retreats in +y direction)
+  - B: `retreat_m = max(0.0, -y_m)` (retreats in -y direction)
+  Clamp negatives to 0.0 (inside the court = no retreat).
+- **Why**: A single-baseline implementation would produce mathematically inverted values for one player with magnitudes on the order of the full court length (~23m). The symmetric branch exploits the fact that in the canonical coordinate convention both players face the net (y=11.885); retreating moves AWAY from the net, which is +y for A and -y for B.
+- **How to apply**: Fleet 3's `baseline_retreat_distance_m.py` reads `self.target_player` + `target_kalman[1]` (Kalman-smoothed y_m — no re-projection per USER-CORRECTION-017). Uses `SINGLES_COURT_LENGTH_M` constant from `backend/db/schema.py`.
+- **Severity**: HIGH (prevents catastrophically-wrong values for one of two players)
+- **File**: `.claude/skills/biomechanical-signal-semantics/SKILL.md` (Signal 5 rewrite).
+
+### USER-CORRECTION-022 — Fail-Fast Dependency Lookup (no silent defaults in quant systems)
+- **Rule**: Use strict dict access for REQUIRED deps: `self.deps["match_id"]`, NOT `self.deps.get("match_id", "unknown")`. If a required dep is missing, `flush()` must raise `KeyError` loudly.
+- **Why**: `SignalSample.match_id` is part of the DuckDB primary key `(timestamp_ms, match_id, player, signal_name)`. A silent default like `"unknown"` would cause PK collisions across matches and pollute downstream analytics (all misconfigured runs aggregated into a single "unknown" bucket). In quant systems, LOUD failure is correct — pipeline should fail fast during orchestration setup, not silently corrupt data at write time.
+- **How to apply**: Every extractor's `flush()` uses `self.deps["match_id"]`. Regression test: `pytest.raises(KeyError, match="match_id")` when constructed with `dependencies={}`. All fleets MUST follow this pattern.
+- **Severity**: HIGH (data integrity)
+- **File**: `backend/cv/signals/lateral_work_rate.py:70`; `.claude/skills/signal-extractor-contract/SKILL.md`.
+
+### PATTERN-019 — Compiler-Orchestrated Flush is the clean idiom for buffered-window signal extractors
+- **Type**: Architectural (applies to any streaming signal-extraction pipeline)
+- **Context**: USER-CORRECTION-018.
+- **Lesson**: When signal extractors produce a value per "window" defined by external state transitions (e.g., "per rally", "per pre-serve ritual"), pushing flush-timing into each extractor produces boilerplate duplication AND subtle bugs when N extractors disagree on "when did the window end." Clean idiom: orchestrator owns window-boundary detection and calls `flush()` on the subset of extractors whose `required_state` just exited. Each extractor stays stateless except for its buffer. Generalizes to any message-broadcast + windowed-aggregation pipeline.
+- **Severity**: HIGH (architectural)
+- **File**: Applies to `backend/cv/compiler.py` in Action 3.5.
+
+### PATTERN-020 — State-Machine Transitions as Smoothed Event Timestamps (instead of raw-derivative peak finding)
+- **Type**: Signal processing pattern
+- **Context**: USER-CORRECTION-019 split-step latency.
+- **Lesson**: When a "moment of interest" is defined by a peak/zero-crossing in a noisy time series, resist the temptation to compute the peak directly via `np.argmax(np.diff(y))`. Instead, look for whether an UPSTREAM STATE MACHINE (which already denoises via consecutive-frame gating) emits a transition at ~the same moment — and use that transition's timestamp. In tennis, `PRE_SERVE_RITUAL → ACTIVE_RALLY` is effectively a serve-contact timestamp with a 5-frame (~167ms) latency baked in; far more robust than differentiating YOLO keypoints for peak-velocity detection. Generalizes: if an FSM already filters noise, its transitions are the events you want.
+- **Severity**: HIGH-ROI (prevents an entire class of noise-sensitive derivative code)
+- **File**: Applies to `backend/cv/signals/split_step_latency.py` in Fleet 1.
+
+### PATTERN-021 — Biological Ruler (Camera-Invariant Pixel-to-Physical Conversion)
+- **Type**: Computer vision pattern (alternative to homography for airborne / above-ground points)
+- **Context**: USER-CORRECTION-020 toss variance.
+- **Lesson**: When you cannot use a ground-plane homography (because the point of interest is above Z=0) but you still need physical units, use a nearby BODY SEGMENT as a pixel ruler. Both the target point and the segment project through the same camera with the same perspective, so `target_cm ≈ target_norm_px × (segment_known_cm / segment_norm_px)`. For tennis: torso (~60cm) is the best ruler — stable, visible, and a reasonable avg across pro players. Generalizes to: any CV task needing physical lengths of airborne body parts (shot placement, vertical leap, serve toss). Bounded error ~10% from human-size variance, acceptable for relative-change signals.
+- **Severity**: HIGH-ROI (enables an entire class of Z>0 signals that homography can't touch)
+- **File**: Applies to `backend/cv/signals/serve_toss_variance_cm.py` in Fleet 2.
+
+### PATTERN-022 — Asymmetric Coordinate Branching for Two-Player Signals with Opposite Half-Courts
+- **Type**: Coordinate convention discipline
+- **Context**: USER-CORRECTION-021 baseline retreat.
+- **Lesson**: When two players inhabit MIRRORED half-courts under a single coordinate system (A's baseline at y=L, B's at y=0), any signal involving "distance from own baseline" or "own court position" must branch on `self.target_player`. Using a single global formula silently inverts the sign for one player. The fix is always a short branch: `A: max(0, y - L); B: max(0, -y)`. Applies beyond tennis: any two-sided game with a fixed divider (pickleball, badminton, volleyball, etc.).
+- **Severity**: HIGH (prevents one player's signal being catastrophically wrong)
+- **File**: Applies to `backend/cv/signals/baseline_retreat_distance_m.py` in Fleet 3.
+
+### PATTERN-023 — Fail-Fast Dict Access for Required Deps in Data Systems
+- **Type**: Defensive programming (quant discipline)
+- **Context**: USER-CORRECTION-022 match_id lookup.
+- **Lesson**: `dict.get(key, default)` is safe in UI code where defaults are meaningful, and dangerous in data pipelines where a wrong default silently corrupts the dataset. For any dict value REQUIRED for correct operation (primary keys, IDs, join keys), use strict `[key]` access so missing keys raise `KeyError` loudly during orchestration setup — NOT silently during data write. Generalizes: error early, error loud, fix once. A `KeyError` in a test during dev is a gift; a corrupted dataset is a week of debugging.
+- **Severity**: HIGH (data integrity)
+- **File**: Applies to every `BaseSignalExtractor` subclass; `lateral_work_rate.py:70` is the reference.
+
 ---
 
 ## DAY 2 LEARNINGS (Apr 23, 2026)

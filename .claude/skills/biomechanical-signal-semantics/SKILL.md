@@ -78,13 +78,20 @@ Each signal module exposes its own `torso_scalar_for_mode(mode)` helper. Do NOT 
 
 **Definition**: Time elapsed between `ACTIVE_RALLY` exit and player's Kalman-smoothed velocity magnitude dropping below 0.5 m/s.
 
-**State gate**: Only computed at `ACTIVE_RALLY → DEAD_TIME` transition. Standing still during an extended changeover (pure DEAD_TIME) is NOT recovery.
+**State gate** (USER-CORRECTION-018 compiler-flush contract): Extractor buffers `(t_ms, |v|)` tuples during ACTIVE_RALLY. The compiler calls `flush()` exactly once when the player transitions OUT of ACTIVE_RALLY (either → DEAD_TIME via natural stillness, or coupled by other match events). The extractor then scans its buffer for the last tick where `|v| >= 0.5` (t_rally_end) and the first subsequent tick where `|v| < 0.5` (t_at_stillness).
+
+**Kalman velocity magnitude** (USER-CORRECTION-017 physics guardrail): compute `math.hypot(vx, vy)` from `target_kalman[2], target_kalman[3]`. Do NOT re-derive velocity from keypoints. Do NOT project upper-body points through CourtMapper.
 
 **Calculation**:
 ```python
-t_rally_end: int  # ms, moment state transitions out of ACTIVE_RALLY
-t_at_stillness: int  # ms, first frame after t_rally_end where |v| < 0.5 m/s
-recovery_latency_ms = t_at_stillness - t_rally_end
+# On each ACTIVE_RALLY ingest tick:
+speed_mps = math.hypot(target_kalman[2], target_kalman[3])
+self._buffer.append((t_ms, speed_mps))
+
+# On flush (compiler calls this when state exits ACTIVE_RALLY):
+t_rally_end = last t in buffer where speed_mps >= 0.5
+t_at_stillness = first t after t_rally_end where speed_mps < 0.5
+recovery_latency_ms = t_at_stillness - t_rally_end  # may be None if never stilled
 ```
 
 **Physical ranges** (literature-informed):
@@ -100,17 +107,42 @@ recovery_latency_ms = t_at_stillness - t_rally_end
 
 ## Signal 2 — serve_toss_variance_cm
 
-**Definition**: Standard deviation of wrist-keypoint apex height (peak Y over the toss phase) across serves within a sliding window during PRE_SERVE_RITUAL.
+**Definition**: Standard deviation of wrist-keypoint apex height across serve attempts within a sliding window during PRE_SERVE_RITUAL, converted from normalized pixels to centimeters via a camera-invariant biological ruler.
 
-**State gate**: Only accumulated during PRE_SERVE_RITUAL; flushed at transition.
+**State gate** (USER-CORRECTION-018 compiler-flush): accumulated only during PRE_SERVE_RITUAL; compiler flushes on transition OUT.
 
-**Calculation**:
+**USER-CORRECTION-020 — Phantom-Serve Guard + Biological Ruler**:
+
+1. **Relative kinematics** (USER-CORRECTION-012): operate on `wrist_y - hip_y` (ambidextrous wrist selection per USER-CORRECTION-014), not raw `wrist_y`. Removes camera pan/tilt.
+
+2. **Apex extraction**: in normalized image coords, `y=0` is the TOP of the frame, so the TOSS APEX corresponds to the MINIMUM `relative_y` over the toss phase (NOT the max).
+
+3. **Phantom-serve amplitude filter**: the returner also lives in PRE_SERVE_RITUAL. If the wrist y-range `(max_y - min_y)` over the buffer is BELOW `0.05` normalized units, the buffer is jitter — return `None`, do not emit a value. Only a real toss clears this threshold (typical pro toss spans ~0.15-0.25 normalized units).
+
+4. **Biological ruler (Z=0 invariant compliant)**: cannot use `CourtMapper` to convert airborne wrist pixels to meters (per USER-CORRECTION-017). Instead, use the player's OWN torso (`abs(shoulder_y - hip_y)`) as a pixel ruler. A pro tennis torso averages ~60 cm; use it to convert normalized → cm:
+   ```python
+   torso_px_norm = abs(shoulder_y - hip_y)  # same coordinate system as wrist_y
+   CM_PER_NORMALIZED_UNIT = 60.0 / torso_px_norm
+   variance_cm = std(apex_heights_norm) * CM_PER_NORMALIZED_UNIT
+   ```
+   Both wrist and torso project through the same camera, so the torso-scalar naturally absorbs perspective. The 60 cm assumption bounds error to ~10% (pro men avg ~62 cm, pro women ~55 cm), which is fine for a relative-fatigue signal.
+
+**Calculation (canonical)**:
 ```python
-# For each serve attempt (wrist Y trajectory)
-apex_y = max(wrist_y_series)
-apex_heights.append(apex_y)
-# Sliding window of last N serves
-variance_cm = np.std(apex_heights[-N:]) * court_scale_cm_per_unit
+# Per-frame during PRE_SERVE_RITUAL:
+ambi_wrist_y = max(left_wrist_y, right_wrist_y)  # confident + max-y per USER-CORRECTION-014
+rel_y = ambi_wrist_y - hip_y
+self._wrist_buffer.append(rel_y)
+self._torso_buffer.append(abs(shoulder_y - hip_y))
+
+# On flush:
+if (max(wrist_buffer) - min(wrist_buffer)) < 0.05:
+    return None  # phantom serve — too little range to be a real toss
+apex_norm = min(self._wrist_buffer)  # smallest y = highest point
+std_norm = float(np.std(apex_series))  # std of apex across serves in sliding window
+torso_norm = float(np.mean(self._torso_buffer))  # stable across the buffer
+cm_per_norm = 60.0 / torso_norm
+variance_cm = std_norm * cm_per_norm
 ```
 
 **Physical ranges** (elite research on serve-toss consistency):
@@ -187,21 +219,30 @@ degradation_deg = np.degrees(np.arctan2(normalized_crouch - baseline_normalized,
 
 ## Signal 5 — baseline_retreat_distance_m
 
-**Definition**: Player's Y-position relative to own baseline, transformed from pixel space to court meters via homography.
+**Definition**: Player's distance BEHIND their own baseline in court meters, clamped to 0.0 (standing inside the court is "no retreat").
 
-**Requires**: Valid `CourtMapper` with 4 annotated court corners.
+**USER-CORRECTION-021 — Asymmetric Baseline Geometry**: Player A and Player B have OPPOSITE baselines and retreat directions. A naive single-baseline implementation would invert B's retreat or produce negative distances. Retreat MUST branch on `self.target_player`:
 
-**Calculation**:
+- **Player A** (near baseline in our convention, y=23.77m): retreat = `max(0.0, y_m - SINGLES_COURT_LENGTH_M)`
+- **Player B** (far baseline, y=0.0m): retreat = `max(0.0, 0.0 - y_m)` = `max(0.0, -y_m)`
+
+**Input source** (USER-CORRECTION-017 physics guardrail): use `target_kalman[1]` (y_m) directly — the Kalman filter runs on `robust_foot_point` which IS a ground-plane point, so its y-output is already the valid court-meter y-coordinate. Do NOT re-derive by running keypoints through `CourtMapper` a second time.
+
+**Calculation (canonical)**:
 ```python
-# Feet midpoint in pixel space (normalized)
-feet_pixel = ((kp[LEFT_ANKLE][0] + kp[RIGHT_ANKLE][0]) / 2,
-              (kp[LEFT_ANKLE][1] + kp[RIGHT_ANKLE][1]) / 2)
-# Transform to court meters
-court_xy = court_mapper.to_court_meters(feet_pixel)  # returns None if off-court (SP1)
-if court_xy is None:
-    return None
-# Distance from own baseline
-retreat_m = court_xy[1] - player_baseline_y_m
+from backend.db.schema import SINGLES_COURT_LENGTH_M  # = 23.77
+
+if target_state != "ACTIVE_RALLY" or target_kalman is None:
+    return
+y_m = target_kalman[1]
+if self.target_player == "A":
+    retreat_m = max(0.0, y_m - SINGLES_COURT_LENGTH_M)
+else:  # "B"
+    retreat_m = max(0.0, -y_m)
+self._buffer.append(retreat_m)
+
+# On flush (compiler flushes on ACTIVE_RALLY exit):
+mean_retreat_m = float(np.mean(self._buffer))  # or median, or max — TDD-decide
 ```
 
 **Physical ranges**:
@@ -244,16 +285,65 @@ p95 = float(np.percentile(self._buffer, 95))
 
 ## Signal 7 — split_step_latency_ms
 
-**Definition**: Time from opponent's racquet-wrist peak velocity (serve/groundstroke contact) to player's first velocity zero-crossing (commit-to-return).
+**Definition**: Time from the OPPONENT'S transition into ACTIVE_RALLY (serve/stroke contact) to the TARGET'S transition into ACTIVE_RALLY (commit-to-return).
 
-**State gate**: PRE_SERVE_RITUAL exit → ACTIVE_RALLY entry.
+**USER-CORRECTION-019 — Structural State-Proxies (no raw-derivative hunting)**:
 
-**Calculation**:
+The original specification said: "time from opponent wrist-velocity PEAK to target's first velocity ZERO-CROSSING." Differentiating raw YOLO keypoints to find a peak is chaotic — jitter + occlusion noise destroys the signal. **However**, the MatchStateMachine already gives us canonical transition timestamps that are:
+- Smoothed over 5 consecutive frames (`CONSECUTIVE_FRAMES_TO_RALLY`)
+- Unambiguously aligned with serve-contact moments (server transitions PRE_SERVE_RITUAL → ACTIVE_RALLY at the moment of contact)
+- Returner-specific transition timestamps are the commit-to-return moment
+
+So: `split_step_latency_ms = target_ACTIVE_RALLY_entry_t_ms - opponent_ACTIVE_RALLY_entry_t_ms`. The state machine's 5-frame gating naturally absorbs jitter.
+
+**State-tracking pattern** (USER-CORRECTION-013 symmetric API, USER-CORRECTION-018 compiler-flush):
+
 ```python
-t_contact: int  # ms, opponent wrist-velocity peak
-t_commit: int  # ms, first zero-crossing of own velocity after t_contact
-split_step_latency_ms = t_commit - t_contact
+class SplitStepLatency(BaseSignalExtractor):
+    signal_name = "split_step_latency_ms"
+    required_state = ("PRE_SERVE_RITUAL", "ACTIVE_RALLY")  # both — we need to see the transition
+
+    def __init__(self, target_player, dependencies):
+        super().__init__(target_player, dependencies)
+        self._opp_entered_active_t_ms: int | None = None
+        self._target_entered_active_t_ms: int | None = None
+        self._last_target_state: PlayerState | None = None
+        self._last_opponent_state: PlayerState | None = None
+
+    def ingest(self, frame, target_state, opponent_state,
+               target_kalman, opponent_kalman, t_ms):
+        # Opponent just entered ACTIVE_RALLY = serve/stroke contact
+        if self._last_opponent_state == "PRE_SERVE_RITUAL" and opponent_state == "ACTIVE_RALLY":
+            self._opp_entered_active_t_ms = t_ms
+            self._target_entered_active_t_ms = None  # reset target-entry for this rally
+
+        # Target just entered ACTIVE_RALLY = split-step commit
+        if self._last_target_state == "PRE_SERVE_RITUAL" and target_state == "ACTIVE_RALLY":
+            self._target_entered_active_t_ms = t_ms
+
+        self._last_target_state = target_state
+        self._last_opponent_state = opponent_state
+
+    def flush(self, t_ms):
+        # If target is the server (transitioned FIRST), return None — no meaningful latency.
+        # If opponent transitioned first AND target transitioned after, emit the delta.
+        if (self._opp_entered_active_t_ms is None
+                or self._target_entered_active_t_ms is None):
+            return None
+        if self._target_entered_active_t_ms < self._opp_entered_active_t_ms:
+            return None  # target is the server this rally — no latency to measure
+        latency_ms = self._target_entered_active_t_ms - self._opp_entered_active_t_ms
+        sample = SignalSample(..., value=float(latency_ms), ...)
+        self._opp_entered_active_t_ms = None
+        self._target_entered_active_t_ms = None
+        return sample
 ```
+
+**Why this is physically correct**:
+- The state machine transitions ACTIVE_RALLY only after 5 consecutive frames (167 ms @ 30 fps) above 0.2 m/s. This inherently filters noise.
+- Server → ACTIVE_RALLY aligns with the visible serve motion starting.
+- Returner → ACTIVE_RALLY aligns with the visible split-step and forward/lateral commit.
+- A healthy returner's commit-to-return timing is 150-250 ms AFTER the server's commit; a fatigued returner is delayed 300-500 ms. These match the literature-informed ranges below.
 
 **Physical ranges** (literature-verified via Perplexity Apr 21 2026):
 - Elite fresh: 150-250 ms

@@ -57,13 +57,19 @@ class LateralWorkRate(BaseSignalExtractor):
         self._buffer.append(abs(vx_mps))
 
     def flush(self, t_ms: int) -> SignalSample | None:
-        """Emit p95 of the buffered |vx| values; clear buffer; return sample."""
+        """Emit p95 of the buffered |vx| values; clear buffer; return sample.
+
+        USER-CORRECTION-022: Strict `self.deps["match_id"]` — fail LOUDLY if the
+        orchestrator forgets to inject deps. Silently defaulting to "unknown"
+        would corrupt the DuckDB PK `(timestamp_ms, match_id, player, signal_name)`
+        and pollute downstream analysis.
+        """
         if not self._buffer:
             return None
         p95 = float(np.percentile(self._buffer, 95))
         sample = SignalSample(
             timestamp_ms=t_ms,
-            match_id=self.deps.get("match_id", "unknown"),
+            match_id=self.deps["match_id"],
             player=self.target_player,
             signal_name=self.signal_name,
             value=p95,

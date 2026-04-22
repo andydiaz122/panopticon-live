@@ -200,6 +200,25 @@ def iter_frames_from_ffmpeg(
 # ──────────────────────────── Content hashing ────────────────────────────
 
 
+def load_corners_json(corners_json_path: Path) -> tuple[str, CornersNormalized]:
+    """Load a corners JSON emitted by tools/court_annotator.html.
+
+    Accepts BOTH shapes (tested 2026-04-22 after annotator sent a wrapper):
+      1. Wrapped (what the annotator actually emits):
+         {"clip": ..., "annotated_at": ..., "corners": {"top_left": [...], ...}, "notes": ...}
+      2. Bare (manual JSON hand-edits, back-compat):
+         {"top_left": [...], "top_right": [...], "bottom_right": [...], "bottom_left": [...]}
+
+    Returns (raw_text, CornersNormalized). The raw text is preserved for MatchMeta
+    provenance so the full annotation metadata travels with the pre-computed artifact.
+    """
+    raw_text = corners_json_path.read_text()
+    data = json.loads(raw_text)
+    # Unwrap if the annotator's wrapper shape is present.
+    inner = data.get("corners", data) if isinstance(data, dict) else data
+    return raw_text, CornersNormalized(**inner)
+
+
 def compute_clip_sha256(clip_path: Path) -> str:
     """Stream SHA256 of the file for MatchMeta (8MB chunks).
 
@@ -455,9 +474,8 @@ def run_precompute(
     """
     # 1. Probe video meta + corners (fail fast before opening DuckDB).
     width, height, fps, probed_duration_ms = probe_video_meta(clip_path)
-    corners_text = corners_json_path.read_text()
-    corners_data = json.loads(corners_text)
-    corners = CornersNormalized(**corners_data)
+    # Use load_corners_json — handles BOTH the annotator's wrapper shape AND bare shape.
+    corners_text, corners = load_corners_json(corners_json_path)
 
     clip_sha = compute_clip_sha256(clip_path)
 

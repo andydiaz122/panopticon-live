@@ -1,7 +1,15 @@
 # PHASE 1 PLAN — CV Spine + 7 Signals (Revised after 2026-04-21 Team Lead Review)
 
-**Status**: APPROVED (2026-04-21 second-wave review). Currently executing Action 1; Action 2 commences immediately after. Action 3 (signal sprint) paused until team-lead reviews the spine.
-**Scope**: Actions 1 + 2 (documentation + spine). Action 3 (signal sprint) gated.
+**Status** (updated 2026-04-21 end-of-day):
+- **Action 1**: ✅ **COMPLETE** (commit `db2a1e9`) — MEMORY.md has 10 USER-CORRECTIONs + 13 PATTERNs; 6 existing skills updated; 4 new specialized skills created (`physical-kalman-tracking`, `topological-identity-stability`, `match-state-coupling`, `vercel-ts-server-actions`); 4 agents updated; FORANDREW.md + ORCHESTRATION_PLAYBOOK.md revised.
+- **Action 2**: ✅ **CODE COMPLETE** (commit `cd52758`) — 45/45 tests GREEN, 82.75% coverage, ruff clean.
+  - `backend/cv/homography.py` (11 tests)
+  - `backend/cv/pose.py` (14 tests)
+  - `backend/cv/kalman.py` (8 tests)
+  - `backend/cv/state_machine.py` (12 tests)
+  - `backend/db/schema.py` extended with `CornersNormalized`, `RawDetection`, `PlayerDetection`, `StateTransition`, `FrameKeypoints`
+- **Action 3**: ⛔ **GATED** on team-lead review of the spine. Parallel signal sprint begins ONLY after approval.
+
 **Owner agents**: `documentation-librarian`, `cv-pipeline-engineer`, `test-forensic-validator`, `vercel-deployment-specialist`.
 
 ## Wave 2 — 5 Additional USER-CORRECTIONs Integrated (006-010)

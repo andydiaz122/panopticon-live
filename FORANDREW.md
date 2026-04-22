@@ -110,3 +110,54 @@ Two full waves of architectural scrutiny, totaling **10 USER-CORRECTIONs** baked
 ## Day 0 Status: GO ✅
 
 Proceeding to Phase 1 (CV pre-compute pipeline) on Wednesday.
+
+---
+
+## 2026-04-21 End-of-Day Block (post Phase-1 Action-2)
+
+### What happened this session (chronological)
+1. **Day 0 morning**: 10 USER-CORRECTIONs absorbed over two team-lead review waves (see [MEMORY.md](MEMORY.md) entries USER-CORRECTION-001 through 010).
+2. **Late-morning infrastructure investment**: created 4 new specialized project skills (`physical-kalman-tracking`, `topological-identity-stability`, `match-state-coupling`, `vercel-ts-server-actions`), bringing the skill team to 12 orthogonal skills; updated 6 existing skills; updated 4 agents to reference the canonical rules directly in their charters. Committed as `db2a1e9`.
+3. **Afternoon TDD-first CV spine** (Action 2): wrote tests before each module.
+   - `backend/cv/homography.py` — 11/11 tests green
+   - `backend/cv/pose.py` — 14/14 tests green
+   - `backend/cv/kalman.py` — 8/8 tests green
+   - `backend/cv/state_machine.py` — 12/12 tests green
+   - **Total 45/45 tests green**, coverage 82.75%, ruff clean
+   - Committed as `cd52758`
+
+### Key architectural decisions this session
+- **Absolute Court Half Assignment** supersedes Hungarian/Y-sort for player identity (USER-CORRECTION-007). Implemented in `backend/cv/pose.py::assign_players`.
+- **Physical Kalman domain**: the Kalman filter operates on court meters and emits m/s so state-machine thresholds are physically meaningful (USER-CORRECTION-008). Enforced by `test_input_units_are_assumed_meters_not_normalized` regression.
+- **MatchStateMachine** couples both players via bounce event so `split_step_latency` fires for the returner (USER-CORRECTION-010). Implemented in `backend/cv/state_machine.py`.
+- **Vercel surface is pure Next.js**; `backend/` is strictly a local Mac Mini pre-compute tool (USER-CORRECTION-006). The scouting-report Managed Agent uses the TypeScript `@anthropic-ai/sdk` via Next.js Server Action.
+
+### Non-obvious learnings captured in MEMORY.md
+1. **Perspective warp compresses far half in image space** — the image-space net line is ~`y_norm=0.34` for a typical broadcast trapezoid, NOT `0.54`. Caught via TDD. (PATTERN-010)
+2. **Ultralytics `.xyn` is pre-normalized [0,1]** — no manual W/H division needed. (PATTERN-004)
+3. **Security hook trips on literal `exec` / `innerHTML`** — use `subprocess.Popen` + `textContent`/`createElement`. (PATTERN-006, PATTERN-007)
+4. **Memory slope sign**: only positive > 200 KB/frame is a leak; negative = freed. (GOTCHA-007)
+5. **YOLO sees 2-25 detections per frame on broadcast** (crowd, ballboys, linesmen); USER-CORRECTION-007 solves this canonically. (PATTERN-009)
+6. **Managed Agents 2026-04-01 API shape** captured via Perplexity — `client.beta.agents.create(...)` + `client.beta.sessions.create(...)` + `agent_toolset_20260401`. (PATTERN-008)
+7. **Plan-mode inheritance is silent** — dispatched sub-agents inherit the parent's plan-mode unless explicitly passed `mode: "acceptEdits"`. Cost a round-trip on the documentation save. (anti-pattern #33 re-learned)
+
+### Bug journal
+- **2026-04-21 late — perspective-warp test fixture** (`tests/test_cv/test_pose.py::test_assign_players_splits_by_court_half`): initial fixture used `image_y=0.40` for the far-side detection, expecting it to land in the far half. Actual projection via the trapezoid homography: `y_m ≈ 13.2` (above net line 11.885 → Player A's half, not B's). Fixed by moving far detection to `image_y=0.30`. Fix is captured in PATTERN-010.
+- **2026-04-21 late — ruff N806 on `W`, `H`**: standard CV `width, height` uppercase idiom. Added per-file-ignore in `pyproject.toml` rather than renaming.
+
+### What's NEXT (resume directives)
+
+When this session resumes (or after compact):
+
+1. **HOLD for team-lead review of CV Spine** — do NOT start Action 3 until explicit approval.
+2. Once approved, begin Action 3 parallel signal sprint via `/devfleet`:
+   - Fleet 1: `recovery_latency_ms`, `split_step_latency_ms`
+   - Fleet 2: `serve_toss_variance_cm`, `ritual_entropy_delta`
+   - Fleet 3: `crouch_depth_degradation_deg`, `baseline_retreat_distance_m` (enforce far-court fallbacks)
+   - Fleet 4: `lateral_work_rate`
+3. Each signal must have `test-forensic-validator` write tests FIRST with synthetic keypoint fixtures proving physical-realism assertions before any math is implemented.
+4. After all 7 signals green, smoke integration on `data/clips/utr_match_01_segment_a.mp4` producing a full DuckDB row set + `match_data.json` pre-compute.
+5. Then Phase 2 (offline Opus: Coach + HUD Designer + Haiku Narrator + scouting-report TypeScript Server Action).
+
+### Documentation is safe to compact from this point
+All 5 living docs reflect current state. MEMORY.md has 10 USER-CORRECTIONs + 13 PATTERNs + 5 DECISIONs + 8 GOTCHAs. TOOLS_IMPACT.md has Day-0 and Phase-1-late-session ROI blocks. PHASE_1_PLAN.md status line reflects where we are. CLAUDE.md prime directive unchanged. All agents + skills on main branch.

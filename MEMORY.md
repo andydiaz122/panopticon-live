@@ -264,9 +264,39 @@ Cross-session recall. Every entry is:
 
 ---
 
+## PHASE-1 LEARNINGS (Apr 21, 2026 — late session)
+
+### PATTERN-010 — Perspective warp compresses the "far half" in image space
+- **Type**: Pattern (non-obvious math; critical for test fixtures)
+- **Context**: Writing `tests/test_cv/test_pose.py` Apr 21, 2026 — initially assumed the net line would project to `image_y ≈ 0.54` (midpoint of `top_y=0.20`, `bottom_y=0.88`). The first run of `test_assign_players_splits_by_court_half` flagged a false positive.
+- **Lesson**: Perspective homography is NON-LINEAR. For a trapezoid with `top_y=0.20` and `bottom_y=0.88`, the physical net line (court length / 2 = 11.885 m) projects to ~`image_y=0.34`, not the midpoint. The far half of the image is compressed toward the top of the frame due to 3D foreshortening. ALWAYS compute expected test coordinates by running a forward projection through the actual homography matrix — never assume linear midpoints.
+- **Severity**: MEDIUM (test correctness gate)
+- **File**: `backend/cv/homography.py`, `tests/test_cv/test_pose.py::test_assign_players_splits_by_court_half`
+
+### PATTERN-011 — TDD with synthetic keypoint fixtures proves physical constraints BEFORE code
+- **Type**: Pattern (high-ROI methodology)
+- **Context**: Action 2 CV spine landed 45/45 tests green on a single TDD pass
+- **Lesson**: For physics-grounded code (Kalman meters, court polygon, state thresholds), synthetic fixtures (linear motion at 2 m/s, stepwise bounces, occluded frames) let you assert CONTRACTS (converged velocity, coast-on-None, transition frame counts) BEFORE any real YOLO data. This methodology caught the perspective-warp test-fixture bug AND catches unit-mismatch regressions via the explicit `test_input_units_are_assumed_meters_not_normalized` guard. Production data is for smoke integration and validation; unit tests NEVER depend on production data.
+- **Severity**: HIGH-ROI — compounds across every signal module in Action 3
+- **Files**: `tests/test_cv/test_homography.py` (11), `test_pose.py` (14), `test_kalman.py` (8), `test_state_machine.py` (12)
+
+### PATTERN-012 — Absolute Court Half Assignment is provably immune to identity swapping
+- **Type**: Pattern (architectural)
+- **Context**: Canonicalized in USER-CORRECTION-007; implemented in `backend/cv/pose.py::assign_players`
+- **Lesson**: Because top-1-per-half never compares detections ACROSS halves, a ballboy on Player A's side (high bbox_conf) CANNOT steal Player B's identity — even if occluded Player B has lower YOLO confidence. Provably correct under the tennis non-crossing invariant (players do not cross the net mid-rally). The `test_assign_players_immune_to_occlusion_swap` test demonstrates the scenario concretely.
+- **Severity**: HIGH (prevents demo-corrupting identity swaps)
+- **File**: `backend/cv/pose.py:112`
+
+### PATTERN-013 — Kalman contract: input MUST be court meters, not normalized coords
+- **Type**: Pattern (contract discipline)
+- **Context**: USER-CORRECTION-008; enforced by the regression test `test_input_units_are_assumed_meters_not_normalized`
+- **Lesson**: State machine thresholds (0.2 m/s, 0.05 m/s) are only meaningful if Kalman's velocity output is in m/s. Therefore Kalman MUST receive meters as input. Canonical pipeline: `YOLO.xyn → robust_foot_point → CourtMapper.to_court_meters → PhysicalKalman2D.update(meters)`. The regression test asserts that feeding normalized-space input would produce absurd velocities, making unit drift detectable at test time. Without this guard, a silent bug could make every downstream signal fire correctly on synthetic but wildly wrong on real data.
+- **Severity**: HIGH
+- **Files**: `backend/cv/kalman.py`, `tests/test_cv/test_kalman.py::test_input_units_are_assumed_meters_not_normalized`
+
 ## DAY 1 LEARNINGS (Apr 22, 2026)
 
-(To be populated)
+(To be populated when Phase 1 Action 3 begins)
 
 ---
 

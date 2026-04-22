@@ -99,9 +99,18 @@ def probe_video_meta(clip_path: Path) -> tuple[int, int, float, int]:
     height = int(stream["height"])
 
     # r_frame_rate is "num/den"
-    num_s, _, den_s = str(stream["r_frame_rate"]).partition("/")
+    raw_fps_str = str(stream["r_frame_rate"])
+    num_s, _, den_s = raw_fps_str.partition("/")
     den = float(den_s) if den_s else 1.0
     fps = float(num_s) / den if den else float(num_s)
+
+    # Reviewer HIGH: guard fps > 0 to avoid ZeroDivisionError deep inside run_precompute
+    # with a confusing traceback. Fire the error at the probe site with the raw string.
+    if fps <= 0.0:
+        raise RuntimeError(
+            f"ffprobe reported non-positive fps={fps!r} (raw r_frame_rate={raw_fps_str!r}) "
+            f"for {clip_path}. Clip is likely corrupted or ffprobe returned '0/0'."
+        )
 
     duration_str = stream.get("duration")
     duration_ms = int(float(duration_str) * 1000) if duration_str is not None else 0
@@ -132,7 +141,9 @@ def iter_frames_from_ffmpeg(
         "-f", "rawvideo", "-pix_fmt", "bgr24",
         "-",
     ]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # Reviewer LOW: stderr=PIPE risks kernel-buffer fill blocking ffmpeg on long clips;
+    # drain to DEVNULL (ffmpeg is already `-loglevel error` so we don't need stderr).
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     try:
         frame_idx = 0
         stdout = proc.stdout
@@ -146,9 +157,14 @@ def iter_frames_from_ffmpeg(
             yield frame_idx, frame
             frame_idx += 1
     finally:
+        # Reviewer HIGH: terminate() before wait() so abandoned iterators (break mid-loop,
+        # downstream exception) don't hang 5 seconds per occurrence. terminate() is a no-op
+        # if the process already exited cleanly on EOF.
         with contextlib.suppress(Exception):
             if proc.stdout is not None:
                 proc.stdout.close()
+        with contextlib.suppress(Exception):
+            proc.terminate()
         with contextlib.suppress(Exception):
             proc.wait(timeout=5)
 
@@ -184,14 +200,19 @@ def _get_inference_mode_ctx() -> object:
         return nullcontext()
 
 
-def _empty_mps_cache_if_due(frame_idx: int, device: str) -> None:
-    """Fire torch.mps.empty_cache() when frame_idx is a multiple of 50.
+def _empty_gpu_cache_if_due(frame_idx: int, device: str) -> None:
+    """Fire torch.<backend>.empty_cache() when frame_idx is a multiple of 50.
 
-    Skipped when device != 'mps' or torch.mps is unavailable. Never raises.
+    Dispatches per device: mps -> torch.mps.empty_cache, cuda -> torch.cuda.empty_cache.
+    Reviewer MEDIUM: CUDA code path was omitted — the CLI exposes --device cuda,
+    so we must support it even though M4 Pro only uses MPS in the hackathon.
+
+    Skipped when device is cpu / unsupported, or torch module is missing.
+    Never raises.
     """
-    if device != "mps":
-        return
     if frame_idx <= 0 or frame_idx % 50 != 0:
+        return
+    if device not in ("mps", "cuda"):
         return
     try:
         import torch
@@ -200,7 +221,14 @@ def _empty_mps_cache_if_due(frame_idx: int, device: str) -> None:
     # Some macOS versions lack empty_cache when unified memory is healthy —
     # non-fatal, don't crash pre-compute over it.
     with contextlib.suppress(Exception):
-        torch.mps.empty_cache()
+        if device == "mps":
+            torch.mps.empty_cache()
+        else:  # cuda
+            torch.cuda.empty_cache()
+
+
+# Backward-compat alias for existing tests that reference the old name.
+_empty_mps_cache_if_due = _empty_gpu_cache_if_due
 
 
 # ──────────────────────────── Frame wrapping ────────────────────────────

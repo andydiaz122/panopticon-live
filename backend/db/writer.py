@@ -147,11 +147,24 @@ class DuckDBWriter:
 
         if self._pending_keypoints:
             # Each FrameKeypoints expands to up to 2 rows (one per PlayerDetection).
+            # Reviewer HIGH: enforce 17-keypoint invariant at write time. The BLOB
+            # readback contract `np.frombuffer(blob, dtype=np.float32).reshape(17, 2)`
+            # assumes exactly 17 keypoints. If YOLO ever returns a different keypoint
+            # count (model upgrade, corrupted detection), we want to fail LOUDLY at
+            # write time rather than silently corrupt DuckDB blobs.
             rows: list[tuple] = []
             for kf in self._pending_keypoints:
                 for side, detection in (("A", kf.player_a), ("B", kf.player_b)):
                     if detection is None:
                         continue
+                    if len(detection.keypoints_xyn) != 17 or len(detection.confidence) != 17:
+                        raise ValueError(
+                            f"keypoint length mismatch: expected 17, got "
+                            f"{len(detection.keypoints_xyn)} keypoints / "
+                            f"{len(detection.confidence)} confidences "
+                            f"(player={side}, t_ms={kf.t_ms}). "
+                            f"Would corrupt BLOB reshape contract."
+                        )
                     kp_arr = np.asarray(detection.keypoints_xyn, dtype=np.float32).tobytes()
                     conf_arr = np.asarray(detection.confidence, dtype=np.float32).tobytes()
                     rows.append((kf.t_ms, self.match_id, side, kp_arr, conf_arr))

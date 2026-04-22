@@ -750,3 +750,157 @@ def test_run_precompute_duration_ms_recovered_when_ffprobe_missing_duration(
 
     # 30 frames at 30fps → 1000 ms (reconstructed post-loop)
     assert dur == 1000
+
+
+# ──────────────────────────── Reviewer-hardening regression tests ────────────────────────────
+
+
+def test_probe_video_meta_raises_on_zero_fps(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Reviewer HIGH: ffprobe '0/0' must fail LOUDLY at the probe site, not
+    cascade to an opaque ZeroDivisionError deep inside run_precompute.
+    """
+    from backend import precompute
+
+    fake_stream = {
+        "streams": [
+            {"width": 1920, "height": 1080, "r_frame_rate": "0/0", "duration": "5.0"}
+        ]
+    }
+    fake_result = SimpleNamespace(
+        stdout=json.dumps(fake_stream), stderr="", returncode=0
+    )
+    monkeypatch.setattr("backend.precompute.subprocess.run", lambda *a, **k: fake_result)
+
+    clip = tmp_path / "bad.mp4"
+    clip.write_bytes(b"x")
+    with pytest.raises(RuntimeError, match="non-positive fps"):
+        precompute.probe_video_meta(clip)
+
+
+def test_iter_frames_calls_proc_terminate_on_abandon(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Reviewer HIGH: when the frame iterator is abandoned mid-stream, proc.terminate()
+    must fire before proc.wait() so ffmpeg doesn't hang 5 seconds per abandoned clip.
+    """
+    from backend import precompute
+
+    W, H = 64, 48
+    frame_size = W * H * 3
+    # Popen returns a fake with stdout that ALWAYS has data (infinite stream) — we
+    # abandon via `break` after the first frame so terminate() must interrupt the
+    # otherwise-unbounded loop.
+    terminate_mock = MagicMock()
+    wait_mock = MagicMock()
+
+    fake_stdout = MagicMock()
+    fake_stdout.read = MagicMock(return_value=b"\x00" * frame_size)
+    fake_stdout.close = MagicMock()
+
+    fake_proc = MagicMock()
+    fake_proc.stdout = fake_stdout
+    fake_proc.terminate = terminate_mock
+    fake_proc.wait = wait_mock
+
+    monkeypatch.setattr(
+        "backend.precompute.subprocess.Popen", lambda *a, **k: fake_proc
+    )
+
+    it = precompute.iter_frames_from_ffmpeg(tmp_path / "clip.mp4", W, H)
+    # Consume one frame, then abandon
+    first = next(it)
+    assert first[0] == 0
+    assert first[1].shape == (H, W, 3)
+    # Trigger the generator's finally block by closing it early
+    it.close()
+
+    terminate_mock.assert_called_once()
+    wait_mock.assert_called_once()
+
+
+def test_iter_frames_uses_devnull_for_stderr(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Reviewer LOW: ffmpeg stderr must be DEVNULL to prevent kernel-buffer fill
+    on long clips. Verify the Popen kwargs.
+    """
+    from backend import precompute
+
+    captured_kwargs: dict = {}
+
+    def _fake_popen(cmd, **kwargs):
+        captured_kwargs.update(kwargs)
+        fake_proc = MagicMock()
+        fake_proc.stdout = MagicMock()
+        fake_proc.stdout.read = MagicMock(return_value=b"")  # immediate EOF
+        fake_proc.stdout.close = MagicMock()
+        fake_proc.terminate = MagicMock()
+        fake_proc.wait = MagicMock()
+        return fake_proc
+
+    monkeypatch.setattr("backend.precompute.subprocess.Popen", _fake_popen)
+
+    it = precompute.iter_frames_from_ffmpeg(tmp_path / "clip.mp4", 64, 48)
+    list(it)  # exhaust
+
+    import subprocess as sp
+    assert captured_kwargs.get("stderr") == sp.DEVNULL
+
+
+def test_empty_gpu_cache_fires_on_cuda_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reviewer MEDIUM: the CLI exposes --device cuda, so cache-clearing must
+    dispatch to torch.cuda.empty_cache, not just torch.mps.empty_cache.
+    """
+    import sys as _sys
+    from types import ModuleType as _ModuleType
+
+    fake_torch = _ModuleType("torch")
+    fake_torch.cuda = SimpleNamespace(empty_cache=MagicMock())  # type: ignore[attr-defined]
+    fake_torch.mps = SimpleNamespace(empty_cache=MagicMock())  # type: ignore[attr-defined]
+    monkeypatch.setitem(_sys.modules, "torch", fake_torch)
+
+    from backend import precompute
+    precompute._empty_gpu_cache_if_due(100, "cuda")
+    assert fake_torch.cuda.empty_cache.call_count == 1
+    assert fake_torch.mps.empty_cache.call_count == 0
+
+
+def test_writer_rejects_keypoints_with_wrong_length(tmp_path: Path) -> None:
+    """Reviewer HIGH: BLOB reshape contract requires 17 keypoints. If a future
+    YOLO model or a corrupted detection sneaks through Pydantic validation
+    (e.g., via .model_construct bypassing checks), writer.flush() must raise
+    a clear error rather than silently corrupt DuckDB blobs.
+
+    Belt-and-suspenders check — Pydantic schema already enforces
+    min_length=17/max_length=17 on PlayerDetection.keypoints_xyn. The
+    write-time guard catches model_construct or similar validation bypasses.
+    """
+    from backend.db.schema import FrameKeypoints, PlayerDetection
+    from backend.db.writer import DuckDBWriter
+
+    bad_detection = PlayerDetection.model_construct(
+        player="A",
+        keypoints_xyn=[(0.5, 0.5)] * 15,   # 15 instead of 17 (bypass via model_construct)
+        confidence=[0.9] * 15,
+        bbox_conf=0.9,
+        feet_mid_xyn=(0.5, 0.95),
+        feet_mid_m=(4.0, 12.0),
+        fallback_mode="ankle",
+    )
+    bad_frame = FrameKeypoints.model_construct(
+        t_ms=100, frame_idx=3, player_a=bad_detection, player_b=None
+    )
+
+    # NOT using `with DuckDBWriter(...)` context manager: __exit__ calls flush()
+    # a second time, which would re-raise and confuse pytest.raises. Construct
+    # manually, assert the raise, clear the queue, then close cleanly.
+    writer = DuckDBWriter(tmp_path / "db.duckdb", match_id="m")
+    try:
+        writer.queue_keypoint_frame(bad_frame)
+        with pytest.raises(ValueError, match="keypoint length mismatch"):
+            writer.flush()
+        writer._pending_keypoints.clear()  # clear so close() doesn't re-raise
+    finally:
+        writer.close()

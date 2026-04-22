@@ -53,8 +53,47 @@
         border: 1px solid #243049;
         border-radius: 8px;
         overflow: hidden;
+        min-height: 300px;
+      }
+      .canvas-wrap video {
+        display: block;
+        width: 100%;
+        height: auto;
       }
       canvas { display: block; width: 100%; height: auto; cursor: crosshair; }
+      .placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 300px;
+        color: #64748b;
+        font-size: 14px;
+        text-align: center;
+        padding: 20px;
+      }
+      .error-banner {
+        display: none;
+        padding: 10px 14px;
+        margin-top: 8px;
+        background: #3f1d1d;
+        border: 1px solid #7f1d1d;
+        color: #fca5a5;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      .error-banner.show { display: block; }
+      .status-banner {
+        display: none;
+        padding: 10px 14px;
+        margin-top: 8px;
+        background: #1a2f1a;
+        border: 1px solid #166534;
+        color: #86efac;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+      }
+      .status-banner.show { display: block; }
       aside {
         background: #0f1524;
         border: 1px solid #243049;
@@ -103,8 +142,9 @@
         </div>
       </div>
       <div class="controls">
-        <label class="file" for="video">Load video...</label>
-        <input type="file" id="video" accept="video/*" />
+        <label class="file" for="videoPicker">Load video...</label>
+        <input type="file" id="videoPicker" accept="video/*" />
+        <button id="btnTestDirect">Test direct URL</button>
         <button id="btnCaptureFrame" disabled>Capture frame</button>
         <button id="btnReset" disabled>Reset</button>
         <button id="btnDownload" disabled>Download JSON</button>
@@ -113,13 +153,19 @@
     <main>
       <div>
         <div class="canvas-wrap">
-          <canvas id="canvas" width="1920" height="1080"></canvas>
+          <video id="video" controls muted playsinline preload="auto" style="display:none;"></video>
+          <canvas id="canvas" width="1920" height="1080" style="display:none;"></canvas>
+          <div id="placeholder" class="placeholder">
+            Click "Load video..." above to begin.
+          </div>
         </div>
+        <div id="errorBanner" class="error-banner"></div>
+        <div id="statusBanner" class="status-banner"></div>
         <div class="note">
-          Click corners in order, clockwise from top-left:
-          <strong>top-left -> top-right -> bottom-right -> bottom-left</strong>.
+          Workflow: (1) Load video -> (2) scrub to a clean wide-angle frame ->
+          (3) click "Capture frame" -> (4) click 4 corners on the captured image,
+          clockwise from top-left: <strong>top-left -> top-right -> bottom-right -> bottom-left</strong>.
           Output coordinates are normalized [0.0, 1.0] (shape-invariant).
-          Scrub the video to a clean wide-angle frame, click "Capture frame," then click corners.
           Save as <code>&lt;clip_basename&gt;_corners.json</code> next to the clip.
         </div>
       </div>
@@ -135,22 +181,50 @@
       const ctx = canvas.getContext("2d");
       const cornerList = document.getElementById("cornerList");
       const jsonOut = document.getElementById("jsonOut");
-      const fileInput = document.getElementById("video");
+      const video = document.getElementById("video");
+      const placeholder = document.getElementById("placeholder");
+      const errorBanner = document.getElementById("errorBanner");
+      const statusBanner = document.getElementById("statusBanner");
       const btnCaptureFrame = document.getElementById("btnCaptureFrame");
       const btnReset = document.getElementById("btnReset");
       const btnDownload = document.getElementById("btnDownload");
+      const btnTestDirect = document.getElementById("btnTestDirect");
+      const fileInput = document.getElementById("videoPicker");
 
-      const video = document.createElement("video");
-      video.controls = true;
-      video.muted = true;
-      video.playsInline = true;
-      video.preload = "metadata";
-      video.style.maxWidth = "100%";
-      video.style.display = "none";
+      // GUARD: catch the ID-collision class of bug that lost us 5 iterations of debugging.
+      // If the id="video" element is not actually a <video> tag, fail loudly at page load.
+      if (!video || video.tagName !== "VIDEO") {
+        const found = video ? video.tagName : "null";
+        const msg =
+          "FATAL: #video element is not a <video> tag (found " + found + "). " +
+          "Check for duplicate id='video' in the HTML.";
+        const errDiv = document.createElement("div");
+        errDiv.style.cssText = "padding:40px;color:#fca5a5;font-family:monospace;";
+        errDiv.textContent = msg;
+        document.body.replaceChildren(errDiv);
+        throw new Error(msg);
+      }
 
       let corners = [];
       let clipName = "clip";
       let frameCaptured = false;
+      let currentObjectURL = null;
+
+      function showError(msg) {
+        errorBanner.textContent = msg;
+        errorBanner.classList.add("show");
+      }
+
+      function clearError() {
+        errorBanner.textContent = "";
+        errorBanner.classList.remove("show");
+      }
+
+      function setStatus(msg) {
+        statusBanner.textContent = msg;
+        statusBanner.classList.add("show");
+        console.log("[annotator] " + msg);
+      }
 
       function clearChildren(node) {
         while (node.firstChild) node.removeChild(node.firstChild);
@@ -236,35 +310,149 @@
       }
 
       fileInput.addEventListener("change", (evt) => {
-        const file = evt.target.files[0];
-        if (!file) return;
+        clearError();
+        setStatus("STEP 1/5: file input 'change' event fired");
+        const file = evt.target.files && evt.target.files[0];
+        if (!file) {
+          setStatus("ABORT: no file in evt.target.files (picker cancelled?)");
+          return;
+        }
+        // file.type can be "" on some drag/drop sources per research-agent finding.
+        // Wrap in a typed Blob when necessary so the element doesn't silently no-op.
+        const effectiveType = file.type || "video/mp4";
+        setStatus(
+          "STEP 2/5: got file '" + file.name +
+          "' (type=" + (file.type || "(empty -> forcing video/mp4)") +
+          ", " + (file.size / 1048576).toFixed(2) + " MB)"
+        );
         clipName = file.name.replace(/\.[^.]+$/, "");
-        const url = URL.createObjectURL(file);
-        video.src = url;
+
+        // Revoke previous URL to avoid memory leak when reloading
+        if (currentObjectURL) {
+          URL.revokeObjectURL(currentObjectURL);
+          currentObjectURL = null;
+        }
+
+        try {
+          const source = file.type ? file : new Blob([file], { type: effectiveType });
+          currentObjectURL = URL.createObjectURL(source);
+          setStatus("STEP 3/5: object URL created: " + currentObjectURL.substring(0, 60) + "...");
+        } catch (e) {
+          showError("createObjectURL failed: " + (e && e.message ? e.message : String(e)));
+          return;
+        }
+
+        // ORDER MATTERS: make the video visible BEFORE assigning src so Chrome doesn't
+        // defer load algorithm work on a display:none element (research-agent finding #5).
+        placeholder.style.display = "none";
         video.style.display = "block";
-        document.body.appendChild(video);
-        video.addEventListener(
-          "loadedmetadata",
-          () => {
-            canvas.width = video.videoWidth || 1920;
-            canvas.height = video.videoHeight || 1080;
-            btnCaptureFrame.disabled = false;
-            btnReset.disabled = false;
-          },
-          { once: true }
+        canvas.style.display = "none";
+        frameCaptured = false;
+        setStatus("STEP 4/5: video element made visible; assigning src...");
+
+        video.src = currentObjectURL;
+        // Explicitly kick the media load algorithm. Belt-and-braces per research-agent
+        // finding #5 — src assignment alone SHOULD trigger load, but explicit .load()
+        // guarantees it even in edge cases.
+        video.load();
+        setStatus("STEP 5/5: video.src set + video.load() called; waiting for events...");
+
+        // DIAGNOSTIC TIMEOUT: if the load algorithm hasn't reached HAVE_METADATA (1)
+        // within 3 seconds, dump the full element state so we can see what's stuck.
+        setTimeout(() => {
+          if (video.readyState >= 1) return;  // metadata loaded — fine
+          const rsMap = ["NOTHING(0)", "METADATA(1)", "CURRENT_DATA(2)", "FUTURE_DATA(3)", "ENOUGH_DATA(4)"];
+          const nsMap = ["EMPTY(0)", "IDLE(1)", "LOADING(2)", "NO_SOURCE(3)"];
+          const errStr = video.error ? ("code=" + video.error.code + " msg=" + video.error.message) : "null";
+          showError(
+            "DIAGNOSTIC (3s timeout): loadedmetadata still hasn't fired.\n" +
+            "  readyState = " + (rsMap[video.readyState] || video.readyState) + "\n" +
+            "  networkState = " + (nsMap[video.networkState] || video.networkState) + "\n" +
+            "  videoWidth x videoHeight = " + video.videoWidth + " x " + video.videoHeight + "\n" +
+            "  error = " + errStr + "\n" +
+            "  currentSrc = " + (video.currentSrc || "(empty)") + "\n" +
+            "  element.tagName = " + video.tagName + "\n" +
+            "Open DevTools -> Issues tab, paste any Chrome-reported issue text."
+          );
+        }, 3000);
+      });
+
+      video.addEventListener("loadedmetadata", () => {
+        canvas.width = video.videoWidth || 1920;
+        canvas.height = video.videoHeight || 1080;
+        btnCaptureFrame.disabled = false;
+        btnReset.disabled = false;
+        setStatus(
+          "LOADED: " + video.videoWidth + "x" + video.videoHeight +
+          " @ " + video.duration.toFixed(1) + "s. Scrub to a good frame, then click Capture."
         );
       });
 
+      video.addEventListener("loadstart", () => console.log("[annotator] video loadstart"));
+      video.addEventListener("canplay", () => console.log("[annotator] video canplay"));
+      video.addEventListener("stalled", () => console.warn("[annotator] video stalled"));
+      video.addEventListener("suspend", () => console.log("[annotator] video suspend"));
+
+      // Direct-URL test button — bypasses blob: URL entirely to isolate blob-specific issues.
+      // Loads the demo clip directly from the local HTTP server.
+      btnTestDirect.addEventListener("click", () => {
+        clearError();
+        const testURL = "/data/clips/utr_match_01_segment_a.mp4";
+        clipName = "utr_match_01_segment_a";
+        setStatus("DIRECT TEST: assigning video.src = '" + testURL + "' (no blob)...");
+        placeholder.style.display = "none";
+        video.style.display = "block";
+        canvas.style.display = "none";
+        frameCaptured = false;
+        video.src = testURL;
+        video.load();
+      });
+
+      video.addEventListener("error", () => {
+        const err = video.error;
+        const codeMap = {
+          1: "MEDIA_ERR_ABORTED (user aborted)",
+          2: "MEDIA_ERR_NETWORK (network error)",
+          3: "MEDIA_ERR_DECODE (codec/decode error — try re-encoding to H.264 baseline mp4)",
+          4: "MEDIA_ERR_SRC_NOT_SUPPORTED (unsupported codec / container — common for H.265/HEVC, try H.264)",
+        };
+        const msg = err ? (codeMap[err.code] || ("unknown code " + err.code)) : "unknown error";
+        showError(
+          "Video failed to load: " + msg + ". " +
+          "If your clip is H.265/HEVC or has an unusual codec, re-encode with ffmpeg: " +
+          "`ffmpeg -i input.mp4 -c:v libx264 -preset fast -crf 22 -c:a aac output_h264.mp4`"
+        );
+        placeholder.style.display = "flex";
+        placeholder.textContent = "Video load failed — see error below.";
+        video.style.display = "none";
+      });
+
       btnCaptureFrame.addEventListener("click", () => {
+        if (!video.videoWidth || !video.videoHeight) {
+          showError("Video not ready yet. Wait for the first frame to render, then scrub to your target frame and click Capture again.");
+          return;
+        }
+        clearError();
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         frameCaptured = true;
         corners = [];
+        // Swap video for canvas so clicks land on the still image (not on video controls)
+        video.style.display = "none";
+        canvas.style.display = "block";
         renderCornerList();
         redrawOverlay();
       });
 
       btnReset.addEventListener("click", () => {
+        clearError();
         corners = [];
+        // If a frame was already captured, redraw it clean (no dots); otherwise swap back to video.
+        if (frameCaptured) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        } else if (currentObjectURL) {
+          video.style.display = "block";
+          canvas.style.display = "none";
+        }
         renderCornerList();
         redrawOverlay();
       });

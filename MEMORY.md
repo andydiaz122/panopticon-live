@@ -606,6 +606,40 @@ Cross-session recall. Every entry is:
 
 ---
 
+## COURT-ANNOTATOR DEBUGGING (Apr 22, 2026) — 5-iteration Silent-Failure
+
+### GOTCHA-014 — HTML ID Collision: `getElementById` Returns First-in-Document-Order, Silently
+- **Symptom**: a video-loader tool silently does nothing. No `loadstart`, no `loadedmetadata`, no `error` event fires. Browser gives no visual feedback. DevTools console shows the JS successfully reached the line that sets `video.src = blobURL` but nothing happens after. 5 iterations of debugging lost to this (faststart remux, preload attribute, http vs file protocol — ALL red herrings).
+- **Root cause**: `<input type="file" id="video">` AND `<video id="video">` both carried `id="video"` in the HTML. `document.getElementById("video")` returns the first match in document order (the input). Every subsequent `video.src = ...`, `video.addEventListener(...)` silently operated on the INPUT, not the video element. The input element had `.src` set to a blob URL (harmless no-op) and had listeners attached that would never fire.
+- **Why it was hard to spot**: Duplicate IDs are syntactically valid HTML — no parse error, no runtime exception. The symptoms (nothing happens) look identical to codec issues, autoplay blocks, CORS, network stalls, a dozen other things. Every "fix" we tried (remuxing moov atom, switching protocol, changing preload) was chasing a phantom.
+- **Why this class of bug is particularly deceptive**: browsers mis-silently ignore operations on wrong-type elements. `<input type="file">` doesn't fire a decoder error when you set `src` on it — it just accepts the property. Listeners attach successfully because `addEventListener` works on any EventTarget.
+- **How to apply**: ANY time `getElementById` returns something weird or a DOM manipulation seems to silently no-op, immediately check `element.tagName` — if it's not what you expect, grep the HTML for `id="X"` and count matches.
+- **Detector**: `tests/test_tools/test_court_annotator_html.py::test_no_duplicate_ids` — guards this class of bug statically. Fails the build if ANY two elements share an ID.
+- **Runtime guard**: `court_annotator.html` now fails LOUD at page load if `document.getElementById("video").tagName !== "VIDEO"` — blanks the page with a red error rather than silently misbehaving.
+- **Severity**: HIGH (silent correctness, very hard to diagnose without a bisecting mindset)
+
+### PATTERN-037 — Use Known-Good Fallback Paths to Isolate Class of Bug
+- **Type**: Debugging
+- **Context**: When a video won't load via `blob:` URL, we added a "Test direct URL" button that loads the same file via a direct HTTP URL (no blob). If direct works but blob fails, bug is blob-specific. If BOTH fail, bug is with the element/pipeline itself.
+- **Lesson**: For any "this doesn't work" debugging session, invest 2 minutes wiring up a known-good alternate path. It's a boolean bisect that eliminates half the hypothesis space instantly. See the `#btnTestDirect` handler in `tools/court_annotator.html`.
+- **Severity**: MEDIUM (debugging-tool craft)
+
+### PATTERN-038 — Timeout-Driven Diagnostics for "Never Happens" Bugs
+- **Type**: Debugging
+- **Context**: Waiting for an event that never fires is indistinguishable from waiting for an event that hasn't fired YET. After setting `video.src`, we start a 3-second timer; if `loadedmetadata` hasn't fired by then, we dump the full element state (`readyState`, `networkState`, `videoWidth`, `error.code`, `currentSrc`, `tagName`) into an on-screen red banner.
+- **Lesson**: Silent-failure diagnosis needs a deadline + state dump. The dump should include enough context that the NEXT iteration of debugging has a concrete starting point (not "nothing happened"). `tagName` in the dump is what would have caught our ID-collision bug immediately.
+- **File**: `tools/court_annotator.html` — the `setTimeout(() => { ... readyState + networkState + tagName dump ... }, 3000)` block.
+- **Severity**: MEDIUM (debugging-tool craft)
+
+### PATTERN-039 — Research-Agent + Runtime-Diagnostic Parallel Attack on Sticky Bugs
+- **Type**: Orchestration
+- **Context**: When a bug survives 3+ iterations of "reasonable next-try" fixes, dispatch a research agent (general-purpose, background) IN PARALLEL with adding runtime diagnostics to the code. The research agent surfaces a ranked list of known causes while you build the diagnostic surface to disambiguate them. Both paths converge: the research agent's ranked list narrows hypothesis space; the diagnostic dumps narrow evidence space.
+- **Example (this session)**: Research agent ranked ID-collision as cause #2 while I was already narrowing in on it via the `tagName` dump. Parallel execution took ~2 minutes; would have taken 15 minutes serially.
+- **Non-obvious insight**: ALWAYS run both in parallel after 3+ failed iterations. The "just one more fix" instinct after each failure is what cost us 5 iterations here. Set a 3-failure circuit breaker: on iteration 4, escalate to research+diagnostics.
+- **Severity**: MEDIUM (process — prevents future sessions from burning iterations on sticky bugs)
+
+---
+
 ## DAY 2 LEARNINGS (Apr 23, 2026)
 
 (To be populated)

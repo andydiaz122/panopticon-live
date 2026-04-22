@@ -352,3 +352,58 @@ The python-reviewer's ROI on Phase 2 was very high: 2 HIGH bugs + 3 MEDIUM in <2
 2. **Phase 3** (Fri Apr 24 target): Next.js HUD scaffold + canvas rAF loop + typewriter coach panel + Motion animations + scouting-report Managed Agent Server Action
 3. **Phase 4** (Sat Apr 25): Vercel deploy + multi-agent review panel + second match clip
 4. **Phase 5** (Sun Apr 26 8pm EST): demo video + submission
+
+---
+
+## 2026-04-22 (evening) — Court Annotator "Video Won't Load" Debugging Postmortem
+
+### The bug
+
+You opened `tools/court_annotator.html`, clicked "Load video...", picked `data/clips/utr_match_01_segment_a.mp4`, and nothing happened. Video area stayed black. Status banner got stuck at STEP 4/4: "video.src set; waiting for loadedmetadata..." No loadstart, no loadedmetadata, no error. Every reasonable next-try fix failed.
+
+### 5 iterations of red herrings before finding the real cause
+
+1. **Dynamic video created in JS, appended to `document.body`** — the video was rendering below the main grid, off-screen. FIXED by moving `<video>` into the HTML inside `.canvas-wrap`. **Didn't solve it.**
+2. **MP4 had `moov` atom at the END of the file** (non-faststart). Remuxed with `ffmpeg -c copy -movflags +faststart`. **Didn't solve it.**
+3. **`preload="metadata"` was conservative** — changed to `preload="auto"`. **Didn't solve it.**
+4. **`file://` origin might block blob video playback** — launched `python -m http.server` and served via `http://localhost:8000`. **Didn't solve it.**
+5. **Added deep diagnostic (status banner, 3s timeout dump, direct-URL test button)** + dispatched research agent in parallel — ROOT CAUSE found.
+
+### The actual root cause
+
+`<input type="file" id="video">` and `<video id="video">` **both had `id="video"`**. `document.getElementById("video")` returns the first match in document order — the input. Every `video.src = ...`, `video.addEventListener(...)` call in the script was silently operating on the INPUT, not the video element. The actual `<video>` tag in the DOM was never touched.
+
+**One character of change would have fixed it:** rename `<input id="video">` to `<input id="videoPicker">`.
+
+### Why it ate 5 iterations
+
+- **Duplicate IDs are valid HTML** — no parse error, no warning in console.
+- **Wrong-type operations silently succeed** — `<input>.src = blobURL` is a harmless no-op that doesn't throw.
+- **Listeners attach to ANY EventTarget** — so `input.addEventListener("loadedmetadata", ...)` succeeds and simply never fires.
+- **The symptoms match a dozen other real bugs** — codec issues, CORS, autoplay blocks, network stalls, MSE init problems. I pattern-matched to each in turn instead of questioning whether my variable was pointing at the right element.
+
+### Defenses installed
+
+1. **`tests/test_tools/test_court_annotator_html.py`** — 9 static-validation tests. The critical ones:
+   - `test_no_duplicate_ids` — fails build if any two HTML elements share an id.
+   - `test_video_id_is_on_video_element_not_input` — fails build if `id="video"` is on anything other than a `<video>` tag.
+   - `test_script_get_element_by_id_references_exist` — fails build if the inline script references an id not present in the DOM.
+2. **Runtime guard in `court_annotator.html`** — if `document.getElementById("video").tagName !== "VIDEO"` at page load, blank the page with a red FATAL error rather than silently misbehaving.
+3. **3-second diagnostic timeout in the load handler** — if `loadedmetadata` hasn't fired, dump `readyState` / `networkState` / `videoWidth` / `error` / `currentSrc` / `tagName` into a red banner. `tagName` in that dump would have caught the ID-collision bug on the FIRST iteration.
+4. **"Test direct URL" button** — loads the same file via `http://localhost:8000/data/clips/...` (no blob) to disambiguate blob-specific vs general load bugs.
+
+### Meta-lesson (most important)
+
+**After 3 failed debugging iterations, escalate to parallel research + runtime diagnostics.** Don't keep iterating on "just one more reasonable fix." The cost of a research agent (~2 min) + a diagnostic dump (~5 min) is trivial compared to another 3 rounds of phantom chasing. Logged as PATTERN-039 in MEMORY.md.
+
+The research agent I dispatched in iteration 5 ranked "duplicate `#video`" as cause #2 in its list — it took a specialist's outside perspective to surface the hypothesis I'd been blind to.
+
+### Files touched
+
+- `tools/court_annotator.html` — full refactor (DOM structure, listeners, diagnostics, guards)
+- `tests/test_tools/__init__.py` + `test_court_annotator_html.py` — 9 static-validation tests
+- `data/clips/utr_match_01_segment_a.mp4` — faststart remuxed (original preserved as `.original.mp4`)
+- `MEMORY.md` — GOTCHA-014, PATTERN-037/038/039
+- `FORANDREW.md` — this postmortem
+
+**Tests**: 358 pass, ruff clean.

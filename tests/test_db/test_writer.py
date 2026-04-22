@@ -30,6 +30,7 @@ from backend.db.schema import (
     HUDLayoutSpec,
     HUDWidgetSpec,
     MatchMeta,
+    NarratorBeat,
     PlayerDetection,
     SignalSample,
     StateTransition,
@@ -132,6 +133,24 @@ def _coach_insight(
         cache_read_tokens=50,
         cache_creation_tokens=10,
     )
+
+
+def _narrator_beat(
+    beat_id: str = "beat_1",
+    t_ms: int = 500,
+    text: str = "Forehand winner down the line.",
+    **overrides,
+) -> NarratorBeat:
+    defaults = dict(
+        beat_id=beat_id,
+        timestamp_ms=t_ms,
+        match_id="utr_01",
+        text=text,
+        input_tokens=80,
+        output_tokens=25,
+    )
+    defaults.update(overrides)
+    return NarratorBeat(**defaults)
 
 
 def _hud_layout() -> HUDLayoutSpec:
@@ -346,6 +365,57 @@ def test_queue_and_flush_coach_insights(tmp_path: Path) -> None:
     assert rows[0][8] == 10
 
 
+def test_queue_and_flush_narrator_beats(tmp_path: Path) -> None:
+    db = tmp_path / "p.duckdb"
+    with DuckDBWriter(db, match_id="utr_01") as w:
+        w.queue_narrator_beat(_narrator_beat(beat_id="b1", t_ms=1000, text="Ace up the tee."))
+        w.queue_narrator_beat(_narrator_beat(beat_id="b2", t_ms=2000, text="Service break in sight."))
+        w.flush()
+
+    with duckdb.connect(str(db), read_only=True) as conn:
+        rows = conn.execute(
+            "SELECT beat_id, timestamp_ms, match_id, text, input_tokens, output_tokens "
+            "FROM narrator_beats ORDER BY timestamp_ms"
+        ).fetchall()
+    assert len(rows) == 2
+    assert rows[0] == ("b1", 1000, "utr_01", "Ace up the tee.", 80, 25)
+    assert rows[1][0] == "b2"
+    assert rows[1][3] == "Service break in sight."
+
+
+def test_queue_narrator_beat_auto_flushes_at_batch_size(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = tmp_path / "p.duckdb"
+    monkeypatch.setattr(DuckDBWriter, "BATCH_SIZE", 3)
+    with DuckDBWriter(db, match_id="utr_01") as w:
+        for i in range(3):
+            w.queue_narrator_beat(_narrator_beat(beat_id=f"b{i}", t_ms=1000 * i, text=f"beat {i}"))
+        # After 3 queued, auto-flush fires; pending must be empty
+        assert w._pending_narrator == []
+
+    with duckdb.connect(str(db), read_only=True) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM narrator_beats").fetchone()[0]
+    assert count == 3
+
+
+def test_queue_narrator_beat_primary_key_upsert(tmp_path: Path) -> None:
+    """beat_id is PRIMARY KEY — re-queueing the same id must upsert, not duplicate."""
+    db = tmp_path / "p.duckdb"
+    with DuckDBWriter(db, match_id="utr_01") as w:
+        w.queue_narrator_beat(_narrator_beat(beat_id="same", text="v1"))
+        w.queue_narrator_beat(_narrator_beat(beat_id="same", text="v2"))
+        w.flush()
+
+    with duckdb.connect(str(db), read_only=True) as conn:
+        rows = conn.execute(
+            "SELECT beat_id, text FROM narrator_beats ORDER BY timestamp_ms"
+        ).fetchall()
+    # Executemany within a single flush inserts both rows; INSERT OR REPLACE keeps the later one.
+    assert len(rows) == 1
+    assert rows[0] == ("same", "v2")
+
+
 # ──────────────────────────── close / context manager / empty flush ────────────────────────────
 
 
@@ -379,7 +449,7 @@ def test_flush_on_empty_queues_is_noop(tmp_path: Path) -> None:
         w.flush()
         w.flush()
     with duckdb.connect(str(db), read_only=True) as conn:
-        for tbl in ("signals", "keypoints", "anomalies", "coach_insights"):
+        for tbl in ("signals", "keypoints", "anomalies", "coach_insights", "narrator_beats"):
             count = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
             assert count == 0
 
@@ -479,6 +549,48 @@ def test_dump_match_data_json_excludes_none_fields(tmp_path: Path) -> None:
     # Required (non-null) fields still present
     assert s0["signal_name"] == "recovery_latency_ms"
     assert s0["state"] == "ACTIVE_RALLY"
+
+
+def test_dump_match_data_json_includes_narrator_beats(tmp_path: Path) -> None:
+    """Narrator beats must round-trip through the JSON export with their text intact."""
+    out = tmp_path / "with_beats.json"
+    dump_match_data_json(
+        out,
+        meta=_match_meta(),
+        keypoints=[],
+        signals=[],
+        anomalies=[],
+        coach_insights=[],
+        hud_layouts=[],
+        transitions=[],
+        narrator_beats=[
+            _narrator_beat(beat_id="nb1", t_ms=1000, text="First up: Nadal's serve routine."),
+            _narrator_beat(beat_id="nb2", t_ms=2000, text="Djokovic breaks tension with a baseline drive."),
+        ],
+    )
+    data = json.loads(out.read_text())
+    assert "narrator_beats" in data
+    assert len(data["narrator_beats"]) == 2
+    assert data["narrator_beats"][0]["beat_id"] == "nb1"
+    assert data["narrator_beats"][0]["text"] == "First up: Nadal's serve routine."
+    assert data["narrator_beats"][1]["input_tokens"] == 80
+
+
+def test_dump_match_data_json_default_narrator_beats_empty(tmp_path: Path) -> None:
+    """Omitting narrator_beats keyword must default to empty list (backward-compat for Phase-1 callers)."""
+    out = tmp_path / "no_beats.json"
+    dump_match_data_json(
+        out,
+        meta=_match_meta(),
+        keypoints=[],
+        signals=[],
+        anomalies=[],
+        coach_insights=[],
+        hud_layouts=[],
+        transitions=[],
+    )
+    data = json.loads(out.read_text())
+    assert data["narrator_beats"] == []
 
 
 def test_dump_match_data_json_accepts_iterables(tmp_path: Path) -> None:

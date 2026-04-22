@@ -28,28 +28,37 @@ Testability:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import hashlib
 import json
 import math
+import os
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Coroutine, Iterator
 from contextlib import nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from backend.agents.haiku_narrator import generate_narrator_beat
+from backend.agents.hud_designer import generate_hud_layout
+from backend.agents.opus_coach import AnthropicClientLike, generate_coach_insight
+from backend.agents.tools import ToolContext
 from backend.cv.compiler import FeatureCompiler, build_frame_wrist_hip_inputs
 from backend.cv.homography import CourtMapper
 from backend.cv.kalman import PhysicalKalman2D
 from backend.cv.state_machine import MatchStateMachine
 from backend.cv.temporal_signals import RollingBounceDetector
 from backend.db.schema import (
+    CoachInsight,
     CornersNormalized,
     FrameKeypoints,
+    HUDLayoutSpec,
     MatchMeta,
+    NarratorBeat,
     PlayerDetection,
     SignalSample,
     StateTransition,
@@ -58,6 +67,25 @@ from backend.db.writer import DuckDBWriter, dump_match_data_json
 
 if TYPE_CHECKING:
     from backend.cv.pose import PoseExtractor
+
+# ──────────────────────────── Phase 2 agent defaults ────────────────────────────
+
+DEFAULT_COACH_CAP: int = 5
+"""Hard cap on Coach insights per clip. Prevents API-spend blowouts on long clips."""
+
+DEFAULT_DESIGN_CAP: int = 10
+"""Hard cap on HUD-layout generations per clip."""
+
+DEFAULT_BEAT_PERIOD_SEC: float = 10.0
+"""Narrator beat cadence. 10s means ~6 beats/minute — balanced cost vs coverage."""
+
+DEFAULT_BEAT_CAP: int = 20
+"""Hard cap on Narrator beats per clip (reviewer HIGH-2). Mirrors coach_cap/design_cap.
+
+Without this, a 15-minute clip at 10s cadence fires 90 concurrent Haiku calls via
+asyncio.gather, tripping Anthropic's rate limiter — output becomes mostly [narrator_error]
+beats and the demo looks broken. 20 beats covers ~3 minutes at 10s, which matches the
+demo-video budget."""
 
 
 # ──────────────────────────── Video metadata ────────────────────────────
@@ -256,6 +284,138 @@ def _kalman_speed(state: tuple[float, float, float, float] | None) -> float | No
     return math.hypot(vx, vy)
 
 
+# ──────────────────────────── Phase 2 agent-phase helpers ────────────────────────────
+
+
+def _build_state_summary(
+    signals: list[SignalSample], transitions: list[StateTransition], t_ms: int,
+    window_sec: float = 15.0,
+) -> str:
+    """Natural-language summary of recent signals + transitions for Designer context.
+
+    Designer doesn't query tools; this string is the sole context it receives. Keep
+    under ~100 words — Designer's max_tokens budget is low.
+    """
+    lo = t_ms - int(window_sec * 1000)
+    recent_signals = [s for s in signals if lo <= s.timestamp_ms <= t_ms and s.value is not None]
+    recent_transitions = [t for t in transitions if lo <= t.timestamp_ms <= t_ms]
+
+    lines: list[str] = [f"Window: last {window_sec:.0f}s up to t={t_ms}ms"]
+    if recent_transitions:
+        last_t = recent_transitions[-1]
+        lines.append(
+            f"Latest transition: player {last_t.player} "
+            f"{last_t.from_state} -> {last_t.to_state} ({last_t.reason})"
+        )
+    # Most recent sample per player+signal
+    by_key: dict[tuple[str, str], SignalSample] = {}
+    for s in recent_signals:
+        by_key[(s.player, s.signal_name)] = s
+    if by_key:
+        lines.append("Recent signals:")
+        for (player, name), s in sorted(by_key.items()):
+            lines.append(f"  {player} {name}: {s.value} (state={s.state})")
+    else:
+        lines.append("No recent signals in window.")
+    return "\n".join(lines)
+
+
+def _build_signal_snapshot(signals: list[SignalSample], t_ms: int, window_sec: float = 3.0) -> str:
+    """Short snapshot for Narrator — what's happening RIGHT NOW."""
+    lo = t_ms - int(window_sec * 1000)
+    recent = [s for s in signals if lo <= s.timestamp_ms <= t_ms and s.value is not None]
+    if not recent:
+        return f"Quiet moment at t={t_ms}ms — no recent signals."
+    most_recent = max(recent, key=lambda s: s.timestamp_ms)
+    return (
+        f"t={t_ms}ms. Player {most_recent.player} in {most_recent.state}. "
+        f"Latest {most_recent.signal_name}={most_recent.value}."
+    )
+
+
+async def _safe_gather(
+    tasks: list[Coroutine[Any, Any, Any]],
+) -> list[Any]:
+    """asyncio.gather that returns [] on empty task list (gather() on zero args would also work but is noisier)."""
+    if not tasks:
+        return []
+    return list(await asyncio.gather(*tasks))
+
+
+async def run_agent_phase(
+    client: AnthropicClientLike,
+    *,
+    match_id: str,
+    signals: list[SignalSample],
+    transitions: list[StateTransition],
+    duration_ms: int,
+    coach_cap: int = DEFAULT_COACH_CAP,
+    design_cap: int = DEFAULT_DESIGN_CAP,
+    beat_period_sec: float = DEFAULT_BEAT_PERIOD_SEC,
+    beat_cap: int = DEFAULT_BEAT_CAP,
+) -> tuple[list[CoachInsight], list[HUDLayoutSpec], list[NarratorBeat]]:
+    """Run Coach + Designer + Narrator agents concurrently against pre-computed signals.
+
+    Triggers:
+      Coach     → one insight per ACTIVE_RALLY-exit transition, up to coach_cap
+      Designer  → one layout per PRE_SERVE_RITUAL-entry transition, up to design_cap
+      Narrator  → one beat every beat_period_sec seconds (skipped if beat_period_sec<=0)
+
+    Returns (coach_insights, hud_layouts, narrator_beats) — each list in call order.
+    All three agents already swallow their own errors into structured fallback records
+    so this function cannot raise from model/API problems.
+    """
+    ctx = ToolContext(match_id=match_id, signals=signals, transitions=transitions)
+
+    # Coach: rally-end moments — that's when a coach has something to say
+    coach_triggers = [t for t in transitions if t.from_state == "ACTIVE_RALLY"][:coach_cap]
+    coach_tasks = [
+        generate_coach_insight(
+            client, ctx,
+            t_ms=tr.timestamp_ms, match_id=match_id,
+            insight_id=f"coach_{tr.timestamp_ms}_{tr.player}",
+            trigger_description=(
+                f"Player {tr.player} exits ACTIVE_RALLY at t={tr.timestamp_ms}ms "
+                f"(reason={tr.reason}). Analyze the rally just ended."
+            ),
+        )
+        for tr in coach_triggers
+    ]
+
+    # Designer: new-point moments — layouts refresh on ritual entry
+    design_triggers = [t for t in transitions if t.to_state == "PRE_SERVE_RITUAL"][:design_cap]
+    design_tasks = [
+        generate_hud_layout(
+            client,
+            t_ms=tr.timestamp_ms,
+            trigger_description=f"Player {tr.player} enters PRE_SERVE_RITUAL ({tr.reason})",
+            state_summary=_build_state_summary(signals, transitions, tr.timestamp_ms),
+        )
+        for tr in design_triggers
+    ]
+
+    # Narrator: regular beat cadence (reviewer HIGH-2 — cap at beat_cap to avoid rate-limiter blowout)
+    beat_tasks: list[Coroutine[Any, Any, NarratorBeat]] = []
+    if beat_period_sec > 0 and duration_ms > 0:
+        beat_period_ms = int(beat_period_sec * 1000)
+        beat_timestamps = list(range(0, duration_ms, beat_period_ms))[:beat_cap]
+        for t_ms in beat_timestamps:
+            beat_tasks.append(
+                generate_narrator_beat(
+                    client,
+                    t_ms=t_ms, match_id=match_id,
+                    signal_snapshot=_build_signal_snapshot(signals, t_ms),
+                ),
+            )
+
+    coach_results, design_results, beat_results = await asyncio.gather(
+        _safe_gather(coach_tasks),
+        _safe_gather(design_tasks),
+        _safe_gather(beat_tasks),
+    )
+    return coach_results, design_results, beat_results
+
+
 # ──────────────────────────── Main pipeline ────────────────────────────
 
 
@@ -269,10 +429,22 @@ def run_precompute(
     match_data_json_path: Path,
     pose_extractor: PoseExtractor | None = None,
     device: str = "mps",
+    *,
+    anthropic_client: AnthropicClientLike | None = None,
+    coach_cap: int = DEFAULT_COACH_CAP,
+    design_cap: int = DEFAULT_DESIGN_CAP,
+    beat_period_sec: float = DEFAULT_BEAT_PERIOD_SEC,
+    beat_cap: int = DEFAULT_BEAT_CAP,
 ) -> tuple[int, int]:
     """Run the full pre-compute pipeline on one clip.
 
     Returns (frames_processed, signals_emitted).
+
+    Phase 2 agent integration: if `anthropic_client` is provided, runs Coach/Designer/
+    Narrator agents AFTER the main CV loop and writes their outputs into both DuckDB
+    and match_data.json. When None (or no ANTHROPIC_API_KEY in env, main() checks),
+    the agent phase is skipped entirely. This lets tests mock the whole agent layer
+    without touching the real SDK.
 
     If `pose_extractor` is None we lazily construct a real PoseExtractor with the
     default weights path. Tests inject a FakePoseExtractor to avoid YOLO weights.
@@ -399,17 +571,50 @@ def run_precompute(
             final_meta = provisional_meta.model_copy(update={"duration_ms": recomputed_ms})
             writer.write_match_meta(final_meta)
 
-    # 8. Export match_data.json — Pydantic nested composition propagates
+        # 8. Phase 2 agent phase (Coach + Designer + Narrator), if a client was provided.
+        #    Writer is still open — agent outputs get queued into DuckDB here.
+        all_coach_insights: list[CoachInsight] = []
+        all_hud_layouts: list[HUDLayoutSpec] = []
+        all_narrator_beats: list[NarratorBeat] = []
+        if anthropic_client is not None:
+            effective_duration = final_meta.duration_ms or last_t_ms
+            # Reviewer MEDIUM-3: asyncio.run() is correct here — run_precompute is called from
+            # sync contexts (CLI, pytest). If this ever moves into an async FastAPI endpoint,
+            # replace with `await run_agent_phase(...)` and make run_precompute async.
+            coach_list, design_list, beat_list = asyncio.run(
+                run_agent_phase(
+                    anthropic_client,
+                    match_id=match_id,
+                    signals=all_signals,
+                    transitions=all_transitions,
+                    duration_ms=effective_duration,
+                    coach_cap=coach_cap,
+                    design_cap=design_cap,
+                    beat_period_sec=beat_period_sec,
+                    beat_cap=beat_cap,
+                ),
+            )
+            all_coach_insights = list(coach_list)
+            all_hud_layouts = list(design_list)
+            all_narrator_beats = list(beat_list)
+            for ci in all_coach_insights:
+                writer.queue_coach_insight(ci)
+            for nb in all_narrator_beats:
+                writer.queue_narrator_beat(nb)
+            # HUDLayoutSpec intentionally JSON-only (matches existing pattern, no DDL table).
+
+    # 9. Export match_data.json — Pydantic nested composition propagates
     #    @field_serializer to every float (USER-CORRECTION-015 / PATTERN-030).
     dump_match_data_json(
         out_path=match_data_json_path,
         meta=final_meta,
         keypoints=all_keypoints,
         signals=all_signals,
-        anomalies=[],       # Phase 2 populates
-        coach_insights=[],  # Phase 2 populates
-        hud_layouts=[],     # Phase 2 populates
+        anomalies=[],  # Anomaly detection is a future Phase (signals -> anomalies is not yet wired)
+        coach_insights=all_coach_insights,
+        hud_layouts=all_hud_layouts,
         transitions=all_transitions,
+        narrator_beats=all_narrator_beats,
     )
 
     return frames_processed, signals_emitted
@@ -432,7 +637,30 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("dashboard/public/match_data/match.json"),
     )
     parser.add_argument("--device", default="mps", choices=["mps", "cuda", "cpu"])
+    # Phase 2 agent flags
+    parser.add_argument(
+        "--skip-agents", action="store_true",
+        help="Skip Phase 2 Opus/Haiku agents entirely (no API calls, no commentary)",
+    )
+    parser.add_argument("--coach-cap", type=int, default=DEFAULT_COACH_CAP)
+    parser.add_argument("--design-cap", type=int, default=DEFAULT_DESIGN_CAP)
+    parser.add_argument("--beat-cap", type=int, default=DEFAULT_BEAT_CAP,
+                        help="Hard cap on Narrator beats (rate-limiter safety)")
+    parser.add_argument(
+        "--beat-period-sec", type=float, default=DEFAULT_BEAT_PERIOD_SEC,
+        help="Narrator cadence; 0 disables Narrator",
+    )
     args = parser.parse_args(argv)
+
+    # Build Anthropic client lazily — only if agents are enabled AND key is present
+    anthropic_client: AnthropicClientLike | None = None
+    if not args.skip_agents:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            print("WARN: ANTHROPIC_API_KEY not set — skipping Phase 2 agents", file=sys.stderr)
+        else:
+            from anthropic import AsyncAnthropic  # lazy — avoids import cost when --skip-agents
+            anthropic_client = AsyncAnthropic(api_key=api_key)
 
     frames, signals = run_precompute(
         clip_path=args.clip,
@@ -443,10 +671,19 @@ def main(argv: list[str] | None = None) -> int:
         db_path=args.db,
         match_data_json_path=args.out_json,
         device=args.device,
+        anthropic_client=anthropic_client,
+        coach_cap=args.coach_cap,
+        design_cap=args.design_cap,
+        beat_period_sec=args.beat_period_sec,
+        beat_cap=args.beat_cap,
     )
     print(f"processed {frames} frames -> {signals} signals")
     print(f"  DuckDB: {args.db}")
     print(f"  match_data.json: {args.out_json}")
+    if anthropic_client is None:
+        print("  Phase 2 agents: SKIPPED")
+    else:
+        print("  Phase 2 agents: invoked (Coach/Designer/Narrator wrote to DuckDB + JSON)")
     return 0
 
 

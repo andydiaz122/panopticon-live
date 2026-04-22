@@ -33,6 +33,7 @@ from backend.db.schema import (
     FrameKeypoints,
     HUDLayoutSpec,
     MatchMeta,
+    NarratorBeat,
     SignalSample,
     StateTransition,
 )
@@ -69,6 +70,7 @@ class DuckDBWriter:
         self._pending_keypoints: list[FrameKeypoints] = []
         self._pending_anomalies: list[AnomalyEvent] = []
         self._pending_coach: list[CoachInsight] = []
+        self._pending_narrator: list[NarratorBeat] = []
 
     # ──────────────────────────── Direct write ────────────────────────────
 
@@ -114,6 +116,11 @@ class DuckDBWriter:
     def queue_coach_insight(self, ci: CoachInsight) -> None:
         self._pending_coach.append(ci)
         if len(self._pending_coach) >= self.BATCH_SIZE:
+            self.flush()
+
+    def queue_narrator_beat(self, nb: NarratorBeat) -> None:
+        self._pending_narrator.append(nb)
+        if len(self._pending_narrator) >= self.BATCH_SIZE:
             self.flush()
 
     # ──────────────────────────── Flush ────────────────────────────
@@ -227,6 +234,26 @@ class DuckDBWriter:
             )
             self._pending_coach.clear()
 
+        if self._pending_narrator:
+            rows = [
+                (
+                    nb.beat_id,
+                    nb.timestamp_ms,
+                    nb.match_id,
+                    nb.text,
+                    nb.input_tokens,
+                    nb.output_tokens,
+                )
+                for nb in self._pending_narrator
+            ]
+            self._conn.executemany(
+                "INSERT OR REPLACE INTO narrator_beats "
+                "(beat_id, timestamp_ms, match_id, text, input_tokens, output_tokens) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            self._pending_narrator.clear()
+
     # ──────────────────────────── Lifecycle ────────────────────────────
 
     def close(self) -> None:
@@ -259,6 +286,7 @@ class _MatchData(BaseModel):
     signals: list[SignalSample]
     anomalies: list[AnomalyEvent]
     coach_insights: list[CoachInsight]
+    narrator_beats: list[NarratorBeat]
     hud_layouts: list[HUDLayoutSpec]
     transitions: list[StateTransition]
 
@@ -272,6 +300,7 @@ def dump_match_data_json(
     coach_insights: Iterable[CoachInsight],
     hud_layouts: Iterable[HUDLayoutSpec],
     transitions: Iterable[StateTransition],
+    narrator_beats: Iterable[NarratorBeat] = (),
 ) -> Path:
     """Export full match payload as a single JSON file.
 
@@ -288,6 +317,7 @@ def dump_match_data_json(
         signals=list(signals),
         anomalies=list(anomalies),
         coach_insights=list(coach_insights),
+        narrator_beats=list(narrator_beats),
         hud_layouts=list(hud_layouts),
         transitions=list(transitions),
     )

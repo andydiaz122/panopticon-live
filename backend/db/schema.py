@@ -310,6 +310,27 @@ class CoachInsight(PanopticonBase):
     cache_creation_tokens: int = Field(default=0, ge=0)
 
 
+class NarratorBeat(PanopticonBase):
+    """One Haiku 4.5 per-second ESPN-style color-commentary beat.
+
+    Pre-computed offline inside precompute.py (Phase 2) alongside CoachInsight.
+    Rendered in the frontend as a ticker/crawl synchronized to videoRef.currentTime.
+    Haiku intentionally — judges see cost-aware multi-model routing (Opus reasons,
+    Haiku narrates) as part of the "Opus 4.7 Use" judging story.
+
+    No cache_* fields: Haiku beat prompts are tiny (<500 tokens) and the 5-minute
+    prompt-cache TTL rarely pays off at 1-beat-per-second cadence. Omit for schema
+    honesty rather than pad with zeros.
+    """
+
+    beat_id: str = Field(min_length=1)
+    timestamp_ms: int = Field(ge=0)
+    match_id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+
+
 WidgetKind = Literal[
     "PlayerNameplate", "SignalBar", "MomentumMeter",
     "PredictiveOverlay", "TossTracer", "FootworkHeatmap",
@@ -421,4 +442,14 @@ CREATE TABLE IF NOT EXISTS coach_insights (
   cache_creation_tokens INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_coach_match ON coach_insights (match_id, timestamp_ms);
+
+CREATE TABLE IF NOT EXISTS narrator_beats (
+  beat_id      TEXT PRIMARY KEY,
+  timestamp_ms INTEGER NOT NULL,
+  match_id     TEXT NOT NULL,
+  text         TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_narrator_match ON narrator_beats (match_id, timestamp_ms);
 """

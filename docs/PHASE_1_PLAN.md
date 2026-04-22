@@ -12,7 +12,12 @@
   - Fleet 2 (`serve_toss_variance_cm` + `ritual_entropy_delta`, commit `144343a`): 160/160 tests, 91% coverage.
   - Fleet 3 (`crouch_depth_degradation_deg` + `baseline_retreat_distance_m`, commit `67fb7ae`): 194/194 tests, 100% coverage.
 - **Action 3.5** (FeatureCompiler integration): ✅ **COMPLETE** (commit `23de0f2`) — 13 end-to-end tests, 207/207 total, 91.36% project coverage, ruff clean.
-- **Action 4** (Pre-Compute Crucible): 🟡 **IN PROGRESS** — DB writer + precompute CLI with mocked tests.
+- **Action 4** (Pre-Compute Crucible): ✅ **COMPLETE** — DB writer (commit `faca491`), precompute CLI (`66d8cf5`), python-reviewer hardening (`47c354b`), corners-JSON wrapper adapter (`114c1f0`).
+- **Action 4.4** (smoke test on real UTR clip): 🟢 **READY** — all prerequisites landed. Corners JSON exists at `data/corners/utr_match_01_segment_a_corners.json` (annotated 2026-04-22 via the post-fix court_annotator). Two one-shot commands in `FORANDREW.md` (CV-only + full Opus pipeline). Awaiting user kick-off.
+- **Phase 2** (Opus agent layer — Coach + Designer + Narrator OFFLINE inside precompute.py): ✅ **COMPLETE** (commits `c981773` + `101cafb`) — 83 new tests, python-reviewer caught 2 HIGH + 3 MEDIUM issues (all actioned).
+- **Court-Annotator Bug Fix** (out-of-band infrastructure): ✅ **COMPLETE** (commit `3061d5d`) — ID-collision root-causing, 9 static-validation tests (`tests/test_tools/test_court_annotator_html.py`), runtime guard, 3-second diagnostic dump, faststart remux of the demo clip.
+
+**Current state**: 363 tests passing, ruff clean. Branch `main` at `114c1f0`. Ready for Action 4.4 smoke test, then Phase 3 (Next.js HUD).
 
 **Owner agents**: `documentation-librarian`, `cv-pipeline-engineer`, `test-forensic-validator`, `vercel-deployment-specialist`.
 

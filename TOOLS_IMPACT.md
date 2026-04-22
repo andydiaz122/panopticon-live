@@ -338,3 +338,62 @@ All 5 actioned with 3 regression tests added (markdown-fence test, beat_cap test
 ### Meta-learning on the hackathon ROI curve
 
 The hackathon's tool-ROI peak is when **orthogonal specialists fire at the right moment**. Phase 2's single most valuable decision was NOT dispatching a swarm, but running ONE python-reviewer at the hand-off between "author wrote it" and "committed to main." The HIGH-1 fence bug would have survived every unit test I wrote — it needed a fresh set of eyes that understood the JSON-extraction-from-LLM problem space. That's a different skill from "author the code" or "write tests for the code." Right tool, right moment.
+
+---
+
+## Day 2.5 (Apr 22, evening) — Court Annotator Debugging Session
+
+### The story in one paragraph
+
+User opened `tools/court_annotator.html`, picked an MP4, nothing loaded. I iterated through 4 "reasonable next-try" fixes (dynamic DOM placement, faststart remux, preload attribute, file:// vs http:// protocol) — all red herrings. On iteration 5 I dispatched a research agent IN PARALLEL with instrumenting runtime diagnostics (`tagName` dump, 3-second timeout, direct-URL test button). Both paths converged on the same answer: **`<input type="file" id="video">` and `<video id="video">` shared `id="video"`**, so `document.getElementById("video")` returned the input. Every `video.*` operation was silently no-oping on the wrong element. One-character fix (rename input to `videoPicker`), 9 static validation tests, 3 commits, 1 faststart-remuxed clip, 4 new MEMORY entries.
+
+### Tool ROI — the asymmetric insight
+
+**Iterations 1-4 (serial next-try fixes):**
+- 4 hypotheses tested, all wrong. Each took ~10 minutes. **Cumulative cost: ~40 minutes + user's patience.**
+- The hypotheses were NOT unreasonable — each matched the symptom pattern. This is the trap.
+
+**Iteration 5 (research-agent + runtime-diagnostic PARALLEL attack):**
+- Dispatched `general-purpose` research agent in background with a detailed problem statement + ranked-causes request. **~75 seconds agent time.**
+- Simultaneously built the runtime diagnostic (`tagName` in the 3-second dump). **~5 minutes authoring time.**
+- Research agent returned 8 ranked causes — #2 (duplicate ID) matched instantly.
+- Total iteration cost: ~5 minutes wall, 2 minutes of the agent's time. **Bug fixed same iteration.**
+
+**ROI lesson — the 3-failure circuit breaker.** After iteration 3, the marginal value of another serial fix attempt approaches zero. Parallel escalation (research + diagnostics) costs ~5 minutes and cracks sticky bugs. This is codified in PATTERN-039.
+
+### Tests-as-future-guards ROI
+
+Wrote 9 static-validation tests (`tests/test_tools/test_court_annotator_html.py`). The most important ones:
+- `test_no_duplicate_ids` — fails the build if ANY two HTML elements share an ID anywhere in `tools/*.html`.
+- `test_video_id_is_on_video_element_not_input` — the SPECIFIC regression guard for this exact bug.
+- `test_script_get_element_by_id_references_exist` — fails if inline script references a non-existent ID (typo/stale rename).
+- `test_script_attaches_critical_media_listeners` — requires `loadedmetadata`, `error`, AND `loadstart` listeners. Absence of `loadstart` in the user's console was the smoking gun; future sessions will have that signal available by construction.
+
+These tests took ~8 minutes to write. They prevent the same 45+ minutes of debugging from EVER recurring, AND they encode the lesson at a level where a future session's author doesn't need to read MEMORY.md to avoid the trap — the build just fails.
+
+### Tools that FIRED during this debugging session
+
+- `Bash` for `ffprobe` / atom-walker Python snippet — diagnosed the faststart issue (iteration 2, red herring but taught us what to check).
+- `Bash` for `ffmpeg -movflags +faststart` — remuxed the clip (iteration 2 action).
+- `Bash` for `python -m http.server 8000` — served via localhost (iteration 4).
+- **`Agent` (general-purpose, background, run_in_background=true)** — THE high-ROI tool of the session. Detailed problem statement with ranked-causes format request returned an 8-item causes list in 75 seconds, one of which (duplicate ID) matched exactly.
+- `Write` + `Edit` — annotator HTML refactor + test file creation.
+- `Grep` — found all `id="video"` instances (confirmed the collision).
+
+### Tools NOT used (noteworthy for future sessions)
+
+- `Claude_Preview` MCP (preview panel) — preview DID render the file but it's not equivalent to a real browser session for `<input type="file">` interactions. Chrome in a dedicated window was needed.
+- `e2e-runner` / Playwright — could have automated the reproduction but probably overkill for a single-tool HTML file.
+- `perplexity_*` research — the general-purpose agent with Web access was the right tool here (research agent has reasoning + source-citing abilities that raw Perplexity queries don't).
+
+### Meta-pattern: "silent correctness" bugs are deceptive
+
+Duplicate HTML IDs are syntactically VALID. `<input>.src = blobURL` is a harmless no-op that doesn't throw. `addEventListener` attaches to any EventTarget. Every browser layer happily cooperated with the wrong pointer. When symptoms match a dozen real bugs (codec, CORS, autoplay, network, MSE), pattern-matching leads you toward familiar fixes — not toward questioning whether your variable even points to the right element.
+
+**The single-biggest preventive move:** when something silently no-ops, IMMEDIATELY log `element.tagName` before any other debugging. If it's not what you expect, you've found the bug. Our 3-second diagnostic timeout in the annotator now includes `tagName` in the dump — future sessions will catch this class of bug at iteration 1.
+
+---
+
+## Day 3 (Apr 23 — Phase 3 Next.js HUD PENDING)
+
+(To be populated when frontend work begins.)

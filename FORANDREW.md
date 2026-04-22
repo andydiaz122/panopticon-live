@@ -407,3 +407,75 @@ The research agent I dispatched in iteration 5 ranked "duplicate `#video`" as ca
 - `FORANDREW.md` — this postmortem
 
 **Tests**: 358 pass, ruff clean.
+
+---
+
+## 2026-04-22 (late evening) — Corners JSON wrapper adapter + current state rollup
+
+### The small follow-on
+
+After you successfully annotated `utr_match_01_segment_a.mp4`, the `court_annotator.html` saved a JSON with a **wrapper shape**:
+```
+{"clip": "...", "annotated_at": "...", "corners": {top_left, top_right, ...}, "notes": "..."}
+```
+But `precompute.py` was calling `CornersNormalized(**json.load(...))` on the whole wrapper, which Pydantic v2 frozen models reject because extras are forbidden. Easy fix:
+
+- New helper `load_corners_json(path) -> (raw_text, CornersNormalized)` in `backend/precompute.py`.
+- Handles BOTH shapes: wrapper (what the annotator emits) AND bare (back-compat for hand-edited JSONs).
+- Raw text preserved for `MatchMeta.court_corners_json` provenance — the full annotation metadata (clip name, annotation timestamp, notes) travels with the pre-computed artifact.
+- 5 regression tests in `tests/test_cv/test_precompute_corners_json.py`.
+- Logged as PATTERN-040 in MEMORY.md.
+
+### Current repo state (as of commit `114c1f0`)
+
+**363 tests passing, ruff clean. 15 commits landed this week.** Phase 1 (CV signals + DuckDB writer + precompute CLI) is complete. Phase 2 (Opus Coach + HUD Designer + Haiku Narrator OFFLINE) is complete. Court annotator works, corners JSON exists, precompute.py can now ingest it.
+
+| Layer | Status | Commit |
+|---|---|---|
+| Phase 1 CV Spine (YOLO + Kalman + state machine + homography) | ✅ | `cd52758` |
+| Phase 1 — USER-CORRECTIONs 011–022 + BaseSignalExtractor ABC | ✅ | `5e22166` |
+| Phase 1 — 7 biomech signals (Fleet 1/2/3/4) | ✅ | `058cf32`..`67fb7ae` |
+| Phase 1 — FeatureCompiler integration | ✅ | `23de0f2` |
+| Phase 1 — DuckDBWriter + setup tests | ✅ | `faca491` |
+| Phase 1 — precompute.py master CLI | ✅ | `66d8cf5` |
+| Phase 1 — python-reviewer hardening | ✅ | `47c354b` |
+| Phase 2 — Opus agent layer (Coach + Designer + Narrator + tools + integration) | ✅ | `c981773` |
+| Phase 2 — docs | ✅ | `101cafb` |
+| Court annotator — ID collision fix + 9 static-validation tests | ✅ | `3061d5d` |
+| Corners JSON wrapper adapter | ✅ | `114c1f0` |
+
+**Files you now have:**
+- `data/clips/utr_match_01_segment_a.mp4` — your 60-second clip (1920×1080, H.264, faststart-remuxed today).
+- `data/clips/utr_match_01_segment_a.original.mp4` — pre-faststart original (backup; you can delete if disk space matters).
+- `data/corners/utr_match_01_segment_a_corners.json` — your 4 court corners, annotated today via the fixed annotator.
+
+### Next up: Action 4.4 smoke test (the original directive you asked about)
+
+Now that ALL prerequisites are in place, the smoke test is a single command. It will:
+1. Run the full CV pipeline on the 60s clip (YOLO pose → Kalman → bounce detector → state machine → FeatureCompiler → 7 biomech signals)
+2. Optionally run the Opus/Haiku agents (requires `ANTHROPIC_API_KEY` in env; skip with `--skip-agents` for CV-only smoke)
+3. Write everything to `data/panopticon.duckdb` and export `dashboard/public/match_data/utr_01_seg_a.json`
+
+Two invocation options (pick one and run it; I'll help triage any failures):
+
+**CV-only (fast, no API cost, ~30s on M4 Pro):**
+```bash
+source .venv/bin/activate && python -m backend.precompute \
+  --clip data/clips/utr_match_01_segment_a.mp4 \
+  --corners data/corners/utr_match_01_segment_a_corners.json \
+  --match-id utr_01_seg_a --player-a "Player A" --player-b "Player B" \
+  --out-json dashboard/public/match_data/utr_01_seg_a.json \
+  --skip-agents
+```
+
+**Full pipeline including Opus/Haiku (~2–3 min, costs ANTHROPIC credits):**
+```bash
+# Requires ANTHROPIC_API_KEY set in env OR .env
+source .venv/bin/activate && python -m backend.precompute \
+  --clip data/clips/utr_match_01_segment_a.mp4 \
+  --corners data/corners/utr_match_01_segment_a_corners.json \
+  --match-id utr_01_seg_a --player-a "Player A" --player-b "Player B" \
+  --out-json dashboard/public/match_data/utr_01_seg_a.json
+```
+
+After either completes, we'll have a real `match_data.json` that Phase 3 (Next.js HUD) can consume. That's the bridge to the next phase.

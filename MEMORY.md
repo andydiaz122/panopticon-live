@@ -631,6 +631,14 @@ Cross-session recall. Every entry is:
 - **File**: `tools/court_annotator.html` — the `setTimeout(() => { ... readyState + networkState + tagName dump ... }, 3000)` block.
 - **Severity**: MEDIUM (debugging-tool craft)
 
+### PATTERN-040 — Tolerant JSON Loaders for Tool-Emitted Artifacts
+- **Type**: Integration boundary
+- **Context**: `tools/court_annotator.html` emits a JSON with a wrapper (`{"clip": ..., "annotated_at": ..., "corners": {...}, "notes": ...}`) — useful provenance metadata. But `precompute.py` was calling `CornersNormalized(**json.load(...))`, which rejected the wrapper because Pydantic v2 frozen models forbid extras.
+- **Lesson**: When a Pydantic model boundary receives JSON from a HUMAN-ORIENTED tool (annotator UI, hand-edited file, upload form), implement a `load_*` helper that accepts BOTH the wrapper and the bare shape. Pattern: `data.get("key", data)` to unwrap if wrapped, fall through to top-level if not. Return `(raw_text, ValidatedModel)` so callers can preserve provenance metadata.
+- **Why non-obvious**: the temptation is to simplify the emitter (strip the wrapper from the UI) OR tighten the callsite (require the bare shape). Both break downstream provenance. The third path — a tolerant loader — keeps both ends clean.
+- **File**: `backend/precompute.py:load_corners_json` + `tests/test_cv/test_precompute_corners_json.py`
+- **Severity**: MEDIUM (integration correctness)
+
 ### PATTERN-039 — Research-Agent + Runtime-Diagnostic Parallel Attack on Sticky Bugs
 - **Type**: Orchestration
 - **Context**: When a bug survives 3+ iterations of "reasonable next-try" fixes, dispatch a research agent (general-purpose, background) IN PARALLEL with adding runtime diagnostics to the code. The research agent surfaces a ranked list of known causes while you build the diagnostic surface to disambiguate them. Both paths converge: the research agent's ranked list narrows hypothesis space; the diagnostic dumps narrow evidence space.

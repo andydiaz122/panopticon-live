@@ -29,9 +29,14 @@ from backend.db.schema import CoachInsight
 
 DEFAULT_MODEL: str = "claude-opus-4-7"
 DEFAULT_MAX_TOKENS: int = 2000
-DEFAULT_THINKING_BUDGET: int = 1500
 DEFAULT_MAX_ITERATIONS: int = 5
 """Hard cap on tool-use round-trips per insight. Opus can't spiral."""
+
+# NOTE: Opus 4.7 uses ADAPTIVE thinking — the model decides how much reasoning to
+# allocate per turn. The old `thinking={"type": "enabled", "budget_tokens": N}` API
+# is REJECTED with a 400. See USER-CORRECTION-027 (2026-04-22 smoke-test discovery).
+# To force a minimum reasoning depth on hard problems, pass output_config={"effort": "max"|"xhigh"|"high"|"low"}
+# (but for Coach we let the model auto-tune — biomech reasoning qualifies as "hard").
 
 
 @runtime_checkable
@@ -132,7 +137,6 @@ async def generate_coach_insight(
     trigger_description: str,
     model: str = DEFAULT_MODEL,
     max_tokens: int = DEFAULT_MAX_TOKENS,
-    thinking_budget: int = DEFAULT_THINKING_BUDGET,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
 ) -> CoachInsight:
     """Run the Opus 4.7 Coach Reasoner against the current ToolContext.
@@ -150,7 +154,7 @@ async def generate_coach_insight(
             (e.g., "Anomaly: player B recovery_latency_ms z-score=2.7 at t=42500ms").
         model: Anthropic model ID. Default claude-opus-4-7.
         max_tokens: Output cap per round-trip.
-        thinking_budget: Extended-thinking budget per round-trip.
+        (thinking depth: Opus 4.7 adaptive — model auto-tunes per problem)
         max_iterations: Hard cap on tool-use round-trips. Prevents runaway loops.
     """
     system_blocks = [
@@ -171,7 +175,8 @@ async def generate_coach_insight(
             response = await client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
-                thinking={"type": "enabled", "budget_tokens": thinking_budget},
+                # Opus 4.7: adaptive thinking — model decides reasoning depth (see module header)
+                thinking={"type": "adaptive"},
                 system=system_blocks,
                 tools=TOOL_SCHEMAS,
                 messages=messages,

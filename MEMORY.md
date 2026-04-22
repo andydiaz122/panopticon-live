@@ -619,6 +619,27 @@ Cross-session recall. Every entry is:
 - **Severity**: MEDIUM (Phase 1 limitation carried forward; acceptable for Phase-2 demo but worth flagging in FORANDREW.md)
 - **File**: Manifests in the output of `backend/precompute.py` on real video; NOT visible in synthetic tests (which construct both players with confidence=0.9).
 
+### USER-CORRECTION-027 — Opus 4.7 Rejects `thinking.type.enabled`; Uses Adaptive Thinking Only
+- **Rule**: For `model="claude-opus-4-7"`, the request shape `thinking={"type": "enabled", "budget_tokens": N}` is REJECTED with HTTP 400 `invalid_request_error`: *"thinking.type.enabled is not supported for this model. Use thinking.type.adaptive and output_config.effort to control thinking behavior."* Always use `thinking={"type": "adaptive"}` for Opus 4.7 (no budget_tokens). Optionally set `output_config={"effort": "low"|"high"|"xhigh"|"max"}` to influence depth.
+- **Why**: Discovered the moment real Opus was first called in the Phase 2 smoke test (Apr 22). All 5 coach_insights came back as `[coach_error: BadRequestError 400 ...]` with zero tokens consumed. The mocked tests had passed — because mocks accept any shape — but the real API has schema validation. This is the generalized version of anti-pattern: **mocked SDK tests cannot catch API-shape drift**.
+- **How to apply**: For any Claude 4.x model, do NOT pass `budget_tokens` in the `thinking` dict. Either pass `{"type": "adaptive"}` or omit `thinking` entirely (adaptive is the default on 4.7). Global CLAUDE.md says: "Opus 4.7 uses adaptive thinking — the model decides how much internal reasoning to allocate per turn. There is no MAX_THINKING_TOKENS budget."
+- **Severity**: HIGH (any new Claude 4.x integration will fail silently via the agent fallback unless this shape is right)
+- **File**: `backend/agents/opus_coach.py:generate_coach_insight` + `backend/agents/hud_designer.py:generate_hud_layout`
+
+### PATTERN-038 — Mocked SDK Tests Validate SHAPE-of-OUR-CALL, Not SHAPE-API-ACCEPTS
+- **Type**: Testing philosophy
+- **Context**: Our fake `_ScriptedClient` accepts any `**kwargs` and returns scripted responses. Tests verify the fake was called with the expected kwargs. But the fake does NOT validate those kwargs against the real Anthropic API's schema — so request-shape drift (like USER-CORRECTION-027) slips through every mocked test and only surfaces when the code finally hits real servers.
+- **Lesson**: Write a "shape regression" test that locks in the EXACT kwargs shape you expect to send. Then when the API evolves and you need to change the shape, the shape test fails loudly, forcing you to update the callers. Example: `test_coach_sends_tools_and_adaptive_thinking` asserts `call["thinking"] == {"type": "adaptive"}` and that `budget_tokens` does NOT appear — if someone regresses to the old shape, this test catches it before it ships.
+- **Severity**: MEDIUM (testing discipline generalizable to any SDK integration)
+- **File**: `tests/test_agents/test_opus_coach.py:test_coach_sends_tools_and_adaptive_thinking`
+
+### GOTCHA-015 — Warm-Up State-Machine Flicker Triggers Spurious Coach Invocations
+- **Symptom**: Coach was invoked on 5 transitions all within 5066-5733ms (the first 700ms of the clip). All 5 insights said "no rally data yet — warm-up artifact." This isn't a coach bug; it's the FeatureCompiler emitting ACTIVE_RALLY exits during warm-up because the RollingBounceDetector fires on noise before Kalman converges.
+- **Root cause**: `coach_triggers = [t for t in transitions if t.from_state == "ACTIVE_RALLY"][:coach_cap]` takes the FIRST `coach_cap` transitions chronologically. Warm-up noise dominates the early timeline, so the cap gets consumed by fake transitions.
+- **How to fix in Phase 3** (not urgent): skip transitions where the previous transition for the same player was <1s ago (rapid flicker = CV artifact), or gate on Kalman convergence time, or just skip the first 2s of the clip. For NOW, accept that coach commentary on demo clips will be thoughtful observations about warm-up noise ("no rally data yet, UNKNOWN phase") — which is actually a FINE demo narrative ("Claude is honest about what it knows").
+- **Severity**: LOW-MEDIUM (demo-quality issue, not correctness)
+- **File**: Emerges from `backend/precompute.py:run_agent_phase:coach_triggers`
+
 ### DECISION-007 — HUDLayoutSpec Stays JSON-Only (No DuckDB Table)
 - **Context**: Coach and Narrator insights have DuckDB tables; HUD layouts do not.
 - **Why**: Layouts are low-frequency (one per match-state transition, ~10 per clip) and consumed exclusively by the frontend via match_data.json. Storing them in DuckDB too would be redundancy for zero read-path benefit.

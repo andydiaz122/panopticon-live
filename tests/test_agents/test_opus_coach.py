@@ -270,15 +270,19 @@ def test_coach_sends_system_prompt_with_cache_control() -> None:
     assert "7 signals" in system[0]["text"]
 
 
-def test_coach_sends_tools_and_thinking_config() -> None:
+def test_coach_sends_tools_and_adaptive_thinking() -> None:
+    """Opus 4.7 REQUIRES `thinking={"type": "adaptive"}` — the old "enabled"+budget_tokens
+    API is rejected with a 400 (USER-CORRECTION-027). Lock this in a test so the
+    shape never drifts back silently."""
     client = _ScriptedClient([_response(_text_block("ok"), stop_reason="end_turn")])
     _run(generate_coach_insight(
         client, _ctx_with_signal(),
         t_ms=0, match_id="utr_01", insight_id="ins1", trigger_description="t",
-        thinking_budget=700,
     ))
     call = client.call_log[0]
-    assert call["thinking"] == {"type": "enabled", "budget_tokens": 700}
+    assert call["thinking"] == {"type": "adaptive"}
+    # Must NOT pass the rejected legacy shape
+    assert "budget_tokens" not in str(call["thinking"])
     # All 4 tool schemas present
     tool_names = {t["name"] for t in call["tools"]}
     assert tool_names == {

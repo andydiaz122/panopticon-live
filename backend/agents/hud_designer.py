@@ -31,8 +31,9 @@ from backend.db.schema import HUDLayoutSpec, HUDWidgetSpec
 
 DEFAULT_MODEL: str = "claude-opus-4-7"
 DEFAULT_MAX_TOKENS: int = 1200
-DEFAULT_THINKING_BUDGET: int = 500
-"""Lower budget than Coach — Designer is a constrained task, not open-ended reasoning."""
+# Opus 4.7 uses adaptive thinking — the model decides reasoning depth.
+# The old `thinking={"type": "enabled", "budget_tokens": N}` API is rejected with
+# a 400 error. See USER-CORRECTION-027 (2026-04-22 smoke-test discovery).
 
 DEFAULT_VALID_UNTIL_MS_OFFSET: int = 30_000
 """If the caller doesn't specify a valid_until_ms, default to +30s from the emit timestamp."""
@@ -159,7 +160,6 @@ async def generate_hud_layout(
     valid_until_ms: int | None = None,
     model: str = DEFAULT_MODEL,
     max_tokens: int = DEFAULT_MAX_TOKENS,
-    thinking_budget: int = DEFAULT_THINKING_BUDGET,
 ) -> HUDLayoutSpec:
     """Run Opus 4.7 Designer; return a validated HUDLayoutSpec.
 
@@ -193,7 +193,8 @@ async def generate_hud_layout(
         response = await client.messages.create(
             model=model,
             max_tokens=max_tokens,
-            thinking={"type": "enabled", "budget_tokens": thinking_budget},
+            # Opus 4.7: adaptive thinking (see module header)
+            thinking={"type": "adaptive"},
             system=system_blocks,
             messages=[{"role": "user", "content": user_prompt}],
         )

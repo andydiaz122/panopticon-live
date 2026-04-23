@@ -662,3 +662,59 @@ Finishing the scaffold was the right move. Now the map is clear:
 The team-lead review pattern (team-lead-then-execution) keeps paying dividends. Every time I wrote a plan, you came back with 5-9 patches BEFORE code was written. Each patch was genuinely load-bearing. I'm going to keep making drafts, not final plans, and letting you QA them cheap before they become expensive bugs.
 
 The orthogonal skill team is also paying off. When we designed SignalRail's state-gating, we didn't touch the `2k-sports-hud-aesthetic` skill (visuals), didn't touch `biomechanical-signal-semantics` (thresholds), didn't touch `react-30fps-canvas-architecture` (render pattern). The new discipline ("which signals are contextually appropriate in which state") belongs to a new concern layer, and it crystallized as a separate module (`stateSignalGating.ts`) + a new MEMORY pattern (PATTERN-052). That's the orthogonal-skill approach actually working in practice — not just aspirationally.
+
+---
+
+## 2026-04-23 — Phase 4 kickoff: Sports Science & Polish Sprint (Actions 1 & 2 landed)
+
+### The two patches we landed
+
+**1. PATTERN-053 — Edge-triggered match coupling (backend state machine).**
+
+You flagged the "pre-serve ritual lingers into the rally" bug during Phase 3.5 visual QA. I ran a root-cause investigation before opening any threshold knobs, and the cause was NOT a tuning issue — it was a structural bug in the coupling layer.
+
+`RollingBounceDetector.evaluate()` is a pure spectral probe over a 90-frame (~3 second) rolling buffer. Once a bounce signature enters the buffer, `evaluate()` returns `True` **every frame until the signature ages out of the buffer**. That's correct for a pure probe. But `MatchStateMachine.update()` was reading that continuous signal and calling `force_state("PRE_SERVE_RITUAL")` on BOTH players on every `True` tick. Every time the kinematic update pushed the FSM toward ACTIVE_RALLY, the next line of code dragged it back. Player was pinned in PRE_SERVE_RITUAL for the full signature window, well into the actual rally.
+
+The fix has to live at the consumer, not the probe — the probe's idempotence is a test-asserted invariant (`test_detector_evaluate_is_idempotent`) that other consumers rely on. `MatchStateMachine` now tracks `_last_bounce_state: tuple[bool, bool]` and fires the coupling force only on the rising edge (False → True) per player. Three new regression tests lock this in:
+
+- `test_continuous_bounce_does_not_pin_player_in_pre_serve_ritual` — the original bug, captured as a test.
+- `test_bounce_edge_re_arms_after_going_low` — proves the detector re-arms for the next serve.
+- `test_only_b_bounce_rising_edge_also_couples` — symmetry check (returner-racket rising edge also couples).
+
+All 386 tests pass (up from 383); ruff clean. Committed as `47edaf0`.
+
+The frontend state-gating we added in Phase 3.5 (PATTERN-052, `lib/stateSignalGating.ts`) was the right band-aid at the time — it's still valuable defense-in-depth against LLM layout-lag even after the backend fix. We're keeping it.
+
+**2. PATTERN-054 — Client-Driven Payload for Vercel Server Actions (Tab 3 live-Opus wiring).**
+
+My first draft of `generateScoutingReport` used `fs.promises.readFile(path.join(process.cwd(), 'public', 'match_data', \`${matchId}.json\`))` to load the telemetry server-side. You caught a Vercel deploy trap I missed: NFT (Next.js's Node File Trace) cannot statically analyze dynamic paths, so the `public/match_data/*.json` files wouldn't get bundled into the Serverless Function environment. It'd work locally (`next dev`), then 500 on Vercel during judging. Classic silent-production-break.
+
+The correction: don't touch the filesystem in the Server Action at all. The Client Component (`ScoutingReportTab.tsx`) already has `matchData` loaded via `usePanopticonState()`. Destructure out the three high-volume / low-value keys (`keypoints` ~30 MB of per-frame noise, `hud_layouts` LLM design metadata irrelevant to the analyst, `narrator_beats` broadcast prose that would bias the scouting voice). Pass the remaining ~100 KB payload directly to the Server Action as an argument. Action is now stateless, typed end-to-end via `Omit<MatchData, ...>`, and Vercel-bulletproof.
+
+The system prompt enforces DECISION-009 biometrics-first mandate hard: every tactical claim must cite a signal name + numeric value from the payload, with a worked good/bad example. Output is heavily styled 4-section Markdown (Biomechanical Fatigue Profile / Kinematic Breakdowns / Tactical Exploitations / Methodology). Model is `claude-opus-4-7` with `thinking: { type: "adaptive" }` (USER-CORRECTION-027) and ephemeral prompt caching on the system block. `maxDuration = 60` for Vercel Fluid Compute.
+
+Frontend verification clean: `tsc` no errors, eslint clean, vitest 71/71. Committed as `26cc73f`.
+
+### What's NEXT (tomorrow morning / today)
+
+Action 3 — the Final Golden Crucible run — is staged but blocked on you dropping your `ANTHROPIC_API_KEY` into `dashboard/.env.local` (none present in stage-3 yet). Once that's in, I'll:
+
+1. Export the key into the shell and kick off `python -m backend.precompute --clip data/clips/utr_match_01_segment_a.mp4 --corners data/corners/utr_match_01_segment_a_corners.json ... --coach-cap 10 --design-cap 10 --beat-cap 20 --beat-period-sec 10.0` as a background job, tailing the log.
+2. Expected: ~5–10 min wall clock on M4 Pro MPS. It will regenerate `data/panopticon.duckdb` and `dashboard/public/match_data/utr_01_segment_a.json` with the edge-trigger fix baked in.
+3. Report row counts + a few sample transitions to confirm the timing bleed is gone (PRE_SERVE_RITUAL → ACTIVE_RALLY transitions should now land at rally-start time, not 2-3 s after).
+4. Smoke-test the live Opus Scouting Report on localhost:3000.
+
+### Meta-learnings captured (all in MEMORY.md)
+
+- **USER-CORRECTION-031** — direct user override beats forwarded team-lead text. When the Environment block says one worktree path and a forwarded message says another, trust the Environment block and verify empirically before switching.
+- **USER-CORRECTION-032** — Vercel NFT can't trace dynamic `fs.readFile` paths. Always prefer client-driven payloads for Server Action data-at-rest.
+- **PATTERN-053** — edge-trigger state-machine coupling when the upstream signal is a continuous spectral probe.
+- **PATTERN-054** — Client-Driven Payload for Vercel Server Actions. Generalizes to ANY Next.js AI Server Action that wants to reason over client-resident data.
+
+### Staging note (Phase 4 logistics)
+
+Stage-3 worktree was bare: no venv, no clips, no corners, no YOLO weights. Staged:
+- `data/clips/utr_match_01_segment_a.mp4` ← copied from `Built_with_Opus_4-7_Hackathon/`
+- `data/corners/utr_match_01_segment_a_corners.json` ← copied from `Built_with_Opus_4-7_Hackathon/`
+- `checkpoints/yolo11m-pose.pt` ← symlinked to the file in `Built_with_Opus_4-7_Hackathon/`
+- Python interpreter: reusing `/Users/andrew/Documents/Coding/Built_with_Opus_4-7_Hackathon/.venv/bin/python` directly (cwd-relative module resolution picks up stage-3's `backend/` correctly; pytest runs green end-to-end that way).

@@ -359,3 +359,142 @@ def test_bounce_coupling_still_works_after_dead_time_uncoupling() -> None:
     msm.update(a_speed_mps=0.0, b_speed_mps=0.0, a_bounce=True, b_bounce=False, t_ms=200 * 33)
     assert msm.states["A"] == "PRE_SERVE_RITUAL"
     assert msm.states["B"] == "PRE_SERVE_RITUAL"
+
+
+# ──────────────────────────── PATTERN-053: Edge-triggered bounce coupling ────────────────────────────
+
+
+def test_continuous_bounce_does_not_pin_player_in_pre_serve_ritual() -> None:
+    """PATTERN-053 regression.
+
+    RollingBounceDetector.evaluate() is a pure spectral probe over a 90-frame buffer;
+    it returns True every frame while a bounce signature lives in the buffer
+    (~3 seconds at 30 fps). If MatchStateMachine coupled on every True tick, it would
+    keep calling force_state('PRE_SERVE_RITUAL') every frame, snapping kinematic
+    ACTIVE_RALLY transitions back to PRE_SERVE_RITUAL for the whole signature window.
+
+    Only the RISING EDGE (False -> True) must trigger coupling. Continuous-True ticks
+    after the edge are no-ops.
+    """
+    msm = MatchStateMachine()
+    # Tick 1: rising edge from the initial (False, False) — both forced into PRE_SERVE_RITUAL.
+    msm.update(a_speed_mps=0.0, b_speed_mps=0.0, a_bounce=True, b_bounce=False, t_ms=0)
+    assert msm.states["A"] == "PRE_SERVE_RITUAL"
+    assert msm.states["B"] == "PRE_SERVE_RITUAL"
+
+    # Ticks 2..N: a_bounce STAYS True (detector buffer still contains the signature).
+    # Player A moves kinematically — must be allowed to transition to ACTIVE_RALLY
+    # WITHOUT being re-pinned by the continuous bounce signal.
+    for t in range(1, CONSECUTIVE_FRAMES_TO_RALLY + 2):
+        msm.update(
+            a_speed_mps=0.5, b_speed_mps=0.0,
+            a_bounce=True, b_bounce=False,
+            t_ms=t * 33,
+        )
+
+    assert msm.states["A"] == "ACTIVE_RALLY", (
+        "PATTERN-053: continuous bounce=True must NOT re-force PRE_SERVE_RITUAL every "
+        "frame. Only the rising edge triggers coupling. Player A's 5 consecutive frames "
+        "of motion should have transitioned the FSM to ACTIVE_RALLY."
+    )
+
+
+def test_bounce_edge_re_arms_after_going_low() -> None:
+    """PATTERN-053: rising-edge detector must re-arm after the signal drops.
+
+    Scenario: bounce goes True -> rise triggers coupling. Bounce stays True through
+    the rally. Bounce eventually drops to False (buffer aged out). When a fresh bounce
+    signature enters the buffer (next serve), bounce goes True again -> that second
+    rising edge must ALSO trigger coupling.
+
+    The test uses non-trivial target-state changes (ACTIVE_RALLY or DEAD_TIME back to
+    PRE_SERVE_RITUAL) so force_state emits observable transitions. force_state is a
+    no-op if the FSM is already in the target state.
+    """
+    msm = MatchStateMachine()
+
+    # 1. Drive A kinematically into ACTIVE_RALLY (no bounce signal yet).
+    for t in range(CONSECUTIVE_FRAMES_TO_RALLY):
+        msm.update(
+            a_speed_mps=0.5, b_speed_mps=0.0,
+            a_bounce=False, b_bounce=False,
+            t_ms=(t + 1) * 33,
+        )
+    assert msm.states["A"] == "ACTIVE_RALLY"
+    _ = msm.drain_transitions()
+
+    # 2. First rising edge: bounce goes False -> True. A is in ACTIVE_RALLY, so
+    #    force_state("PRE_SERVE_RITUAL") is a non-trivial transition.
+    msm.update(
+        a_speed_mps=0.5, b_speed_mps=0.0,
+        a_bounce=True, b_bounce=False,
+        t_ms=100 * 33,
+    )
+    first_drain = msm.drain_transitions()
+    assert any(
+        tr.player == "A" and tr.to_state == "PRE_SERVE_RITUAL" and tr.reason == "match_coupling"
+        for tr in first_drain
+    ), "First rising edge (False -> True) must emit a match_coupling transition for A"
+
+    # 3. Rally plays out — bounce STAYS True. A moves back into ACTIVE_RALLY via kinematics.
+    #    The continuous True signal must NOT re-force PRE_SERVE_RITUAL.
+    for t in range(CONSECUTIVE_FRAMES_TO_RALLY + 2):
+        msm.update(
+            a_speed_mps=0.5, b_speed_mps=0.0,
+            a_bounce=True, b_bounce=False,
+            t_ms=(101 + t) * 33,
+        )
+    assert msm.states["A"] == "ACTIVE_RALLY", (
+        "Continuous bounce=True must not prevent kinematic transition to ACTIVE_RALLY"
+    )
+
+    # 4. Detector signature ages out -> bounce drops to False (latched state resets).
+    #    Both players quiet down -> A transitions to DEAD_TIME.
+    for t in range(CONSECUTIVE_FRAMES_TO_DEAD_TIME):
+        msm.update(
+            a_speed_mps=0.0, b_speed_mps=0.0,
+            a_bounce=False, b_bounce=False,
+            t_ms=(200 + t) * 33,
+        )
+    assert msm.states["A"] == "DEAD_TIME"
+    _ = msm.drain_transitions()
+
+    # 5. Next serve — new bounce signature enters detector buffer: False -> True.
+    #    A is in DEAD_TIME, so force_state("PRE_SERVE_RITUAL") is non-trivial.
+    msm.update(
+        a_speed_mps=0.0, b_speed_mps=0.0,
+        a_bounce=True, b_bounce=False,
+        t_ms=500 * 33,
+    )
+    second_drain = msm.drain_transitions()
+    assert any(
+        tr.player == "A" and tr.to_state == "PRE_SERVE_RITUAL" and tr.reason == "match_coupling"
+        for tr in second_drain
+    ), (
+        "PATTERN-053: after bounce drops to False and rises again, the second rising "
+        "edge must fire coupling. This proves the edge-detector re-arms correctly."
+    )
+
+
+def test_only_b_bounce_rising_edge_also_couples() -> None:
+    """PATTERN-053 symmetry: a rising edge on b_bounce alone (e.g., returner's
+    racket impact feeding the detector) must also trigger the coupling.
+    """
+    msm = MatchStateMachine()
+    # Drive A into ACTIVE_RALLY kinematically; keep b_bounce False for now.
+    for t in range(CONSECUTIVE_FRAMES_TO_RALLY):
+        msm.update(
+            a_speed_mps=0.5, b_speed_mps=0.0,
+            a_bounce=False, b_bounce=False,
+            t_ms=(t + 1) * 33,
+        )
+    assert msm.states["A"] == "ACTIVE_RALLY"
+
+    # b_bounce rises — should force both back to PRE_SERVE_RITUAL.
+    msm.update(
+        a_speed_mps=0.5, b_speed_mps=0.0,
+        a_bounce=False, b_bounce=True,
+        t_ms=100 * 33,
+    )
+    assert msm.states["A"] == "PRE_SERVE_RITUAL"
+    assert msm.states["B"] == "PRE_SERVE_RITUAL"

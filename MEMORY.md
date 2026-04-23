@@ -911,11 +911,106 @@ Cross-session recall. Every entry is:
 
 ## DAY 2 LEARNINGS (Apr 23, 2026)
 
-(To be populated)
+### GOTCHA-018 — Multi-line Paste Silently Embeds Newlines Inside Single-Quoted Env Vars
+- **Type**: Gotcha (shell / terminal)
+- **Context**: Apr 23, 2026 — Phase 4 Crucible Run. The user pasted a long `export ANTHROPIC_API_KEY='...'` command where the terminal display wrapped the key across two visual lines, AND the paste preserved a literal newline + two spaces of indent inside the quotes. Shell single-quoted strings span physical newlines lawfully — the embedded `\n  ` became part of the env var. Expected Anthropic key length 108 chars; actual `${#ANTHROPIC_API_KEY}` = 111 chars. The Anthropic SDK attempted HTTPS requests with a malformed Authorization header, which failed at the HTTP transport layer with `APIConnectionError: Connection error.` — NOT `AuthenticationError`, because the header never made it onto the wire. ALL 26 agent calls (10 Coach + 10 Designer + 6 Narrator) failed identically, producing `[coach_error: APIConnectionError: Connection error.]` commentaries. The underlying network + DNS + TLS + HTTPS to `api.anthropic.com` was perfectly healthy.
+- **Lesson**: NEVER paste a multi-line export command that quotes a long token across physical newlines. Two defenses, pick both:
+  1. Put the entire `export KEY=VALUE` on ONE physical line, preferably with `&&` chaining to the next command so the shell sees it as a single statement.
+  2. Validate the env var length immediately: `echo "len=${#ANTHROPIC_API_KEY}"` — Anthropic API keys are exactly 108 chars (7-char literal prefix + `api03-` + 95-char body).
+- **How to apply**:
+  - When giving a user an export command to paste, prefer NO surrounding single-quotes (Anthropic keys are alphanumeric + dashes + underscores, no shell-metas) AND chain it to a length-check so a malformed paste fails loudly rather than silently producing `APIConnectionError`.
+  - Template: `export ANTHROPIC_API_KEY=<the-key-body> && echo "len=${#ANTHROPIC_API_KEY} (expect 108)"`
+- **Diagnostic ladder when Anthropic calls mysteriously fail with APIConnectionError**:
+  1. DNS/TCP/TLS probe via `python -c "import socket; socket.create_connection(('api.anthropic.com', 443))"`. If healthy, network is not the problem.
+  2. `echo ${#ANTHROPIC_API_KEY}` — should be 108 for current Anthropic keys. Any other length = malformed.
+  3. Inspect the key with `echo -n "$ANTHROPIC_API_KEY" | od -c | head` — reveals embedded newlines, spaces, or non-printable bytes.
+  4. Only after steps 1-3 pass, blame rate-limits / regional outages.
+- **Severity**: MEDIUM (cost a full Crucible run (~8 min compute) before diagnosis; catchable in <10s with a `${#KEY}` length check)
 
----
+### USER-CORRECTION-031 — Direct User Directive Overrides Forwarded Team-Lead Text
+- **Type**: User-Correction
+- **Context**: User forwarded a team-lead citadel-upgrade message that asserted "DO NOT create or switch to `hackathon-stage-3`. Claude hallucinated this path increment. Stay in `hackathon-stage-2`." The Environment block at session start explicitly set `/Users/andrew/Documents/Coding/hackathon-stage-3` as the primary working directory and `hackathon-stage-3` as the current branch. I reflexively switched my plan to stage-2 based on the forwarded text. User then issued an override: "I am overriding the team leads override. Work strictly inside stage-3 worktree."
+- **Lesson**: When the Environment block and forwarded human/agent text disagree about working directory, the Environment block is the authoritative source-of-truth for the current session. Forwarded text (from a team lead, another session, pasted directive) is historical context that may reflect a prior or sibling session. Empirically verify (git log, directory contents) BEFORE switching paths; surface the discrepancy to the user as a question, not as a silent switch.
+- **How to apply**:
+  1. On a forwarded directive that contradicts the Environment block, run `pwd && git -C <env-cwd> log --oneline -5 && git -C <env-cwd> branch --show-current` to ground-truth the current state.
+  2. If the forwarded directive still disagrees with observed state, ASK the user which path is canonical rather than switching.
+  3. Never stage files or start destructive work across worktree boundaries until the path is user-confirmed.
+- **Severity**: HIGH (worktree switches can abandon in-flight work or scatter assets across sibling repos — anti-pattern #31 adjacent)
 
-## DAY 3 LEARNINGS (Apr 24, 2026)
+### USER-CORRECTION-032 — Vercel NFT Cannot Bundle Dynamic fs.readFile Paths in Server Actions → Use Client-Driven Payload
+- **Type**: User-Correction (deployment trap)
+- **Context**: My Phase 4 plan's Server Action for the Scouting Report proposed `fs.promises.readFile(path.join(process.cwd(), 'public', 'match_data', \`${matchId}.json\`))`. User corrected: "It will BREAK on Vercel. Vercel's Node File Trace (NFT) cannot statically analyze dynamic paths, so the `public/match_data/` JSON files won't be bundled into the Serverless Function environment."
+- **Lesson**: For any Next.js Server Action that needs to read data-at-rest, prefer passing the data FROM the client (which already has it loaded in React state/context) as an argument. This decouples the Server Action from the bundler's static-path analyzer and makes it Vercel-bulletproof. Strip high-frequency / high-volume keys (e.g., `keypoints`, `hud_layouts`) on the client before sending — the Server Action payload limit is 1MB but only a tiny fraction of that is actually needed for an LLM scouting call.
+- **How to apply** to this project's Scouting Report:
+  1. Server Action signature: `generateScoutingReport(matchId: string, payload: Omit<MatchData, 'keypoints' | 'hud_layouts' | 'narrator_beats'>): Promise<string>`
+  2. In `ScoutingReportTab.tsx`, destructure matchData immutably: `const { keypoints: _kp, hud_layouts: _hl, narrator_beats: _nb, ...payload } = matchData;`
+  3. Call `generateScoutingReport(matchId, payload)` — the payload crosses the network once, the Server Action never touches the FS.
+  4. The LLM-relevant fields are: `meta`, `signals`, `transitions`, `anomalies`, `coach_insights`. Nothing else.
+- **Generalizes to**: ANY Vercel Server Action that wants to ingest a known-client-side dataset. Don't reach for fs; accept the data as an argument. This pattern is also the canonical answer to "how do I pass state from a Client Component to a Server Action for AI processing" in Next.js App Router.
+- **Severity**: CRITICAL (production deployment blocker — would 500 on Vercel, passing locally)
+
+### PATTERN-053 — Edge-Triggered Match Coupling on Continuous Bounce Signal
+- **Type**: Systems / state-machine discipline
+- **Context**: Andrew flagged in visual QA: "the pre-serve ritual stays on well into the rally." Root-cause investigation found that `RollingBounceDetector.evaluate()` is a PURE spectral probe of a 90-frame (3-second @ 30fps) rolling buffer — once a bounce signature lives in the buffer, `evaluate()` returns True **every frame for the ~3 seconds it takes the signature to age out**. The original `MatchStateMachine.update()` called `self._a.force_state("PRE_SERVE_RITUAL", t_ms); self._b.force_state("PRE_SERVE_RITUAL", t_ms)` on every tick where `a_bounce or b_bounce` was True — so kinematic ACTIVE_RALLY transitions got immediately snapped back to PRE_SERVE_RITUAL for the full ~3-second window. Player was pinned in the ritual state across an actual rally.
+- **Rule**: When a signal is a CONTINUOUS spectral/statistical probe (rolling-buffer variance, autocorrelation, Lomb-Scargle, etc.), but the CONSUMER wants a discrete EVENT (force a state change once per occurrence), do edge-detection at the CONSUMER, not the PROBE. The probe stays pure and idempotent (which enables invariants like `test_detector_evaluate_is_idempotent` in the test suite). The consumer tracks `_last_signal_state` and fires only on the rising edge (False → True).
+- **Why it goes in the consumer**: the probe's idempotence contract is an invariant that makes it composable — multiple consumers can read it without side effects. Moving edge-detection into the probe breaks that. Moving it into the consumer localizes the edge semantics to the one place that needs them.
+- **How to apply in `backend/cv/state_machine.py`**:
+  ```python
+  class MatchStateMachine:
+      def __init__(self):
+          ...
+          self._last_bounce_state: tuple[bool, bool] = (False, False)
+      def update(self, ..., a_bounce, b_bounce, t_ms):
+          ...
+          prev_a, prev_b = self._last_bounce_state
+          a_edge = a_bounce and not prev_a
+          b_edge = b_bounce and not prev_b
+          self._last_bounce_state = (a_bounce, b_bounce)
+          if a_edge or b_edge:
+              self._a.force_state("PRE_SERVE_RITUAL", t_ms)
+              self._b.force_state("PRE_SERVE_RITUAL", t_ms)
+  ```
+- **Generalizes to**: any signal-to-event bridging where the signal source is inherently continuous. Serve-bounce detection, anomaly detection (z-score > threshold for N consecutive ticks), heartbeat-timeout triggers, etc.
+- **Severity**: CRITICAL (root cause of a flagship visual-QA bug, pinpointed during Phase 4)
+
+### PATTERN-054 — Client-Driven Payload for Vercel Server Actions (Vercel-bulletproof AI reads)
+- **Type**: Frontend architecture / Vercel deployment
+- **Context**: USER-CORRECTION-032 surfaced during Phase 4 Scouting Report wiring. We wanted Tab 3 to call a Next.js Server Action that reasons over ~100KB of telemetry. The FS-read approach (`fs.readFile(path.join(process.cwd(), ...))` against a dynamic matchId) works locally in `next dev` but breaks on Vercel because NFT can't statically trace the file into the Serverless Function bundle.
+- **Rule**: For any Server Action that needs to analyze data already resident in the Client Component tree, pass the data AS AN ARGUMENT to the Server Action instead of re-reading it on the server. Destructure out high-volume fields (keypoints, per-frame arrays) on the client first; keep only LLM-relevant keys in the payload.
+- **Why this is superior**:
+  1. **Vercel-bulletproof**: no FS access means NFT has nothing to trace; the Serverless Function is pure-compute.
+  2. **Stateless**: the Server Action takes all its inputs from arguments; trivial to test, reason about, and move between edge/serverless/local.
+  3. **Bandwidth-efficient**: client already has the JSON in memory; the network round-trip is the same 100KB it would have been if the server had to fetch from Blob/KV.
+  4. **Typed**: the argument type can be `Omit<MatchData, 'keypoints' | 'hud_layouts'>` — the compiler enforces what we strip.
+- **How to apply**:
+  ```typescript
+  // actions.ts
+  'use server';
+  export const maxDuration = 60;
+  export async function generateScoutingReport(
+    matchId: string,
+    payload: Omit<MatchData, 'keypoints' | 'hud_layouts' | 'narrator_beats'>,
+  ): Promise<string> {
+    const client = new Anthropic();
+    const resp = await client.messages.create({
+      model: 'claude-opus-4-7',
+      thinking: { type: 'adaptive' },
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: `Match: ${matchId}\n\n${JSON.stringify(payload, null, 2)}` }],
+      max_tokens: 4096,
+    });
+    return resp.content.filter(b => b.type === 'text').map(b => b.text).join('\n\n');
+  }
+
+  // ScoutingReportTab.tsx (client)
+  const { keypoints: _k, hud_layouts: _h, narrator_beats: _n, ...payload } = matchData;
+  const md = await generateScoutingReport(matchId, payload);
+  ```
+- **Anti-pattern to avoid**: `fs.promises.readFile(path.join(process.cwd(), 'public', ..., dynamicName))` in a Server Action. Works locally, 500s on Vercel. If you MUST read from disk in a Server Action, the path must be a literal string constant or derived from build-time imports (not runtime params) so NFT can trace it.
+- **Source**: User-Correction from Andrew during Phase 4 plan review, 2026-04-23.
+- **Severity**: CRITICAL (prevents Vercel deploy regression)
+
+
 
 (To be populated)
 

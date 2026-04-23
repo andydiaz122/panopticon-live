@@ -4,16 +4,19 @@ import { motion } from 'framer-motion';
 import { useState, useTransition } from 'react';
 import ReactMarkdown from 'react-markdown';
 
-import { generateScoutingReport } from '@/app/actions';
+import { generateScoutingReport, type ScoutingPayload } from '@/app/actions';
 import { colors, motion as motionTokens } from '@/lib/design-tokens';
 import { usePanopticonState } from '@/lib/PanopticonProvider';
 
 /**
  * Tab 3 — Opus Scouting Report.
  *
- * Phase 3.5 scaffold: button triggers a Next.js Server Action that currently
- * returns a hand-authored markdown brief (Phase 4 will replace the stub with
- * a live Claude Opus 4.7 Managed Agent call via `@anthropic-ai/sdk`).
+ * Phase 4 (live): the button triggers a Next.js Server Action that calls
+ * Claude Opus 4.7 via the `@anthropic-ai/sdk`. We follow PATTERN-054
+ * (Client-Driven Payload): strip the high-volume keys on the client, then
+ * pass the remaining ~100 KB telemetry as an argument to the Server Action.
+ * This sidesteps Vercel's Node File Trace (NFT) limitation on dynamic fs
+ * reads (USER-CORRECTION-032) and keeps the action Vercel-bulletproof.
  *
  * The Server Action round-trip is the "creative Opus" demo moment the judges
  * score against. This tab is intentionally minimal UI — the narrative IS the
@@ -29,8 +32,29 @@ export default function ScoutingReportTab() {
 
   const onGenerate = () => {
     setError(null);
+    if (!matchData) {
+      setError(
+        'Match data not loaded yet. Wait for the telemetry payload to finish loading before generating a scouting report.',
+      );
+      return;
+    }
+
+    // PATTERN-054: Client-Driven Payload. Strip keypoints (huge per-frame data),
+    // hud_layouts (LLM design metadata — irrelevant to sports-science reasoning),
+    // and narrator_beats (broadcast prose that would bias the scouting voice).
+    // What remains is the LLM-relevant slice: meta + signals + transitions +
+    // anomalies + coach_insights — typically ~100 KB, well under Next.js's 1 MB
+    // Server Action payload limit, and well under Opus's context budget.
+    const payload: ScoutingPayload = {
+      meta: matchData.meta,
+      signals: matchData.signals,
+      transitions: matchData.transitions,
+      anomalies: matchData.anomalies,
+      coach_insights: matchData.coach_insights,
+    };
+
     startTransition(() => {
-      generateScoutingReport(matchId)
+      generateScoutingReport(matchId, payload)
         .then((md) => setReport(md))
         .catch((err: unknown) => {
           setError(err instanceof Error ? err.message : String(err));

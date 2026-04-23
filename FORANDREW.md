@@ -963,3 +963,22 @@ The dialectical mapping process saved 10+ hours of misallocated work:
 - Identified the SG polyorder physics trap before it corrupted velocity signals
 
 This is the "team-lead QA cheap before it becomes expensive" pattern at its most valuable.
+
+---
+
+### 2026-04-23 — Final Pre-Flight Audit: Feature Freeze + Live Fire Standby
+
+The founder's final pre-flight audit before taking the `run_golden_data.sh` keys. Four non-obvious insights captured as durable memory so no future session has to re-discover them under a deadline:
+
+- **GOTCHA-031** — OBS thermal + DOM hydration on M4 Pro during 1080p60 recording. Checklist: close VS Code, kill Python venv, close all other Chrome tabs, use `bun run start` (production build, not dev), Apple VT hardware encoder.
+- **GOTCHA-032** — Chrome disk-caches the 15-25MB match_data.json. After Golden Run re-generation, a plain reload may serve stale data. Fix: DevTools "Disable cache" open, OR `?v=<timestamp>` query-string cache-buster on fetch.
+- **USER-CORRECTION-026** — The "Perfect LLM" Delusion. If the Golden Run is 95% good and 5% quirky, SHIP IT. Polish-to-perfection is how judges detect hardcoded-mock. Quirks are evidence of real agent reasoning. Only re-tune for PHYSICAL wrongness (wrong player, phantom signal, contradiction with the fan-facing biomech definition). Stylistic quirks stay.
+- **PROJECT-2026-04-28** — B2B Seed-Round Roadmap. Four upgrades that justify the post-hackathon raise: (1) DuckDB-WASM + HTTP Range Requests to kill GOTCHA-026 permanently, (2) MotionAGFormer / BioPose 3D monocular lifting for absolute joint angles, (3) sliding-window IMM filter for sub-200ms RTSP streaming (evolves the offline 3-Pass DAG into real-time), (4) streaming Scouting Committee with live trace viewer replacing the "Architectural Preview" banner.
+
+**CODE RED FEATURE FREEZE engaged.** No new features. No refactoring. Session posture = Live Fire Standby for Golden Run trace triage. If the run surfaces a real failure mode (Anthropic 529, DuckDB type-coercion on live payload, MPS OOM that synthetic tests missed), paste the trace and I'll do a surgical hotfix — nothing more.
+
+**Meta-learning**: the cross-layer observability insight from Phase 4.5 generalizes. Every serialization boundary (JSON cut, browser cache edge, DOM hydration step, OBS encoder ingest, LLM output stream) is a contract the destination layer DIDN'T SIGN. The only defense is tests that read FROM the destination layer's perspective. This is what separates demos that survive live-fire from demos that white-screen in front of judges.
+
+### 2026-04-23 — Next up: hackathon-demo-v1 merge exploration (post-Golden-Run)
+
+The sibling repo at `/Users/andrew/Documents/Coding/hackathon-demo-v1` contains parallel work that needs reconciling with `hackathon-research`. This is post-Golden-Run priority (Monday's Seed-Round prep). Approach: READ-ONLY survey first (git log diff, file tree comparison, unique-code detection) → propose a merge strategy → wait for explicit founder approval before any cross-repo file movement. No `git merge` is possible (different .git roots) — this is a manual cherry-pick / file-comparison exercise.

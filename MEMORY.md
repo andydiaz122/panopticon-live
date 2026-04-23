@@ -1024,6 +1024,54 @@ Cross-session recall. Every entry is:
 - **Severity**: CRITICAL (deploying from this branch could clobber the founder's live demo site)
 - **Source**: Founder directive, 2026-04-23
 
+### GOTCHA-031 — OBS Thermal / DOM-Hydration Frame Drop Trap during demo recording
+- **Type**: Gotcha / Physical Hardware
+- **Context**: 1080p60 OBS recording of the Next.js dashboard on Mac Mini M4 Pro. Simultaneous load: 15-25MB match_data.json hydration + 60fps canvas rasterization over broadcast video + video decode + video H.264 encode (for OBS output). All four compete for the same unified memory + GPU.
+- **The trap**: frame drops during canvas paint or DOM hydration are invisible in dev but SHATTER the "2K Sports" illusion on the recorded video. Judges watching the demo don't know they're looking at dropped frames; they just register "this looks janky" and docked scores.
+- **Rule (demo-recording protocol)**:
+  1. Close VS Code (Electron + language-server CPU load)
+  2. Shut down Python virtualenv / any running precompute
+  3. Close every other Chrome tab (each tab keeps its JS context live)
+  4. Run Next.js as `cd dashboard && bun run start` (production build), NOT `bun run dev` (HMR overhead)
+  5. OBS: Apple VT Hardware Encoder (not x264 software encode — CPU contention)
+  6. Monitor Activity Monitor during a dry-run; CPU should stay <60% peak
+- **When this fires**: only during live recording. Invisible in normal dev/test workflows.
+- **Severity**: HIGH (record-one-shot failure mode right before deadline)
+- **Source**: Founder pre-flight audit, 2026-04-23
+
+### GOTCHA-032 — Browser Cache Serves Stale match_data.json Across Golden Runs
+- **Type**: Gotcha / Debug Loop Trap
+- **Context**: Chrome aggressively disk-caches static assets in `dashboard/public/`, including our 15-25MB `match_data.json` and `agent_trace.json`. After re-running `./run_golden_data.sh` to produce fresh telemetry (e.g., tweaking a prompt), a normal reload in the dashboard may serve the STALE previous-run JSON from the browser's disk cache.
+- **The trap**: you debug against old data while believing you're looking at the new run. Maddening right before a deadline because the signal values don't match your expectations from the new prompt, so you tune the prompt further, regenerate, still see old data — endless loop.
+- **Rule (demo-prep visual QA)** — use at least one of:
+  1. **Chrome DevTools → Network tab → "Disable cache" checkbox** (only effective while DevTools is OPEN)
+  2. Append a cache-buster to the fetch: `fetch('/match_data/x.json?v=' + Date.now())`
+  3. Hard refresh via Cmd+Shift+R (works but easy to forget)
+- **Belt-and-suspenders**: both (1) during iteration AND (2) committed into code if we ever regenerate during a live demo.
+- **Severity**: HIGH (silent staleness; wastes iteration cycles in the highest-stakes hour)
+- **Source**: Founder pre-flight audit, 2026-04-23
+
+### USER-CORRECTION-026 — "Perfect LLM" Delusion — 5% quirk is authentic, do NOT over-tune
+- **Type**: Founder Correction / Demo Philosophy
+- **Context**: The Multi-Agent Swarm is genuinely non-deterministic. On the Golden Run, the Technical Coach may interpret an anomaly slightly off-script, the Tactical Strategist may emit a quirky markdown artifact, or the broadcast-coach voice may lapse into textbook cadence for a phrase or two.
+- **Rule**: If the Golden Run output is **95% good + 5% quirky, SHIP IT.** Do NOT rewrite prompts post-hoc to polish the 5%. Opus 4.7 judges know what real LLM output looks like; hardcoded-mock polish is detectable from a mile away. Authentic quirks are EVIDENCE of real agent reasoning, not a flaw.
+- **When this fires**: after running `run_golden_data.sh`, before demo recording. Resist the urge to re-tune if the output "isn't perfect." Polish-to-perfection is how you lose the Opus 4.7 criterion (25%) — because the demo starts looking canned.
+- **Exception — when to re-tune**: only if the output is PHYSICALLY WRONG (says "Player B" when the scope is Player A; cites a signal we don't track; contradicts the fan-facing biomech definition). Stylistic quirks STAY.
+- **Severity**: HIGH (distinguishes "authentic agent" from "polished script" in the judge's perception)
+- **Source**: Founder pre-flight audit, 2026-04-23
+
+### PROJECT-2026-04-28 — B2B Seed-Round Roadmap (post-hackathon horizon)
+- **Type**: Project / Post-Submission Roadmap
+- **Context**: DECISION-008 (Single-Player Demo Scope) is a demo-time simplification that becomes TECHNICAL DEBT the moment we pitch B2B. ATP broadcasters + elite betting syndicates + tour coaching staff need Player B native, occlusion handling, real-time streaming, 3-hour-match support. The current architecture can't ship that as-is — but the foundation is in place to evolve there.
+- **The Monday-morning roadmap** (in dependency order):
+  1. **DuckDB-WASM + HTTP Range Requests** — ship the `.duckdb` binary as a static asset; use DuckDB's WASM build to run SQL queries IN-BROWSER. Range requests fetch only the viewport's rows instead of the monolithic 15MB JSON. Unlocks 3-hour matches without browser OOM, and dramatically reduces first-paint TTI. Kills GOTCHA-026 (hydration death) permanently.
+  2. **MotionAGFormer / BioPose 3D (monocular 3D lifting)** — swap the 2D YOLO11m-Pose backbone for a monocular 3D pose estimator. Gets ABSOLUTE joint angles (knee flexion, hip rotation, shoulder external rotation) instead of our current relative-screen-space heuristics. Upgrades crouch-depth-degradation and serve-toss-variance from proxy signals to clinical metrics. Also enables proper load-chain biomechanics (torque transfer quantification).
+  3. **IMM (Interacting Multiple Model) Filter** — evolve the offline Strict 3-Pass DAG (PATTERN-055) into a SLIDING-WINDOW IMM filter for sub-200ms causal RTSP streaming. Preserves RTS-style optimality within a rolling window while meeting real-time latency budgets. Multiple motion models (constant-velocity, constant-acceleration, turning) compete via posterior probability; the filter picks per-frame. This is how we ship live broadcast-integration without losing the physics quality of offline precompute.
+  4. **Real-time Scouting Committee streaming** — Phase-3 `agent_trace.json` becomes a streamed protocol (SSE or WebSocket) with incremental agent-step commits. Trace Playback UI evolves into a LIVE trace viewer. Banner flips from "ARCHITECTURAL PREVIEW" → real-time status.
+- **Rule**: when we submit on Sunday, these aren't vague ideas — they're the Seed Round deck outline. Do not let the hackathon code calcify as the product architecture; these four upgrades are what justifies the Seed raise.
+- **Severity**: ROADMAP (not immediate action; Monday-morning planning trigger)
+- **Source**: Founder pre-flight audit, 2026-04-23
+
 ### GOTCHA-030 — JSON Syntax Trap from Truncation Marker ("shrapnel")
 - **Type**: Gotcha / UI Crash
 - **Context**: Phase 4 shipped GOTCHA-027 (trace payload truncation) by hard-slicing `TraceToolResult.output_json` at 2000 chars and appending `" ... [Array truncated for UI playback]"`. That sentinel makes the resulting string INVALID JSON — the first characters look like a serialized object, but the tail terminates mid-structure with free-form English.

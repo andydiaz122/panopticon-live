@@ -285,6 +285,106 @@ def test_compare_to_baseline_uses_defaults() -> None:
     assert out["current_window_sec"] == DEFAULT_WINDOW_SEC
 
 
+# ──────────────────────────── GOTCHA-024: Z-Score Lookahead-Bias Guards ────────────────────────────
+# The 3-Pass DAG (PATTERN-055) gives Pass 3 full-array access. It is trivially easy
+# to compute μ/σ for z-scores using the whole clip, which leaks future data into past
+# baselines. These tests PIN the causal-windowing contract — a future fatigue event
+# must NOT influence any statistic evaluated at an earlier t_ms.
+
+
+def test_compare_to_baseline_ignores_future_samples() -> None:
+    """GOTCHA-024: injecting a huge future value must NOT change z-score at an earlier t_ms.
+
+    Semantics: at t_ms=40000, the tool has only seen samples with timestamp <= 40000.
+    A fatigue event at t_ms=120000 is FUTURE to t_ms=40000 — the baseline stats,
+    current stats, and z_score must be identical regardless of whether the future
+    sample is present in the ToolContext or not.
+    """
+    baseline_and_current = [
+        _sample(t_ms=5000, value=1.0),
+        _sample(t_ms=10000, value=2.0),
+        _sample(t_ms=15000, value=3.0),
+        _sample(t_ms=35000, value=10.0),
+    ]
+    future_fatigue = _sample(t_ms=120_000, value=500.0)  # would blow up a global mean
+
+    ctx_without_future = ToolContext(match_id="utr_01", signals=baseline_and_current)
+    ctx_with_future = ToolContext(
+        match_id="utr_01", signals=[*baseline_and_current, future_fatigue]
+    )
+
+    query = {
+        "player": "A", "signal_name": "recovery_latency_ms", "t_ms": 40000,
+        "baseline_window_sec": 30.0, "current_window_sec": 10.0,
+    }
+    out_without = execute_compare_to_baseline(ctx_without_future, query)
+    out_with = execute_compare_to_baseline(ctx_with_future, query)
+
+    assert out_without["baseline_mean"] == out_with["baseline_mean"]
+    assert out_without["baseline_std"] == out_with["baseline_std"]
+    assert out_without["current_mean"] == out_with["current_mean"]
+    assert out_without["z_score"] == out_with["z_score"]
+    assert out_without["delta_pct"] == out_with["delta_pct"]
+
+
+def test_get_signal_window_ignores_future_samples() -> None:
+    """GOTCHA-024: window mean/std/slope at t_ms=5000 must not see samples from t_ms=30000."""
+    past_only = [_sample(t_ms=1000, value=1.0), _sample(t_ms=2000, value=2.0)]
+    future_spike = _sample(t_ms=30_000, value=999.0)
+
+    ctx_without_future = ToolContext(match_id="utr_01", signals=past_only)
+    ctx_with_future = ToolContext(match_id="utr_01", signals=[*past_only, future_spike])
+
+    query = {
+        "player": "A", "signal_name": "recovery_latency_ms", "t_ms": 5000,
+        "window_sec": 10.0,
+    }
+    out_without = execute_get_signal_window(ctx_without_future, query)
+    out_with = execute_get_signal_window(ctx_with_future, query)
+
+    assert out_without["count"] == out_with["count"]
+    assert out_without["mean"] == out_with["mean"]
+    assert out_without["std"] == out_with["std"]
+    assert out_without["trend_slope_per_sec"] == out_with["trend_slope_per_sec"]
+
+
+def test_compare_to_baseline_baseline_window_is_causally_locked() -> None:
+    """GOTCHA-024: the baseline is the FIRST N seconds of the match — never the
+    tail-end of the signal history. Adding a late-match sample must not migrate the
+    baseline window forward. The founder's rule: "A player's 1st serve shouldn't
+    be z-scored against their 50th serve's distribution."
+    """
+    ctx_short = ToolContext(
+        match_id="utr_01",
+        signals=[
+            _sample(t_ms=2000, value=10.0),
+            _sample(t_ms=5000, value=12.0),
+            _sample(t_ms=8000, value=11.0),
+        ],
+    )
+    # Extend history with a late-match sample at t=180s (3 min in).
+    # The baseline window should STILL be the first 30s, not shifted to the late end.
+    ctx_long = ToolContext(
+        match_id="utr_01",
+        signals=[
+            *ctx_short.signals,
+            _sample(t_ms=175_000, value=50.0),
+            _sample(t_ms=178_000, value=55.0),
+        ],
+    )
+    query = {
+        "player": "A", "signal_name": "recovery_latency_ms", "t_ms": 180_000,
+        "baseline_window_sec": 30.0, "current_window_sec": 10.0,
+    }
+    out_short = execute_compare_to_baseline(ctx_short, {**query, "t_ms": 20_000})
+    out_long = execute_compare_to_baseline(ctx_long, query)
+
+    # Baseline stats (first 30s) must be identical across both contexts.
+    assert out_short["baseline_mean"] == out_long["baseline_mean"]
+    assert out_short["baseline_std"] == out_long["baseline_std"]
+    assert out_short["baseline_n"] == out_long["baseline_n"] == 3
+
+
 # ──────────────────────────── get_rally_context ────────────────────────────
 
 

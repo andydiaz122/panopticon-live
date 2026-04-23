@@ -11,20 +11,26 @@ Two classes:
 
 from __future__ import annotations
 
+from backend.cv.thresholds import KINEMATIC
 from backend.db.schema import PlayerSide, PlayerState, StateTransition
 
-# ──────────────────────────── Tunable thresholds ────────────────────────────
+# ──────────────────────────── Tunable thresholds (PATTERN-057) ────────────────────────────
+#
+# All kinematic gates are sourced from `backend/cv/thresholds.py::KINEMATIC`.
+# The module-level names below are thin re-exports preserved for backward
+# compatibility with existing imports + tests. When re-tuning on post-RTS
+# telemetry, edit `thresholds.py` — never shadow here.
 
-ACTIVE_RALLY_SPEED_THRESHOLD_MPS: float = 0.2
+ACTIVE_RALLY_SPEED_THRESHOLD_MPS: float = KINEMATIC.active_rally_speed_mps
 """Minimum 2D speed to enter ACTIVE_RALLY from PRE_SERVE_RITUAL (or resume from DEAD_TIME)."""
 
-DEAD_TIME_SPEED_THRESHOLD_MPS: float = 0.05
+DEAD_TIME_SPEED_THRESHOLD_MPS: float = KINEMATIC.dead_time_speed_mps
 """Speed must stay below this to transition ACTIVE_RALLY -> DEAD_TIME."""
 
-CONSECUTIVE_FRAMES_TO_RALLY: int = 5
+CONSECUTIVE_FRAMES_TO_RALLY: int = KINEMATIC.consecutive_frames_to_rally
 """Number of consecutive frames above ACTIVE_RALLY_SPEED_THRESHOLD to trigger the transition."""
 
-CONSECUTIVE_FRAMES_TO_DEAD_TIME: int = 15
+CONSECUTIVE_FRAMES_TO_DEAD_TIME: int = KINEMATIC.consecutive_frames_to_dead_time
 """Number of consecutive frames below DEAD_TIME_SPEED_THRESHOLD to trigger the transition."""
 
 

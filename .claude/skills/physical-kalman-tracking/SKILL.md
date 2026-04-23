@@ -142,9 +142,51 @@ This skill is canonical for any `kalman.py`-touching work. Reference explicitly 
 # input MUST be court meters from CourtMapper, not normalized xyn.
 ```
 
+## Offline Smoothing: RTS Smoother (PATTERN-053, Founder Override 2026-04-23)
+
+Because `precompute.py` processes the entire clip offline (not live RTSP), we can use the **Rauch-Tung-Striebel (RTS) backward smoother** — mathematically optimal, zero-lag, 3 lines:
+
+```python
+# After forward pass loop has collected all states:
+means = np.array([kf._kf.x.copy().flatten() for kf in forward_states])
+covs = np.array([kf._kf.P.copy() for kf in forward_states])
+
+# RTS backward pass — filterpy built-in:
+smoothed_means, smoothed_covs, _, _ = forward_kf._kf.rts_smoother(means, covs)
+```
+
+**Why this beats Q-matrix tuning and CA upgrade**:
+- Optimal (minimum variance) smoothed trajectory without changing the model
+- Uses future frames to correct past estimates — only possible offline
+- Does not disrupt the existing 4D state vector or any downstream consumers
+- 20-35% velocity noise reduction at effectively 0 implementation risk
+
+**Savitzky-Golay post-filter (if RTS is insufficient)**:
+```python
+from scipy.signal import savgol_filter
+# polyorder MUST be ≥ 2. polyorder=1 = SMA = smears split-step impulse peaks.
+smoothed_vx = savgol_filter(vx_array, window_length=7, polyorder=2)
+```
+`scipy.signal.savgol_filter` on a full array uses a CENTERED window → **zero-phase, zero temporal lag** (offline-only advantage). Never confuse with causal real-time SG.
+
+## Q-Matrix Inversion Trap (GOTCHA-020)
+
+**NEVER increase Q to reduce visual jitter.** Higher Q → higher Kalman Gain → filter trusts raw (jittery) YOLO detections MORE.
+
+Correct diagnostic:
+- Jitter from noisy YOLO detections → **increase R** (tell filter measurements are unreliable)
+- Jitter from wrong physics model → reconsider model (CV vs. CA vs. IMM)
+- Jitter after entire pipeline → use RTS smoother offline
+
+Current Q=0.05 reflects "tennis players can accelerate hard." Current R=0.10 reflects "foot projection is ~30cm noisy." Innovation diagnostic:
+- If `|measurement - prediction|² > 0.05 m²` consistently → Q may be too small (or R too large)
+- Target innovation: `0.01-0.02 m²` per frame
+
 ## What NOT to do
 
 - Do NOT use a 1D tracker per axis — 2D correlation matters for state machine's `hypot`
 - Do NOT normalize the Kalman state itself (keep raw meters)
 - Do NOT tune `Q` and `R` to hide unit errors (tempting when velocities look "close" to expected but off by a factor of the aspect ratio — that's a USER-CORRECTION-008 violation, not a tuning issue)
 - Do NOT reset the filter between frames. Let it run the full clip per player.
+- Do NOT increase Q to reduce jitter — that is physically backwards (GOTCHA-020)
+- Do NOT use CA model upgrade without first trying RTS smoother — RTS is 3 lines vs. 5-8h rewrite

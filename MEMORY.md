@@ -911,7 +911,264 @@ Cross-session recall. Every entry is:
 
 ## DAY 2 LEARNINGS (Apr 23, 2026)
 
-(To be populated)
+### GOTCHA-018 — SG polyorder=1 Is a Simple Moving Average: Smears Impulse Peaks
+- **Type**: Gotcha / Physics Trap
+- **Context**: Research campaign plan proposed `savgol_filter(window=7, polyorder=1)` for post-Kalman velocity smoothing.
+- **Lesson**: polyorder=1 Savitzky-Golay is mathematically identical to a Simple Moving Average. SMAs ruthlessly flatten high-frequency impulse peaks — exactly what we need to PRESERVE for split-step and lateral push-off detection. **MUST use polyorder=2 or polyorder=3** for sports biomechanical signals where peak velocity amplitude matters.
+- **Severity**: CRITICAL (would corrupt lateral_work_rate and crouch_depth signals)
+- **Source**: Founder override, 2026-04-23
+- **How to apply**: Any time SG filtering is proposed for sports velocity signals, default to polyorder=2 minimum. Only use polyorder=1 for position smoothing where peak amplitude is irrelevant.
+
+### GOTCHA-019 — Offline Precompute = Zero-Phase SG (No Temporal Lag)
+- **Type**: Gotcha / Architecture Advantage
+- **Context**: Plan cautioned that Savitzky-Golay adds "233ms temporal lag" to velocity signals.
+- **Lesson**: That caution applies to CAUSAL (real-time) filters. We run `precompute.py` — an offline batch pipeline with access to the full signal array. `scipy.signal.savgol_filter` applied to an array uses a CENTERED window, making it zero-phase with zero temporal lag. The "lag" warning is irrelevant for precompute architecture.
+- **Severity**: HIGH (architectural advantage we were failing to leverage)
+- **Rule**: Whenever building signal processing for precompute.py, default to non-causal (offline) algorithms — they're strictly superior. The constraint "must be real-time" only applies to live RTSP pipelines.
+
+### GOTCHA-020 — Kalman Q Inversion Trap: Increasing Q Trusts Jittery YOLO More
+- **Type**: Gotcha / Physics Trap
+- **Context**: Plan stated "If innovation² > 0.05 m², increase Q" to reduce jitter. This is backwards.
+- **Lesson**: Increasing Q (process noise covariance) tells the Kalman filter its physical model is UNCERTAIN, which RAISES the Kalman Gain — making the filter trust raw (jittery) YOLO measurements MORE, not less. This increases visual jitter, not decreases. Correct diagnosis: high innovation → filter is under-trusting model (Q too small) OR measurement noise is too low (R too small relative to actual YOLO noise). Correct fix: use RTS smoother offline (not Q tuning at all).
+- **Severity**: CRITICAL (backwards fix would worsen signal quality)
+- **Source**: Founder override, 2026-04-23
+
+### PATTERN-053 — RTS Smoother: Mathematically Optimal Offline Kalman Smoothing
+- **Type**: Pattern / Algorithm
+- **Context**: Research campaign proposed Kalman CA upgrade (5-8h, risky). The correct upgrade for our offline precompute architecture is the Rauch-Tung-Striebel (RTS) smoother.
+- **Rule**: For offline Kalman smoothing in `precompute.py`, use `filterpy.kalman.KalmanFilter.rts_smoother()`. This runs a backward pass over stored forward Kalman states, providing mathematically optimal, zero-lag smoothed trajectories. Implementation is 3 lines of code.
+- **How to apply**:
+  ```python
+  # After forward pass loop:
+  means, covs = zip(*[(kf._kf.x.copy(), kf._kf.P.copy()) for ...])
+  smoothed_means, smoothed_covs, _, _ = kf._kf.rts_smoother(
+      np.array(means), np.array(covs)
+  )
+  ```
+- **Expected improvement**: 20-35% velocity noise reduction at ~3 lines vs. 5-8h CA model rewrite
+- **Severity**: HIGH (unlocks offline advantage; phase 2 implementation target)
+- **Source**: Founder override, 2026-04-23
+
+### GOTCHA-021 — Ghost Opponent Contradiction: split_step_latency Cannot Reference Player B
+- **Type**: Gotcha / Scope Contradiction
+- **Context**: signalCopy.ts and system_prompt.py both described split_step_latency_ms as "delay from OPPONENT's racket contact to Player A's split-step." DECISION-008 (single-player scope) + GOTCHA-016 (Player B undetectable) means this reference is logically impossible.
+- **Lesson**: split_step_latency_ms fires on Player A's OWN state machine transitions (USER-CORRECTION-019: structural state-proxy pattern). The serve-bounce trigger is inferred from Player A's relative kinematics during PRE_SERVE_RITUAL, not from Player B keypoints. All fan-facing copy MUST anchor this signal on Player A's isolated mechanics only.
+- **FIXED**: signalCopy.ts now reads "Player A's movement burst timing relative to serve-bounce detection." system_prompt.py signal 7 no longer references opponent detection.
+- **Severity**: CRITICAL (technical judges would immediately spot logical hole)
+- **Source**: Founder override, 2026-04-23
+
+### USER-CORRECTION-025 — Code-Docs Desync on scientific mandates is a CRITICAL credibility bug
+- **Type**: Founder Correction / Process Invariant
+- **Context**: 2026-04-23 Phase 4 audit. We fixed `signalCopy.ts` and `system_prompt.py` in Phase 1 Lite under Founder Override #1 (GOTCHA-021: Ghost Opponent) to anchor `split_step_latency_ms` entirely on Player A's isolated mechanics. But the underlying Python math in `backend/cv/signals/split_step_latency.py` STILL referenced opponent_state transitions. Result: my Phase 3 report claimed "split_step_latency_ms = 0 because Player B is undetectable (GOTCHA-016)" when the real cause was that the math never got updated to match the fan-facing copy.
+- **Rule**: When a founder override reframes a signal's SEMANTIC DEFINITION, the code-update cascade is:
+  1. UI copy (`signalCopy.ts`, fan-facing labels, tooltips)
+  2. Agent prompts (`system_prompt.py`, BIOMECH_PRIMER, any Scouting Committee agent prompt that references the signal)
+  3. **Underlying extractor math** (`backend/cv/signals/<signal>.py`) ← THIS WAS MISSED
+  4. Test expectations (`tests/test_cv/test_signal_<signal>.py`)
+  Every override that renames or redefines a signal MUST touch all four layers in the same commit (or tests must drive the change).
+- **Diagnostic pattern**: if a signal is "starving" (n=0 emissions) post-override, FIRST check whether the extractor math matches the new definition. Do NOT blame upstream data availability (e.g., "Player B undetectable") until you've verified the code still encodes the OLD definition.
+- **Severity**: CRITICAL (the judges would spot this — a signal described one way and computed another is a credibility bomb)
+- **Source**: Founder audit, 2026-04-23
+
+### PATTERN-059 — Shared Blackboard Handoffs for Multi-Agent Chains (NOT Markov-chain substitution)
+- **Type**: Pattern / Multi-Agent Information Architecture
+- **Context**: Phase 3 implementation of `scouting_committee.py` used strict Markov-chain handoffs: agent N+1's user message contained ONLY agent N's output. Trap: if Analytics Specialist under-reports (e.g., decides a signal "isn't anomalous" and omits it), Technical Coach has zero visibility into the baseline and HALLUCINATES a physical breakdown unconstrained by the raw data.
+- **Rule**: Every downstream agent's user message must be ADDITIVE, not SUBSTITUTIVE:
+  - **Baseline Layer**: stays CONSTANT across all handoffs (MatchMeta summary — signal counts, names, duration, player identity). Gives every agent the same ground-truth frame of reference.
+  - **Domain Prompt Layer**: stays CONSTANT in the system prompt (BIOMECH_PRIMER for Technical Coach, tactical-synthesis instructions for Tactical Strategist).
+  - **Focus Layer**: APPENDED per handoff — the upstream agent's output is the specific subject of synthesis, not the sole context.
+- **Implementation sketch**:
+  ```python
+  def _compose_user_prompt(baseline: str, focus: str, instructions: str) -> str:
+      return f"{baseline}\n\n---\nFOCUS OF SYNTHESIS:\n{focus}\n\n---\n{instructions}"
+  ```
+- **Anti-pattern**: "Agent N+1 reads only Agent N's output." That's Context Starvation. Keep the ground-truth frame in every turn.
+- **Severity**: HIGH (blocks hallucinated biomech claims; a judge comparing a Technical Coach assertion against the raw DuckDB would otherwise catch fabrication)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-027 — Trace Payload Explosion (Megabyte tool_results in agent_trace.json)
+- **Type**: Gotcha / Data Engineering
+- **Context**: Scouting Committee's Analytics Specialist calls `get_signal_window`, which can return a window containing hundreds of samples. If 5 such calls fire, `agent_trace.json` balloons from ~50KB to 100MB+. Next.js hydration on the client chokes trying to `JSON.parse()` that payload — the exact GOTCHA-026 hydration death we built the Orchestration Console to AVOID.
+- **Rule**: Add a TRUNCATION INTERCEPTOR inside the trace recorder (NOT in the LLM loop). Any `TraceToolResult.output_json` > 2000 chars gets truncated + marker " ... [Array truncated for UI playback]" appended. The LLM still sees the full response during execution — only the disk-written trace is truncated.
+- **Constant**: `TRACE_MAX_OUTPUT_JSON_CHARS = 2000` in `scouting_committee.py`. 2000 chars fits comfortably in one Orchestration Console card without wrapping into an unreadable wall of text.
+- **Severity**: HIGH (silent payload blow-up that only manifests on production-scale traces; unit tests with short tool outputs would never catch it)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-028 — Uncanny Valley Text Pacing (Arbitrary ms delays look like a DB dump)
+- **Type**: Gotcha / UX Discipline
+- **Context**: The Orchestration Console originally used `400-1200ms scaled to content length` for text-event pacing. A 400-word final report streaming in 1.2s = ~300 words/sec, which reads as "pre-computed database dump, not live reasoning." Triggers the Uncanny Valley — judges perceive it as mock-ish even though the captured reasoning is real.
+- **Rule**: Text events must stream at a TOKEN VELOCITY (baud rate) that approximates real LLM output — 20-30 characters per second. A 500-char block should take 15-25 seconds. This mirrors the observed pace of streaming Claude output that users have internalized as "real LLM behavior." Judges stop seeing "UI animation" and start seeing "agent thinking."
+- **Escape valve**: provide a Fast-Forward transport control so the user/judge can skip ahead — default pace must feel real, but choice is preserved. Never lock the audience in.
+- **Severity**: HIGH (the Orchestration Console IS the Opus 4.7 judging criterion surface; bad pacing underweights our strongest demo beat)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-029 — Vercel Python-Build Crash from Root-Level pyproject.toml / requirements-local.txt
+- **Type**: Gotcha / Deployment Topology
+- **Context**: This repo has both Python backend (`backend/`, `pyproject.toml`, `requirements-local.txt`) and Next.js frontend (`dashboard/`). Default Vercel build detection scans the ROOT for language signals. If it sees Python files at root, it attempts to spin up a Python runtime and `pip install torch ultralytics opencv-python duckdb` — which exceeds the 250MB serverless bundle limit and hard-crashes the build.
+- **Rule**: Vercel must NEVER touch the Python backend. Enforce with:
+  1. **Root Directory = `dashboard/`** in Vercel project settings (dashboard UI) OR
+  2. `vercel.json` at project root with explicit `buildCommand` + `outputDirectory` pointing into `dashboard/` OR
+  3. An `ignoreCommand` that exits 0 when non-dashboard paths change so Vercel skips the build entirely.
+- **What ships to Vercel**: `dashboard/` (Next.js bundle) + `dashboard/public/match_data/*.json` (static pre-computed assets). Nothing else.
+- **Severity**: HIGH (silent build crash with opaque Vercel logs; wastes deployment debugging time under a submission deadline)
+- **Source**: Founder audit, 2026-04-23
+
+### PROJECT-2026-04-23 — Do-not-deploy constraint: other branch is live on Vercel
+- **Type**: Project / Operational Constraint
+- **Context**: Founder is working on a parallel branch that's already deployed to https://panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app/. Merge conflicts + unintended redeploys would disrupt their work.
+- **Rule**: Within the `hackathon-research` branch, we:
+  - PREPARE Vercel config files (vercel.json, .gitattributes) as source for the founder to merge/adapt
+  - DO NOT run `vercel deploy` / `vercel --prod` / `vercel link` in this session
+  - DO NOT push to GitHub (avoid triggering any auto-deploy webhook on this branch)
+  - Commit locally only after founder explicitly requests it
+- **Severity**: CRITICAL (deploying from this branch could clobber the founder's live demo site)
+- **Source**: Founder directive, 2026-04-23
+
+### GOTCHA-030 — JSON Syntax Trap from Truncation Marker ("shrapnel")
+- **Type**: Gotcha / UI Crash
+- **Context**: Phase 4 shipped GOTCHA-027 (trace payload truncation) by hard-slicing `TraceToolResult.output_json` at 2000 chars and appending `" ... [Array truncated for UI playback]"`. That sentinel makes the resulting string INVALID JSON — the first characters look like a serialized object, but the tail terminates mid-structure with free-form English.
+- **The trap**: If ANY frontend code calls `JSON.parse(event.output_json)` — e.g., to syntax-highlight the tool result, extract a field, or render a JSON tree — the parse throws `SyntaxError`, trips React's error boundary, and WHITE-SCREENS Tab 3 during the live demo. A future contributor adding "pretty print JSON" would hit this.
+- **Rule**: NEVER call raw `JSON.parse()` on `TraceToolResult.output_json`. Use the sanctioned `safeParseOutputJson(raw)` helper in `dashboard/src/lib/agentTracePlayback.ts` which returns `{ parsed: unknown \| null, isTruncated: boolean, raw: string }`. On failure (truncated or malformed or binary), `parsed` is `null` and the caller falls back to raw-text rendering. `isTruncatedToolOutput(raw)` is the companion predicate used to render a "Truncated" badge in the UI.
+- **Enforcement**: 5 new vitest cases in `agentTracePlayback.test.ts` pin the contract — truncated payloads return null (not throw), malformed JSON returns null, empty strings don't crash, binary garbage doesn't crash.
+- **Severity**: HIGH (silent UI crash that only manifests on real production-scale traces; would have been invisible in unit tests with short fixtures)
+- **Source**: Founder audit, 2026-04-23 Phase 4
+
+### PATTERN-058 — Empirical RTS Amplitude Compression on real UTR clip (Phase 3 tuning sprint)
+- **Type**: Empirical Finding / Calibration Baseline
+- **Context**: Founder audit PATTERN-057 predicted RTS would compress velocity peaks. 2026-04-23 ran the new 3-Pass DAG precompute on real UTR clip `utr_match_01_segment_a.mp4` (60s, 1800 frames, 1920×1080). Compared signal distributions against the sibling-repo DuckDB (forward-only, pre-RTS).
+- **Measured compression** on a real broadcast clip:
+
+  | Signal | Pre-RTS max | Post-RTS max | Compression |
+  |---|---|---|---|
+  | `lateral_work_rate` | 3.983 m/s | 2.119 m/s | **-47%** |
+  | `lateral_work_rate` mean | 1.261 | 0.431 | -66% |
+  | `lateral_work_rate` median | 0.369 | 0.378 | ~0% (robust to noise) |
+  | `lateral_work_rate` n | 12 | 13 | +1 (FSM still firing) |
+
+- **Key findings**:
+  1. **RTS compression on real data is LARGER than PATTERN-053's conservative 20-35% estimate** — ~47% peak compression because the noise was causing genuine spurious peaks (not just small-amplitude jitter). The founder's "2.4 → 1.6" intuition was directionally correct and slightly conservative.
+  2. **Median velocity is robust**: noise was adding spurious HIGH velocities, not biasing the center. Median barely moves (0.369 → 0.378).
+  3. **FSM is NOT starved under post-RTS at current thresholds**: 13 ACTIVE_RALLY signals emitted (vs 12 pre-RTS). `ACTIVE_RALLY_SPEED_THRESHOLD_MPS = 0.2` is conservative enough that even compressed peaks cross it readily.
+  4. **`split_step_latency_ms` emits 0 signals** under BOTH pre-RTS and post-RTS. This is NOT a threshold issue — it's upstream Player-B detectability (GOTCHA-016 + DECISION-008 single-player scope). Not fixable via PATTERN-057.
+- **Rule**: current thresholds in `backend/cv/thresholds.py::KINEMATIC` are VERIFIED NOT-STARVED against the canonical UTR clip under the 3-Pass DAG. `post_rts_calibrated` can flip to True ONLY after histogramming on additional real clips to confirm the thresholds generalize. For single-clip demo, current values are safe.
+- **Severity**: HIGH (quantitative evidence closing the founder's tuning-debt audit)
+- **Source**: Empirical 2026-04-23 precompute run on `utr_match_01_segment_a.mp4`
+
+### USER-CORRECTION-024 — DON'T over-index on deployment survival at the expense of showcasing the vision
+- **Type**: Founder Correction / Strategic Framing
+- **Context**: 2026-04-23 Phase 3 audit. I (Claude) proposed serving a static scouting report to avoid Vercel's 10-15s serverless timeout, reasoning that a 45-60s Managed-Agents call would hang and crash the demo. Founder accepted the deployment constraint but rejected the scope narrowing: the hackathon's "Opus 4.7 Use" judging criterion + the judges' stated preference for "projects at the edge of what's probably not fully possible" means we MUST show the real multi-agent reasoning loop. Judges don't reward deploy-safe CRUD wrappers; they reward vision.
+- **Rule**: When the constraint is "X minutes of compute" and the prize is "showcase the 5-10 year future", the correct architectural move is NOT "downgrade the product to fit the constraint" — it is "decouple the compute from the display." Run the expensive reasoning OFFLINE during precompute, CAPTURE a structured trace of every event (thinking, tool_call, tool_result, handoff), and REPLAY the trace client-side with timed pacing. The user sees the UX of 2030; the deploy target sees a static JSON asset.
+- **How to apply**: Any time you're about to recommend "serve a static text file" because a real agent call exceeds a platform timeout, stop and ask: "Can I run the agent call offline, capture its trace, and replay it?" If yes, that's almost always the right answer for a demo-oriented build. Badge the UI with an honest "ARCHITECTURAL PREVIEW — ACCELERATED FOR DEMO" disclosure so nobody accuses us of mocking.
+- **Severity**: CRITICAL (applies to every future demo-oriented Opus 4.7 project; the meta-lesson is "optimize for the judging criterion, not the deployment envelope")
+- **Source**: Founder pushback, 2026-04-23
+
+### PATTERN-056 — Multi-Agent Trace Playback (the canonical bridge for Managed-Agents demos)
+- **Type**: Pattern / Architecture + Demo Technique
+- **Context**: Deep Managed-Agents reasoning loops take 20-60+s; Vercel's Hobby-tier serverless timeout is 10-15s. Any live invocation crashes the demo. But Anthropic judges want to see real multi-agent systems, not CRUD wrappers.
+- **Rule**: Execute the real agent loop offline during the precompute phase. Serialize every event — thinking blocks, tool calls, tool results, agent handoffs, intermediate payloads — into a typed `AgentTrace` object written to disk as `agent_trace.json`. In the frontend, render a playback console that reveals each event with deterministic delays (200-800ms per event, 1-3s between handoffs) so the user SEES the reasoning sequence unfold. Badge: "ARCHITECTURAL PREVIEW: SWARM ACCELERATED FOR DEMO".
+- **Three orthogonal agent roles for Panopticon's Scouting Committee** (structure per founder):
+  1. **Analytics Specialist** — DuckDB tool access, finds statistical anomalies ("lateral work rate dropped 18%")
+  2. **Technical Biomechanics Coach** — takes Quant's data, synthesizes the physical breakdown using biomech literature
+  3. **Tactical Strategist** — takes Technical's output, synthesizes match strategy ("exploit the compromised split-step")
+  Each handoff is real: agent N+1's input is agent N's OUTPUT (not the raw match_data).
+- **Schema requirement**: `AgentTrace` must be Pydantic v2 with a discriminated-union event type (Literal `kind` field). This is what makes the UI replay parseable — a raw `list[dict]` is not.
+- **Severity**: HIGH (unlocks "Opus 4.7 Use" criterion (25%) without breaking deploy)
+- **Source**: Founder strategic direction, 2026-04-23
+
+### PATTERN-057 — Threshold Tuning Debt: re-tune downstream every time upstream signal processing changes
+- **Type**: Pattern / Calibration Discipline
+- **Context**: Phase 2B shipped RTS smoother, which correctly strips ±3-5px YOLO jitter. Side effect: velocity impulse peaks that used to register as 2.4 m/s noise-spikes now correctly register at 1.6 m/s smoothed amplitudes. Any FSM / signal extractor with hardcoded thresholds tuned against the noisy regime will STARVE — transitions drop, signals go silent.
+- **Rule**: Whenever you upgrade upstream signal processing (Kalman → RTS, SG polyorder change, filter bandwidth change, pose model swap), you have incurred Threshold Tuning Debt. Every downstream consumer that gates on an absolute kinematic threshold (m/s, degrees, meters, ms) MUST be audited and re-tuned. Do this empirically: run the new pipeline on real data, histogram the amplitudes, set thresholds at new percentiles. Do NOT guess.
+- **Prevention architecture**: Keep kinematic thresholds in a single `backend/cv/thresholds.py` constants module, not scattered across extractors. When tuning debt is detected, change one file.
+- **Severity**: CRITICAL (silent starvation of signals is invisible in unit tests; only caught by end-to-end telemetry inspection)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-026 — Next.js Server-Component JSON Hydration Death (15MB+ payloads)
+- **Type**: Gotcha / React Performance
+- **Context**: `precompute.py` emits match_data.json with 1800 frames × 30fps × 2 players × keypoints + states + smoothed arrays + 7 signals → 15-25MB JSON. Plus agent_trace.json with full multi-agent reasoning trace.
+- **The Trap**: If any part of match_data.json is passed as a prop to a Next.js Server Component (via `getStaticProps`, `loader`, or `async` Server Component that awaits the JSON), Next.js serializes the ENTIRE object into the initial HTML document under `<script id="__NEXT_DATA__">`. React hydration parses that blob on the main thread. A 15MB+ parse blocks the UI for 500-2000ms while the demo's 60fps video is trying to start. Result: violent stutter during the first 2 seconds — exactly when judges are forming their first impression.
+- **Rule**: match_data.json and agent_trace.json MUST be loaded as STATIC CLIENT-SIDE ASSETS via `fetch("/match_data/*.json")` in `useEffect`. They live in `dashboard/public/match_data/` (served by Next.js's static file server, bypassing the RSC serializer entirely). Never pass them through a Server Component prop, never `import` them synchronously.
+- **Guard**: If you see a `.ts` / `.tsx` file `import`ing a JSON asset larger than ~50KB, that's a hydration-death candidate — convert to fetch+useEffect.
+- **Severity**: HIGH (silently destroys the 60fps animation the demo is designed to showcase)
+- **Source**: Founder audit, 2026-04-23
+
+### USER-CORRECTION-023 — REJECT streaming-hybrid Kalman architectures; Strict 3-Pass DAG only
+- **Type**: Founder Correction / Architectural Invariant
+- **Context**: 2026-04-23 Phase 2B audit. I (Claude) proposed "Option C — signal-only RTS wiring" (state machine keeps forward-only velocities so its transition thresholds stay calibrated; signal extractors get smoothed velocities). Founder formally rejected.
+- **Rule**: NEVER run the FSM on noisy forward-pass velocities while emitting signals from RTS-smoothed velocities. The FSM's transition TIMING is itself a feature — RTS shifts the local-maxima of velocity impulses (it uses future data to center true peaks), so a forward-pass FSM will slice time-windows at the wrong timestamps, and every downstream feature reads against the wrong window. Temporal Decoupling is a DAG-integrity bug, not a tuning nuisance.
+- **Correct architecture**: Strict 3-Pass DAG (PATTERN-055). If FSM thresholds calibrated on forward-only noise stop firing against smoother RTS peaks, RE-TUNE the thresholds in Phase 4 — do NOT compromise the DAG to preserve a config value.
+- **Severity**: CRITICAL (rejecting this pattern prevents an entire class of "preserve existing tuning" drift)
+- **Source**: Founder audit, 2026-04-23
+
+### PATTERN-055 — Strict 3-Pass Offline DAG for CV → RTS → Semantic
+- **Type**: Pattern / Architecture
+- **Context**: Offline precompute.py is not a streaming system. Inverting the causal-to-batch DAG correctly is the difference between mathematically valid signals and temporal-decoupling garbage.
+- **Rule**:
+  - **Pass 1 — Forward Sweep**: decode frames → YOLO pose → player assignment → CourtMapper → `kalman.update()` per player. **FORBIDDEN in Pass 1**: RollingBounceDetector, MatchStateMachine, FeatureCompiler, signal extractors, z-scoring, any consumer of velocity as a feature.
+  - **Pass 2 — Backward Sweep**: call `kalman.rts_smooth()` per player. Produces the zero-lag, mathematically optimal trajectory (N, 4) array.
+  - **Pass 3 — Semantic Sweep**: iterate chronologically over the RTS-smoothed arrays. Feed smoothed (x, y, vx, vy) into RollingBounceDetector → MatchStateMachine → signal extractors → FeatureCompiler, in the canonical pipeline order.
+- **Why this matters**: RTS shifts velocity peaks by using future info to locate TRUE impulse centers. Any FSM or detector that runs in Pass 1 on forward-only data fires at noise-induced peaks, not real peaks. Mixing pass-1 timestamps with pass-2 values is temporal decoupling.
+- **How to apply**: When you see a streaming loop that calls `kalman.update()` AND a state-machine AND signal extractors in the same for-loop, that is architecturally wrong for an offline pipeline. Split the loop.
+- **Severity**: CRITICAL (DAG-integrity invariant for all offline CV pipelines)
+- **Source**: Founder override, 2026-04-23 Phase 2B mandate
+
+### GOTCHA-023 — filterpy RTS NaN Explosion from Prolonged Occlusion Covariance Blowup
+- **Type**: Gotcha / Numerical Stability
+- **Context**: When a player is occluded for 15+ consecutive frames, `kalman.update(None)` calls `predict()` only. Each predict adds `Q` to the covariance `P` but never tightens it via an update gain. After ~30 predicts, elements of `P` can exceed 1e6; after ~60 they can exceed 1e10. `rts_smoother` inverts a matrix built from these exploded covariances — `numpy` throws `LinAlgError: Singular matrix` OR silently propagates NaNs through the whole backward pass, crashing the precompute batch job for that clip.
+- **Rule**: Always wrap `self._kf.rts_smoother(xs, ps)` in `try/except np.linalg.LinAlgError`. On failure OR on `np.isfinite(smoothed).all() == False`, log a warning with diagnostic (frame count, condition number of worst P), and fall back to the forward-pass means (flattened `xs`). Forward means are always finite — they're just posterior updates that can't explode.
+- **Severity**: HIGH (unhandled → crashes an entire clip's precompute; silent NaN → corrupts every signal downstream)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-024 — Z-Score Lookahead Bias in Offline Pass-3 Architecture
+- **Type**: Gotcha / Quant Discipline
+- **Context**: Pass 3 iterates a FULL array of smoothed signals. It is trivially easy — and wrong — to compute `μ` and `σ` for z-scoring using the entire clip. A fatigue event at t=55s drags down the global mean, artificially inflating the z-score of a perfectly normal movement at t=5s. The player's 1st serve should NOT be z-scored against their 50th serve's distribution.
+- **Rule**: Every z-score, z-relative threshold, or baseline-normalization computation MUST use one of:
+  1. **Causal calibration window**: lock `μ`, `σ` to the first 10-15 seconds of the clip and hold them fixed for the rest of the match (matches how a human coach watches warm-up).
+  2. **Strictly past-facing rolling window**: compute `μ_t`, `σ_t` using only samples with `timestamp < t`, never ≥ t.
+- **FORBIDDEN**: `df.mean()`, `df.std()`, `np.mean(signal)`, `np.std(signal)` — ANY statistic computed over the full signal array for use in a z-score.
+- **Severity**: CRITICAL (lookahead bias invalidates every fatigue-claim we emit to Opus or to the HUD)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-025 — Video-Validation Protocol Blindspots (VFR Drift + Kinematic Static Frame)
+- **Type**: Gotcha / Validator Discipline
+- **Context**: 2026-04-23 video-frame-validator agent used `ffmpeg -ss 00:00:50 -vframes 1` to extract frames for vision cross-reference. Two latent bugs:
+  1. **VFR Drift**: `-ss timestamp` on variable-frame-rate MP4s drifts from the DuckDB integer `frame_idx`. Claude Vision validates the wrong frame and hallucinates mismatches against signal values.
+  2. **Kinematic Blindspot**: A single static frame cannot prove velocity. Vision has no way to verify `lateral_work_rate` or any m/s value — it only sees pose, not motion.
+- **Rule**:
+  - Always extract by absolute frame index: `ffmpeg -vf "select=eq(n\,N)" -vframes 1 out.png`. Never mix timestamps and frame indices.
+  - For kinematic validation, either (a) extract a 3-5 frame sprite strip (ffmpeg `select` with a range), or (b) use OpenCV to draw velocity-vector arrows on the frame before passing to Vision. Static frames can only validate POSE/POSITION, never VELOCITY.
+- **Severity**: HIGH (silently false validations mislead downstream signal tuning)
+- **Source**: Founder audit, 2026-04-23
+
+### PATTERN-054 — RTS Smoother Integration on PhysicalKalman2D (Phase 2 shipped 2026-04-23)
+- **Type**: Pattern / Implementation Recipe
+- **Context**: PATTERN-053 predicted 20-35% velocity noise reduction from adding RTS backward pass. Actual measured improvement on synthetic CV path was 69.6% RMSE + 87.3% variance reduction — PATTERN-053 was conservative.
+- **Rule**: Store forward-pass `(x, P)` snapshots at their native filterpy shape `(N, 4, 1)` + `(N, 4, 4)`, NOT pre-flattened — avoids per-update reshape in the hot path. Call `self._kf.rts_smoother(Xs, Ps)` with `Fs`/`Qs` defaulting to `None` (our F/Q are constant). Flatten only at the public return. ALWAYS `x.copy()` / `P.copy()` before appending — `rts_smoother` writes into its input arrays and would otherwise corrupt the live posterior.
+- **How to apply**:
+  ```python
+  # In update():
+  self._x_history.append(self._kf.x.copy())
+  self._p_history.append(self._kf.P.copy())
+  # New method:
+  def rts_smooth(self) -> np.ndarray:
+      xs = np.stack(self._x_history)  # (N, 4, 1)
+      ps = np.stack(self._p_history)  # (N, 4, 4)
+      smoothed_xs, _p, _k, _pp = self._kf.rts_smoother(xs, ps)
+      return smoothed_xs.reshape(smoothed_xs.shape[0], -1)  # (N, 4)
+  ```
+- **Test pattern**: Drive a known constant-velocity path with Gaussian measurement noise through forward-only + RTS, assert `rts_rmse < fwd_rmse` AND `rts_var < fwd_var` against ground truth. Mid-trajectory occlusion is the stress test — RTS uses FUTURE measurements to infer motion during the occlusion window, forward-only cannot.
+- **Wiring caveat**: Adding the capability to PhysicalKalman2D is architecturally free. Wiring it INTO `precompute.py`'s streaming loop is NOT — state-machine thresholds are tuned against forward-only noise. Three wiring strategies (smooth-then-replay / display-only / signal-only) are documented in FORANDREW.md 2026-04-23 entry; make that decision as a separate Phase 2b task.
+- **Severity**: HIGH (unlocks measurable offline advantage; validated against tests)
+- **Source**: Phase 2 implementation, 2026-04-23
+
+### GOTCHA-022 — Sensor Noise Floor: YOLO Wrist Flutter ≈ ±3-5px vs 8cm Clinical Threshold ≈ 11px
+- **Type**: Gotcha / Measurement Validity
+- **Context**: Plan proposed having Opus cite "Toss Precision degraded by 8.4cm" as biological fact. Physical pixel math invalidates this.
+- **Math**: At 1080p, a 1.8m player ≈ 253px tall → 0.71 cm/px. 8cm threshold = 11.2px. YOLO11m-Pose wrist-keypoint flutter ≈ ±3-5px = ±2.1-3.5cm. We are within 1.5-2× of the sensor noise floor.
+- **Lesson**: Absolute centimeter claims for serve toss variance are scientifically indefensible at our sensor resolution. Opus MUST use z-score abstractions: "Toss Precision degrading (z=+2.5) — this variance level aligns with clinical literature predicting serve-error elevation." Never state "toss varied by 8.4cm" as empirical fact.
+- **FIXED**: Added SENSOR NOISE FLOOR caveat to BIOMECH_PRIMER in system_prompt.py.
+- **Severity**: HIGH (credibility with technical judges)
+- **Source**: Founder override + physical pixel math, 2026-04-23
 
 ---
 

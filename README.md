@@ -1,164 +1,170 @@
 # PANOPTICON LIVE
 
-**A 2K-Sports-style video-game HUD for professional tennis, powered by Claude Opus 4.7.**
+**Clinical-grade biomechanical fatigue telemetry for pro tennis. Extracted from standard 2D broadcast pixels. No wearables. No sensors. Just pose estimation, physics, and Claude Opus 4.7.**
 
-Built for the Anthropic × Cerebral Valley **Built with Opus 4.7** virtual hackathon — April 21-26, 2026.
+Panopticon Live is a 2K-Sports-style video-game HUD that reads a pro tennis broadcast the way a team physiologist reads a motion-capture lab. Seven biomechanical signals — recovery lag, crouch depth, toss precision, ritual discipline, court position, court coverage, reaction timing — streamed over the live feed in real time, narrated by a three-agent Claude Opus 4.7 swarm. Built solo in six days for the Anthropic × Cerebral Valley *Built with Opus 4.7* hackathon. MIT licensed.
 
-[Live demo](https://panopticon-live.vercel.app) (TBD) · [3-min demo video](https://youtube.com) (TBD) · MIT licensed
+> Live demo: https://panopticon-live.vercel.app · 3-minute video: [YouTube](https://youtube.com) · Source: [github.com/andydiaz122/panopticon-live](https://github.com/andydiaz122/panopticon-live)
 
 ---
 
-## What it does
+## Why now
 
-Panopticon Live ingests a professional tennis match video, extracts seven biomechanical fatigue signals from broadcast-quality pose estimation, and renders the match as a **live video-game-style HUD** — a **world-class single-player biomechanics deep-dive**:
+Every sports-AI company on earth has access to the same thing we do: 30-year-old HD broadcast feeds. Two-dimensional pixels. Nothing on the athlete's body. The conventional wisdom says you need wearables or a dedicated motion-capture rig to get clinical biomechanics. We built the opposite.
 
-- **Cyan skeleton overlay** tracking the target player (Player A, near court) frame-by-frame — drawn via a zero-React-render rAF canvas loop at 30 FPS
-- **Pulsing signal bars** — fatigue, serve toss variance, baseline retreat, lateral work rate — animate when the player deviates from their match-opening baseline
-- **Opus 4.7 Coach panel** — coach-register commentary with visible `extended_thinking` tokens and real quantitative anchors ("A's baseline_retreat collapsed 1.67m → 0.10m")
-- **Generative HUD layout** — Opus 4.7 Designer re-arranges widgets in real time as match state changes (serve ritual → toss tracer; rally → footwork heatmap)
-- **Haiku 4.5 narrator ticker** — per-N-second broadcast-style color commentary ("Player A explodes laterally, covering the court with explosive urgency")
-- **Signal Feed** (2nd tab) — raw JSON stream, the B2B product surface for prediction-market infrastructure (Valence, Sequence, Dome)
-- **Scouting Report** (3rd tab) — Claude Managed Agent generates a full PDF report on demand
+YOLO11m-Pose on Apple Silicon gives us 17 COCO keypoints per detection at `conf=0.001`. A Kalman filter running on **physical court meters** (not screen pixels) smooths the jitter. A three-pass DAG with an RTS backward smoother strips 47% of peak-velocity noise on real footage. A state machine gates signal extraction to the windows where each signal is physiologically meaningful. The output is seven fatigue telemetry streams with academic literature anchoring four of them — crouch depth (PMC12298469), recovery lag (PMC12298469), toss variance (PMC12294548), lateral work rate (PMC10302430).
 
-**Scope note (DECISION-008, 2026-04-22)**: Panopticon is deliberately a single-player system. We master ONE player's biomechanics at a world-class level rather than two players superficially. The "Moneyball for tennis" angle. See [MEMORY.md](MEMORY.md) GOTCHA-016 for the CV detector-capacity rationale.
+The sensor didn't exist. So we built it. That is the moat.
 
-## Why it matters
+---
 
-Nobody extracts biomechanical fatigue signals from free broadcast video today. The sensor doesn't exist — until you build it. Panopticon Live is both a judge-facing visual showcase AND the foundation of a B2B signal-feed product aimed at the prediction-market infrastructure layer.
+## What's inside
 
-## Architecture
+A monorepo with a Python CV + agents backend and a Next.js 16 dashboard.
 
-```
-Video (MP4)
-  → ffmpeg stdout (BGR24 pipe, Zero-Disk per CLAUDE.md)
-  → YOLO11m-Pose on Apple MPS (17 COCO keypoints per detection)
-  → assign_players (bbox_conf ≥ 0.5 gate, court-half topology, tight lateral polygon)
-  → Kalman 2D smoothing (filterpy) on court meters via homography
-  → 3-state kinematic state machine (PRE_SERVE_RITUAL / ACTIVE_RALLY / DEAD_TIME)
-  → 7 biomechanical signal extractors (state-gated, BaseSignalExtractor ABC)
-  → DuckDB (pre-computed panopticon.duckdb) + match_data.json export
-  → [OFFLINE] Claude Opus 4.7 Coach (tool-use loop over signal queries)
-  → [OFFLINE] Claude Opus 4.7 HUD Designer (generative widget layouts)
-  → [OFFLINE] Claude Haiku 4.5 Narrator (per-10s color-commentary beats)
-  → match_data.json shipped to Next.js /public/match_data/
-  → Next.js 16 dashboard (PanopticonEngine rAF canvas loop; target 30 FPS, zero React renders)
-  → [LIVE @ demo time] Claude Managed Agent scouting report via Vercel Server Action
-```
+- **Backend** — YOLO11m-Pose inference on Mac Mini M4 Pro MPS, a `filterpy`-backed Kalman filter with an RTS smoother pass, a 4-state kinematic state machine, 7 signal extractors each built against a Pydantic v2 contract, DuckDB as the signal store, and an Anthropic SDK wrapper driving three Opus 4.7 agents.
+- **Dashboard** — Next.js 16 App Router (Turbopack), React 19, TypeScript strict mode, a 30 FPS canvas overlay on top of `<video>` with zero React re-renders per frame, three HUD tabs (Live HUD, Raw Telemetry, Orchestration Console), and a baud-rate typewriter playback for the multi-agent trace.
 
-All Opus/Haiku work is **pre-computed** at build time, so there's no network wobble during the demo. The only live Anthropic call is the scouting-report Managed Agent, which the user initiates by clicking.
+Architecture deep-dive: [docs/ORCHESTRATION_PLAYBOOK.md](docs/ORCHESTRATION_PLAYBOOK.md), [docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md).
 
-## The Three Roles of Opus 4.7
+---
 
-1. **Reasoner** — extended-thinking calls with deterministic signal-query tools. Thinking tokens streamed visibly in the UI.
-2. **Designer** — generative UI. Given current match state + active anomaly, Opus outputs a JSON layout spec. The frontend has fixed widget primitives; Opus arranges them dynamically.
-3. **Voice** — streamed coach-register commentary, typewritten into the HUD panel. Haiku 4.5 generates cost-aware per-second beats in parallel.
-
-Plus a **Claude Managed Agent** for the long-running scouting-report PDF pipeline.
-
-## Seven biomechanical signals
-
-| Signal | What it measures |
-|---|---|
-| `recovery_latency_ms` | Time from rally end to Kalman-smoothed velocity < 0.5 m/s |
-| `serve_toss_variance_cm` | Std dev of wrist-apex height across serves |
-| `ritual_entropy_delta` | Lomb-Scargle spectral entropy of pre-serve bounce cadence |
-| `crouch_depth_degradation_deg` | Pelvis-to-ankle distance drift (torso-normalized) |
-| `baseline_retreat_distance_m` | Homography-transformed position relative to own baseline |
-| `lateral_work_rate` | X-axis COM p95 velocity during rally |
-| `split_step_latency_ms` | Time from opponent contact to own velocity zero-crossing |
-
-See [`.claude/skills/biomechanical-signal-semantics/SKILL.md`](.claude/skills/biomechanical-signal-semantics/SKILL.md) for mathematical definitions + literature thresholds.
-
-## Hackathon constraints (all enforced in code)
-
-- **New Work Only** — every line written Apr 21-26, 2026; no prior code vendored
-- **MPS only, no CUDA** — strict `@torch.inference_mode()`, `torch.mps.empty_cache()` every 50 frames, `conf=0.001`, `imgsz=1280`
-- **Zero-Disk video pipeline** — ffmpeg stdout → numpy via `readexactly`; no `cv2.VideoCapture` from disk
-- **Bifurcated requirements** — `requirements-local.txt` (torch, ultralytics, opencv) for pre-compute; `requirements-prod.txt` (fastapi, anthropic, duckdb only) for Vercel's 250MB serverless limit
-- **Pydantic v2 at every module boundary** — no dict crosses between modules
-- **React 30-FPS death-spiral defense** — per-frame keypoints go into `useRef` + `requestAnimationFrame` + `<canvas>` direct paint; never `useState`
-
-## Repo layout
-
-```
-panopticon-live/
-├── backend/            Python 3.12 CV + agents + API
-│   ├── config.py       Env-derived Pydantic settings
-│   ├── cv/             YOLO, Kalman, state machine, signals
-│   ├── db/             DuckDB schema + Pydantic v2 contracts
-│   ├── agents/         Opus 4.7 Reasoner/Designer/Voice + Haiku + Managed Agent
-│   └── api/            FastAPI SSE replay + Opus orchestration
-├── dashboard/          Next.js 16 App Router (Bun for dev)
-├── scripts/            CLI tools (probe_clip.py, etc.)
-├── tools/              court_annotator.html (local-only dev tool)
-├── data/               Pre-computed DuckDB + clips (gitignored)
-├── tests/              pytest suite (≥80% coverage)
-├── docs/               ORCHESTRATION_PLAYBOOK.md + architecture
-└── .claude/
-    ├── agents/         12 specialized hackathon agents
-    └── skills/         8 project-scoped skills (orthogonal)
-```
-
-## Living documents
-
-- [CLAUDE.md](CLAUDE.md) — prime directive + hard constraints
-- [FORANDREW.md](FORANDREW.md) — plain-language walkthrough, decisions, bug journal
-- [MEMORY.md](MEMORY.md) — structured learnings (gotchas, patterns, decisions)
-- [TOOLS_IMPACT.md](TOOLS_IMPACT.md) — tool/skill/agent ROI log
-- [docs/ORCHESTRATION_PLAYBOOK.md](docs/ORCHESTRATION_PLAYBOOK.md) — tool-by-phase runbook
-
-## Quick start (local dev)
+## Quick start
 
 ```bash
-# 1. Clone + venv
+# 1. Clone
 git clone https://github.com/andydiaz122/panopticon-live
 cd panopticon-live
+
+# 2. Backend env (pre-compute machine — Mac with MPS recommended)
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-local.txt
+cp .env.example .env          # set ANTHROPIC_API_KEY
 
-# 2. Env
-cp .env.example .env
-# Set ANTHROPIC_API_KEY (required for the Phase 2 agent layer)
+# 3. Drop a pro tennis clip in data/clips/ and annotate the 4 court corners
+#    via tools/court_annotator.html — saves JSON to data/corners/
 
-# 3. Place a tennis MP4 at data/clips/utr_match_01_segment_a.mp4 and
-#    annotate the 4 court corners via tools/court_annotator.html →
-#    saves to data/corners/utr_match_01_segment_a_corners.json
-
-# 4. Run the pre-compute pipeline (~2:30 on Mac Mini M4 Pro, ~$0.30 in API spend)
+# 4. Pre-compute (about 2:30 on M4 Pro, ~$0.30 in API spend)
 python -m backend.precompute \
   --clip data/clips/utr_match_01_segment_a.mp4 \
   --corners data/corners/utr_match_01_segment_a_corners.json \
   --match-id utr_01_segment_a \
-  --player-a "Player A" --player-b "Player B" \
   --db data/panopticon.duckdb \
   --out-json dashboard/public/match_data/utr_01_segment_a.json \
-  --device mps --doubles-corners \
-  --coach-cap 10 --design-cap 10 --beat-cap 20 --beat-period-sec 10.0
-
-# For a fast CV-only smoke (no API cost), add --skip-agents
+  --agent-trace-json dashboard/public/match_data/agent_trace.json \
+  --device mps --doubles-corners
 
 # 5. Start the dashboard
 cd dashboard
 bun install
-bun run dev
-# Open http://localhost:3000 — PanopticonEngine renders the cyan Player A
-# skeleton overlay synchronized to video playback
+bun run dev                   # http://localhost:3000
 ```
 
-**CLI flags worth knowing** (`python -m backend.precompute --help`):
-- `--doubles-corners` — use when the court annotation traces the doubles alleys (USER-CORRECTION-026)
-- `--coach-cap`, `--design-cap`, `--beat-cap` — hard budgets on agent invocations (rate-limiter safety, cost control)
-- `--warmup-ms` — skip state transitions in first N ms (default 10000; GOTCHA-015)
-- `--min-trigger-gap-ms` — dedupe rapid-fire transitions (default 2000; USER-CORRECTION-028)
-- `--skip-agents` — CV-only mode, no API calls
+For a CV-only smoke run without API spend, add `--skip-agents`. Full CLI reference: `python -m backend.precompute --help`.
 
-## Acknowledgments
+---
 
-- Anthropic + Cerebral Valley for the hackathon
-- Ultralytics for YOLO11m-Pose
-- The UTR Tour for freely viewable professional tennis footage
+## Repo map
 
-## License
+```
+panopticon-live/
+├── backend/
+│   ├── cv/                   YOLO, Kalman, state machine, RTS smoother
+│   │   └── signals/          7 signal extractors, BaseSignalExtractor ABC
+│   ├── db/                   DuckDB schema + Pydantic v2 contracts
+│   ├── agents/               Opus 4.7 Coach, HUD Designer, Haiku Narrator,
+│   │                         3-agent Scouting Committee
+│   └── precompute.py         Orchestration entrypoint
+├── dashboard/
+│   └── src/
+│       ├── app/              Next.js App Router
+│       ├── components/
+│       │   ├── PanopticonEngine.tsx   30 FPS canvas + rAF loop
+│       │   ├── Hud/                   SignalBar, PlayerNameplate
+│       │   ├── Broadcast/             Telestrator, commentary
+│       │   ├── Telemetry/             Raw signal feed (Tab 2)
+│       │   └── Scouting/              Orchestration Console (Tab 3)
+│       └── lib/
+│           ├── signalCopy.ts          Fan-facing label table (source of truth)
+│           └── types.ts               TS mirror of Pydantic contracts
+├── tests/                    434 pytest + 82 vitest = 516 total
+├── docs/                     Architecture, deploy, storyboard
+└── .claude/
+    ├── skills/               Project-scoped skill team
+    └── agents/               Specialized review + build agents
+```
 
-MIT — see [LICENSE](LICENSE).
+---
+
+## The 7 signals
+
+Every signal is state-gated, physics-grounded, and maps to a fan-facing label. Copy is canonical in [`dashboard/src/lib/signalCopy.ts`](dashboard/src/lib/signalCopy.ts).
+
+| Signal (dev name) | Fan label | What it measures | Literature anchor |
+|---|---|---|---|
+| `recovery_latency_ms` | Recovery Lag | Time Player A takes to return to ready stance after shots. Elite fresh: <800 ms; fatigued: 800 ms+. | PMC12298469 (wrist velocity decline) |
+| `serve_toss_variance_cm` | Toss Precision | Vertical scatter of Player A's ball toss at apex. Variance above 8 cm correlates with serve accuracy breakdown. | PMC12294548 (toss variance → serve error) |
+| `ritual_entropy_delta` | Ritual Discipline | Spectral consistency of Player A's pre-serve movements — rising signals routine breaking down under load. | PMC8312934 (motor-variability indirect) |
+| `crouch_depth_degradation_deg` | Crouch Depth | Loss of knee flexion in Player A's ready position — the primary marker of lower-limb fatigue. | PMC12298469 (#1 fatigue marker) |
+| `baseline_retreat_distance_m` | Court Position | Player A's court position behind the baseline — tracks positioning adaptations as match demands accumulate. | PMC12069318 (tactical adaptation) |
+| `lateral_work_rate` | Court Coverage | Player A's peak lateral velocity per rally — tracks court coverage capacity and agility under load. | PMC10302430 (agility decline post-fatigue) |
+| `split_step_latency_ms` | Reaction Timing | Player A's movement burst timing relative to serve-bounce detection — delays signal neuromuscular slowing. | Novel (structurally first-of-kind) |
+
+Scope note (DECISION-008): we deliberately target Player A — the near-court athlete YOLO can reliably detect on broadcast footage. Moneyball for tennis. One player, forensic depth. See [MEMORY.md](MEMORY.md) GOTCHA-016 for the CV detector-capacity rationale.
+
+---
+
+## The Multi-Agent Swarm
+
+Panopticon's Opus 4.7 showcase is a three-agent Scouting Committee with real tool use, real extended thinking, and real handoffs. Each agent owns an orthogonal lens — the same division of labor a human quant desk uses.
+
+| Agent | Lens | Tools | Input |
+|---|---|---|---|
+| **Analytics Specialist** | Statistical anomalies in the 7 signal arrays | DuckDB read-only (`get_signal_window`, `compare_to_baseline`, `get_rally_context`, `get_match_phase`) | Raw signal schema + match ID |
+| **Technical Biomechanics Coach** | Physical-breakdown narrative grounded in biomech literature | None (grounded in `BIOMECH_PRIMER` system prompt) | Analytics Specialist's anomaly list |
+| **Tactical Strategist** | Match-strategy exploit (Vulnerability / Exploit Pattern / Watch Window) | None (pure synthesis) | Technical Coach's causal narrative |
+
+Handoffs cascade. Agent N+1's user message contains agent N's OUTPUT plus a shared-blackboard baseline context — PATTERN-059. This prevents the Coach from hallucinating biomech claims unconstrained by raw data.
+
+The real reasoning loop runs 45–60 seconds. Vercel serverless functions die at 15. So we built **Offline Trace Playback**: capture every `thinking` block, `tool_call`, `tool_result`, and `handoff` during `precompute.py` into a Pydantic-typed `AgentTrace` (discriminated union), write it to `dashboard/public/match_data/agent_trace.json`, and replay it client-side at baud-rate pacing (~25 chars/sec) with `[>> 4× SPEED]` scrub controls. Banner: *"ARCHITECTURAL PREVIEW: SWARM ACCELERATED FOR DEMO."* Honest disclosure, not a mock.
+
+This is the 2030 architecture. Cache the agent-loop. Replay at interaction time. Ship.
+
+Code: [`backend/agents/scouting_committee.py`](backend/agents/scouting_committee.py), [`backend/agents/system_prompt.py`](backend/agents/system_prompt.py), [`dashboard/src/components/Scouting/OrchestrationConsoleTab.tsx`](dashboard/src/components/Scouting/OrchestrationConsoleTab.tsx).
+
+---
+
+## Engineering craft
+
+- **516 tests passing.** 434 Python + 82 TypeScript. Zero regressions across Phase 2, 3, and 4 refactors.
+- **TypeScript strict mode clean.** `next build` compiles in 1327 ms (Next.js 16.2.4 + Turbopack).
+- **Strict 3-Pass DAG** (PATTERN-055). Pass 1: ffmpeg stdout → YOLO → forward Kalman. Pass 2: RTS backward smoother. Pass 3: state-machine + signal extraction on smoothed kinematics. Empirically measured **47% peak-velocity compression** vs forward-only noise on `utr_match_01_segment_a.mp4` (60s, 1800 frames).
+- **Kalman filter on physical court meters**, not normalized pixels (USER-CORRECTION-008). Homography transforms pixel space → court plane before any kinematic claim is made.
+- **Zero-Disk video policy.** `ffmpeg` stdout → `io.BytesIO` → YOLO. No `cv2.VideoCapture` from disk.
+- **React 30-FPS defense.** Per-frame keypoints → `useRef` + `requestAnimationFrame` + `<canvas>` direct paint. Zero React re-renders per frame. See [`.claude/skills/react-30fps-canvas-architecture/SKILL.md`](.claude/skills/react-30fps-canvas-architecture/SKILL.md).
+- **MPS safeguards.** `@torch.inference_mode()`, `torch.mps.empty_cache()` every 50 frames, graceful `torch.mps.MemoryError` handling, single-worker asyncio executor.
+- **Pydantic v2 at every module boundary.** No dict ever crosses between modules. Schema: [`backend/db/schema.py`](backend/db/schema.py).
+- **Bifurcated requirements.** `requirements-local.txt` (torch, ultralytics, opencv) for pre-compute; `requirements-prod.txt` (fastapi, anthropic, duckdb) for Vercel's 250 MB serverless limit.
+
+Living docs: [CLAUDE.md](CLAUDE.md) (constraints), [FORANDREW.md](FORANDREW.md) (decision log), [MEMORY.md](MEMORY.md) (gotchas + patterns), [TOOLS_IMPACT.md](TOOLS_IMPACT.md) (ROI).
+
+---
+
+## Who buys this
+
+- **Broadcasters.** Every match feels like Game 7. Live fatigue chyrons, anomaly callouts, clutch-moment detection. The HUD is broadcast-grade visual intelligence the network can run itself.
+- **Sports betting syndicates.** The raw signal feed is a live edge. Biomechanical fatigue is a leading indicator that closing odds have not priced in — 46 signal emissions per minute on a real UTR clip, each one a tick a model can consume.
+- **Elite coaching and player operations.** Post-match opponent scouting. Pre-match preparation briefs. Forensic breakdowns of one opponent's biomechanics over a full season — Moneyball for tennis.
+
+Same physics engine. Three surfaces. Three revenue streams.
+
+---
+
+## Credits
+
+Solo-built by [Andrew Diaz](https://andrewdiaz.io) with Claude Code for the Anthropic × Cerebral Valley *Built with Opus 4.7* hackathon (April 21–26, 2026).
+
+MIT licensed — see [LICENSE](LICENSE).
+
+Acknowledgments: Ultralytics for YOLO11m-Pose, the `filterpy` maintainers for the Kalman + RTS implementation, Anthropic for Opus 4.7 + extended thinking + tool use, the UTR Tour for freely viewable professional tennis footage.

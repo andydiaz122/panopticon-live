@@ -662,3 +662,304 @@ Finishing the scaffold was the right move. Now the map is clear:
 The team-lead review pattern (team-lead-then-execution) keeps paying dividends. Every time I wrote a plan, you came back with 5-9 patches BEFORE code was written. Each patch was genuinely load-bearing. I'm going to keep making drafts, not final plans, and letting you QA them cheap before they become expensive bugs.
 
 The orthogonal skill team is also paying off. When we designed SignalRail's state-gating, we didn't touch the `2k-sports-hud-aesthetic` skill (visuals), didn't touch `biomechanical-signal-semantics` (thresholds), didn't touch `react-30fps-canvas-architecture` (render pattern). The new discipline ("which signals are contextually appropriate in which state") belongs to a new concern layer, and it crystallized as a separate module (`stateSignalGating.ts`) + a new MEMORY pattern (PATTERN-052). That's the orthogonal-skill approach actually working in practice — not just aspirationally.
+
+---
+
+## PHASE 4 — Research Campaign + 5 Founder Overrides (Apr 23, 2026 — Thu)
+
+### What happened
+
+Ran a 3-round dialectical steelmanning campaign (Technical Skeptic × Scientific Auditor × Demo ROI × Competitive Moat × Signal Reframing × Kalman Alternatives) using Perplexity deep research. The process surfaced the research campaign plan, then systematically challenged it from orthogonal angles. Andrew then reviewed the v2 plan and issued 5 critical architectural overrides before a single line of code was written.
+
+### 5 Founder Overrides (in order of criticality)
+
+**Override 1: Ghost Opponent Contradiction** (GOTCHA-021, CRITICAL)
+The research plan proposed reframing `split_step_latency_ms` as "delay from opponent's racket contact to Player A's split-step." But DECISION-008 + GOTCHA-016 mean Player B is physically undetectable. This was a logical hole technical judges would immediately spot. **Fix**: Signal is now described purely in terms of Player A's own state-machine transitions (serve-bounce detection → movement burst). Updated `signalCopy.ts` and `system_prompt.py`.
+
+**Override 2: SG polyorder=1 Physics Trap** (GOTCHA-018, CRITICAL)
+Research plan proposed `savgol_filter(window=7, polyorder=1)` for velocity smoothing. polyorder=1 is mathematically a Simple Moving Average — it smears impulse peaks. Tennis split-steps and push-offs ARE the signal (impulse peaks). **Fix**: Must use polyorder≥2. This preserves biological local maxima while suppressing YOLO noise floor.
+
+**Override 3: Kalman Inversion + Offline Advantage** (GOTCHA-019, GOTCHA-020, PATTERN-053)
+Two compounding errors: (a) plan said "increase Q if innovation is high" — backwards; higher Q raises Kalman Gain making filter trust jittery YOLO MORE. (b) Plan cautioned SG adds "233ms temporal lag" — but we're OFFLINE. `precompute.py` has access to all future states. `scipy.signal.savgol_filter` on a full array uses centered window = zero-phase, zero lag. Even better: use filterpy's RTS smoother (Rauch-Tung-Striebel) — 3-line code addition running backward pass over Kalman states. Mathematically optimal, zero-lag, no architectural change. **Fix**: Phase 2 is now "RTS smoother + polyorder=3 SG" not "Kalman CA upgrade."
+
+**Override 4: Sensor Noise Floor Trap** (GOTCHA-022, HIGH)
+Physical pixel math: 1.8m player ≈ 253px tall in 1080p → 0.71 cm/px. 8cm clinical toss variance threshold = 11.2px. YOLO wrist keypoint flutter ≈ ±3-5px = ±2-3.5cm. We are within 1.5-2× of the sensor noise floor. Having Opus state "toss varied by 8.4cm" as fact is scientifically indefensible. **Fix**: Added SENSOR NOISE FLOOR caveat to BIOMECH_PRIMER: "Use z-score framing exclusively; never state absolute cm as biological fact."
+
+**Override 5: Kill YOLO11x-Pose Entirely**
+Research plan left YOLO11x-Pose as Phase 4 contingency. The detection failure (GOTCHA-016) is caused by sub-pixel occlusion and H.264 compression artifacts — not by model parameter count. Larger model won't help. It would waste MPS RAM, risk OOM errors, and slow precompute iteration. **Fix**: Removed from plan entirely. Saturday is Vercel deploy stability + 3-min video.
+
+### Phase 1 Lite: What we executed (signalCopy.ts + system_prompt.py)
+
+Updated 7 signal labels and fanDescriptions with literature-backed language:
+
+| Signal | Old Label | New Label | Key Change |
+|---|---|---|---|
+| `baseline_retreat_distance_m` | "Baseline Retreat" | "Court Position" | Removed "giving ground to opponent's heat" (overclaims fatigue causation) |
+| `serve_toss_variance_cm` | "Toss Consistency" | "Toss Precision" | Added 8cm clinical threshold reference |
+| `lateral_work_rate` | "Lateral Work" | "Court Coverage" | Anchored in agility literature (PMC10302430) |
+| `split_step_latency_ms` | "Split-Step Timing" | "Reaction Timing" | FIXED ghost opponent reference; now Player A isolated mechanics |
+| `ritual_entropy_delta` | "Ritual Discipline" | (kept) | Updated description: spectral consistency, not "pattern degrading" |
+| `crouch_depth_degradation_deg` | "Crouch Depth" | (kept) | Updated description: "primary marker of lower-limb fatigue" |
+| `recovery_latency_ms` | "Recovery Lag" | (kept) | Added elite timing ranges: <800ms fresh, 800ms+ fatigued |
+
+Updated `system_prompt.py`:
+- Signal 7 now anchors on Player A's state machine (no opponent dependency)
+- Added FAN-FACING LABELS instruction (use "Court Coverage" not "lateral_work_rate" in commentary)
+- Added SENSOR NOISE FLOOR caveat for serve toss variance
+
+### Phase 2 target (Friday): RTS Smoother
+
+3-line code addition to `precompute.py` or `kalman.py`: Run `kf._kf.rts_smoother()` backward pass over stored Kalman states. This replaces the 5-8h Kalman CA upgrade with 30 minutes of code + test.
+
+### 2026-04-23 — Phase 2 SHIPPED: RTS Smoother on PhysicalKalman2D (`backend/cv/kalman.py`)
+
+TDD cycle executed cleanly:
+1. **RED**: `tests/test_cv/test_kalman_rts.py` — 8 tests (shape, pre-update error, non-mutation, RMSE optimality, jitter reduction, position tracking, mid-trajectory occlusion, determinism). Confirmed failing (`AttributeError: 'PhysicalKalman2D' object has no attribute 'rts_smooth'`).
+2. **GREEN**: Added forward-pass state recording (`_x_history`, `_p_history` lists of `kf.x.copy()`, `kf.P.copy()`) + `rts_smooth()` method calling `self._kf.rts_smoother(Xs, Ps)` with `self.F`/`self.Q` defaults. 26 net lines, zero changes to existing `update()` return shape.
+3. **Verify**: 16/16 on `test_kalman.py` + `test_kalman_rts.py`, and 310/310 on full `tests/test_cv/` + `tests/test_db/` suites — zero regression.
+
+**Measured improvement** on a realistic 10s CV path (300 frames, 2.5 m/s horizontal, 0.3 m/s vertical, 0.1m Gaussian measurement noise):
+- velocity RMSE: 0.3338 m/s → 0.1013 m/s = **69.6% reduction**
+- velocity variance sum (post-convergence): 0.0662 → 0.0084 = **87.3% jitter reduction**
+
+Well above PATTERN-053's conservative 20-35% estimate — because our CV model is perfectly matched to the synthetic test path. Real broadcast footage will sit lower on this range but still visible-to-the-eye smoother.
+
+**Key design decisions** (logged to MEMORY.md as PATTERN-054):
+- Store snapshots at shape `(N, 4, 1)` not `(N, 4)` — preserves filterpy column-vector convention and avoids a per-update reshape in the hot path; flatten to `(N, 4)` only at the public return.
+- Omit `Fs`/`Qs` arguments to `rts_smoother` — F/Q are constant over the match (our `dt` never changes), so filterpy's defaults are correct.
+- `rts_smooth()` reads `x.copy()` / `P.copy()` — `rts_smoother` internally writes to its input arrays, but our copies protect the live posterior. Pinned by `test_rts_smooth_does_not_mutate_live_filter_state`.
+
+**Wiring into precompute.py — DEFERRED pending scope decision.** The live loop (`backend/precompute.py:595-625`) consumes forward-only Kalman state per frame to drive the state machine AND emit signal samples in the same pass. Injecting RTS-smoothed velocities into the state machine would change the noise profile that its transition thresholds are tuned against. Three wiring options on the table:
+- **(a) Smooth-then-replay** (two-pass architecture): Run all YOLO + forward-Kalman to completion, RTS-smooth, then re-run the state machine and signal extractors against smoothed velocities. Cleanest; biggest structural change.
+- **(b) Display-only smoothing**: Keep forward-only velocities driving state-machine and signals; run RTS after the main loop and emit a parallel `smoothed_velocity` column in DuckDB for HUD display. Lowest risk; weakest demo payoff (SignalBar is biometrics, not raw velocity).
+- **(c) Signal-only smoothing**: State machine uses forward-only (preserves tuning), but the 7 signal extractors that consume velocity (`recovery_latency_ms`, `lateral_work_rate`, `split_step_latency_ms`) get RTS-smoothed velocities. Medium risk; biggest signal-quality payoff since velocity-derived signals are the ones judges scrutinize.
+
+My recommendation is **(c)** — but it's a non-trivial refactor of `precompute.py` and should be its own decision point. The PhysicalKalman2D capability is now IN PLACE; the wiring is a separate Phase-2b sub-task.
+
+### 2026-04-23 — Phase 2B FOUNDER AUDIT: Option C REJECTED, Strict 3-Pass DAG COMMANDED
+
+The founder rejected my "signal-only" wiring recommendation and issued a four-part architectural mandate. Acknowledging + logging durably so future sessions cannot drift back.
+
+**Why Option C was a fatal flaw — Temporal Decoupling (USER-CORRECTION-023).** My recommendation assumed state-machine TRANSITIONS and signal VALUES could live on different data channels. They cannot. The FSM's transition timing IS a feature — RTS uses future data to shift velocity impulse peaks toward their true centers, so a forward-pass FSM fires at noise-induced peaks while the smoothed signal values are windowed against the WRONG timestamps. "Preserve existing threshold tuning" is not an engineering reason; it's exactly the drift the override is designed to kill. If smoother peaks are lower amplitude, we re-tune thresholds in Phase 4. We do not compromise DAG correctness for config values.
+
+**Mandated architecture — Strict 3-Pass DAG (PATTERN-055):**
+- **Pass 1 — Forward Sweep**: decode → YOLO pose → player assignment → CourtMapper → `kalman.update()`. FORBIDDEN in Pass 1: bounce detector, state machine, signal extractors, feature compiler.
+- **Pass 2 — Backward Sweep**: `kalman.rts_smooth()` per player → (N, 4) smoothed trajectory arrays.
+- **Pass 3 — Semantic Sweep**: iterate chronologically over smoothed arrays; feed smoothed (x, y, vx, vy) into RollingBounceDetector → MatchStateMachine → signal extractors → FeatureCompiler, in canonical order.
+
+**Three other traps the audit exposed:**
+
+1. **NaN Covariance Explosion (GOTCHA-023)** — 15+ frames of `update(None)` balloon P; `rts_smoother` matrix-inverts the blown-up P and throws `LinAlgError: Singular matrix` OR silently propagates NaNs. Fix: wrap `rts_smoother` in try/except + `np.isfinite` validation; on failure, warn and return flattened forward means as safe fallback. TDD test first.
+
+2. **Z-Score Lookahead Bias (GOTCHA-024)** — Pass 3 has full-array access. Computing `μ`/`σ` over the entire clip for z-scoring is lookahead bias: a fatigue event at t=55s drags the global mean, artificially inflating z-scores at t=5s. Lock baselines to either (a) causal calibration window (first 10-15s held fixed) or (b) strictly past-facing rolling window. FORBIDDEN: `df.mean()` / `np.std(signal)` on the full array for any z-score.
+
+3. **Vision Validator Blindspots (GOTCHA-025)**:
+   - VFR Drift: `ffmpeg -ss 00:00:50` drifts on variable-frame-rate MP4s; the extracted frame is NOT DuckDB frame_idx=1500. Must use `ffmpeg -vf "select=eq(n\,1500)" -vframes 1` (absolute frame index).
+   - Kinematic Blindspot: A static frame cannot validate velocity. For kinematic signals, generate a 3-5 frame sprite strip OR overlay velocity-vector arrows with OpenCV before vision.
+
+**Execution order** (tasks #5-#9 in the current task list):
+1. NaN-trap TDD test + patch (low risk, unblocks refactor)
+2. Update `video-validation-protocol` SKILL (prevents false validations during the refactor)
+3. Execute the 3-Pass refactor on `precompute.py`
+4. Enforce causal z-score windows across all signal extractors
+
+Meta-learning: when the founder pushed back with "Do not compromise our DAG architecture to save a temporary config threshold," that is the exact pattern I need to internalize. I was defaulting to "minimize blast radius of the change" which, for correctness-critical offline pipelines, is the wrong optimization target. The correct target is "build the pure, correct physics engine; re-tune around it."
+
+### 2026-04-23 — Phase 2B SHIPPED: all 4 audit directives executed
+
+All four directives from the founder audit landed in a single pass, TDD-driven, with **397/397 tests passing repo-wide** (up from 313 after Phase 2A → 397 with +14 new tests covering the new invariants).
+
+**1. GOTCHA-023: NaN Explosion Trap** — patched in `backend/cv/kalman.py:rts_smooth()`. The method now catches `np.linalg.LinAlgError` AND post-validates `np.isfinite(smoothed).all()` before returning. On either failure path: emit a `UserWarning` with frame-count diagnostics and fall back to the flattened forward-pass means (always finite by construction). Three new TDD tests pin the contract:
+- `test_rts_smooth_handles_prolonged_occlusion_without_nan` — 300 occluded frames stay finite
+- `test_rts_smooth_falls_back_to_forward_means_on_linalgerror` — monkeypatched LinAlgError triggers fallback
+- `test_rts_smooth_falls_back_when_output_contains_nan` — silent NaN propagation triggers fallback
+
+Empirical probing showed filterpy is more tolerant than the audit threat model assumed — at 100,000 frames of occlusion the covariance condition number only reaches 1.5e7 (numerically degraded but not singular). Nonetheless the defense-in-depth layer is correct: a single pathological Q-tuning experiment or degenerate measurement could push us past the cliff, and the cost of the guard is ~10 lines.
+
+**2. PATTERN-055: Strict 3-Pass DAG** — refactored `backend/precompute.py` lines 582-680. The single streaming loop became three explicit passes:
+- Pass 1 (Forward Sweep): ffmpeg decode → YOLO pose → player assignment → CourtMapper → `kalman.update()`. FORBIDDEN in Pass 1: RollingBounceDetector, MatchStateMachine, FeatureCompiler.
+- Pass 2 (Backward Sweep): `kalman_a.rts_smooth()` + `kalman_b.rts_smooth()` (skipped on empty clips).
+- Pass 3 (Semantic Sweep): chronological iteration of stored `FrameKeypoints`; smoothed `(x, y, vx, vy)` tuples fed into bounce → state_machine → compiler.tick.
+
+Legacy 10-frame convergence gate preserved via `(i + 1) >= PhysicalKalman2D.CONVERGENCE_FRAMES` — mirrors the old `kalman.is_converged` sequence exactly, keeping warm-up semantics identical. All 38 precompute + feature-compiler-E2E tests pass unchanged.
+
+**3. GOTCHA-024: Z-Score Lookahead Bias** — audited every `np.mean`/`np.std`/`np.percentile` call in `backend/cv/` and `backend/agents/`. Findings:
+- Every signal extractor (`crouch_depth`, `serve_toss_variance`, `ritual_entropy`, `lateral_work_rate`, `baseline_retreat`, `split_step_latency`, `recovery_latency`) operates on per-flush **bounded buffers** — causal by construction.
+- `agents/tools.py::execute_compare_to_baseline` already filters `s.timestamp_ms <= inp.t_ms` (baseline = first N sec, current = last N sec up to t_ms) — causal.
+- `agents/tools.py::execute_get_signal_window` already filters `t_lo < s.timestamp_ms <= inp.t_ms` — causal.
+
+The codebase was already clean. Task shifted from "fix leakage" to "prevent future leakage" — added 3 regression-guard tests in `tests/test_agents/test_tools.py`:
+- `test_compare_to_baseline_ignores_future_samples` — adding a sample at t=120s must not change z-score at t=40s
+- `test_get_signal_window_ignores_future_samples` — adding a spike at t=30s must not change stats at t=5s
+- `test_compare_to_baseline_baseline_window_is_causally_locked` — baseline window = first 30s, not shifted by late-match samples
+
+**4. GOTCHA-025: Video Validation Protocol Blindspots** — patched `.claude/skills/video-validation-protocol/SKILL.md`:
+- Mandated absolute-frame-index extraction via `ffmpeg -vf "select=eq(n\,N)" -vframes 1`. Banned `-ss <timestamp>` entirely (drifts on VFR MP4s).
+- Mandated sprite-strip extraction (5 frames across 200ms) OR OpenCV velocity-vector overlay for any kinematic/velocity validation. Banned single-still-frame validation of motion signals.
+- Added "Two Banned Anti-Patterns" checklist at the top of the validator so every validator-agent dispatch has a glance-check before it runs.
+
+**Test counts:** 313 → 397 passing (the +84 delta is tests from `tests/test_agents/` that were always there; my earlier "310" / "313" counts were just `tests/test_cv/ + tests/test_db/`). Net new tests shipped this session: 14 (8 Phase 2A RTS + 3 NaN-robustness + 3 lookahead-bias).
+
+**The refactor is complete. The engine is correct. Thresholds can now be re-tuned in Phase 4 with confidence that the physics underneath is sound.**
+
+### 2026-04-23 — Phase 3 FOUNDER STRATEGIC PIVOT: Multi-Agent Swarm with Trace Playback
+
+The founder pushed back on my "serve static text to avoid Vercel timeout" proposal and redefined the Phase 3 + 4 strategy. Four directives, all accepted:
+
+**1. Multi-Agent Swarm Architecture (USER-CORRECTION-024, PATTERN-056)**
+Build a real Scouting Committee of 3 orthogonal agents using Anthropic API + tools + extended thinking:
+- **Analytics Specialist** (DuckDB tool) — finds statistical anomalies in the signal arrays
+- **Technical Biomechanics Coach** — translates Quant's numbers into physical-breakdown narrative via biomech literature
+- **Tactical Strategist** — synthesizes the match-strategy recommendation from Technical's breakdown
+
+Real handoffs: agent N+1 reads agent N's OUTPUT, not the raw signals. This mirrors our own development process (quant → biomech → tactics) and is the 2030-vision architecture — the real product will have dozens of specialized agents with orthogonal skills (stroke mechanics, tactical patterns, injury risk, opponent history...).
+
+**2. Agent Trace Playback UI (PATTERN-056)**
+The reasoning loop takes 45-60s — Vercel kills it at 10-15s. Resolution: run the Committee OFFLINE during `precompute.py`. Capture every event (thinking block, tool_call, tool_result, handoff, intermediate payloads) into typed `AgentTrace` (Pydantic v2, discriminated-union events). Frontend Tab 3 becomes a "Live Agent Orchestration Console" that plays back the trace with artificial delays (200-800ms per event, 1-3s between handoffs). Banner: "ARCHITECTURAL PREVIEW: SWARM ACCELERATED FOR DEMO" — honest disclosure, not a mock.
+
+The demo effect: judges physically see "[System] Waking Analytics Agent..." → "[Analytics] Executing DuckDB query..." → "[Technical] Evaluating crouch-depth degradation..." → "[Tactical] Synthesizing vulnerability." We built the real agent logic (Opus 4.7 criterion = 25%), we showcase the 5-10 year vision (judges' stated preference), AND we immunize against Vercel timeouts.
+
+**3. Threshold Tuning Debt (PATTERN-057)**
+RTS smoother stripped YOLO jitter. Peak velocities that noise-aliased as 2.4 m/s now register at ~1.6 m/s smoothed. Every hardcoded kinematic threshold in `state_machine.py`, `temporal_signals.py`, and the 7 signal extractors must be re-tuned against the new regime before Phase 3 UI work. If we skip this, the FSM will starve — fewer transitions, thinner signal feed, Coach gets less to say. Tuning is NOT guessing; it's empirical histogram fitting on a real clip (or synthetic RTS path if real clip unavailable).
+
+**4. Next.js Hydration Death (GOTCHA-026)**
+match_data.json will be 15-25MB (1800 frames × 30fps × 2 players × 17 keypoints × 7 signals × states). If ANY part of that JSON flows through a Next.js Server Component prop, React serializes it into `__NEXT_DATA__` and hydration parses 15MB on the main thread — killing the 60fps video during the first 2 seconds. The only correct pattern: static assets in `dashboard/public/match_data/`, loaded via `fetch()` in `useEffect`. This plays well with our react-30fps-canvas-architecture skill (ref + rAF + canvas).
+
+**Execution order** (accepted): docs → skills → empirical tuning → scouting_committee + agent_trace schema → wire into precompute → Phase 3 Orchestration Console UI.
+
+**Meta-learning I'm locking in**: when I see a platform constraint (Vercel timeout) conflict with a product vision (live multi-agent reasoning), my default should be "decouple compute from display via trace capture + playback," NOT "downgrade the product to fit the platform." The former is how the industry will actually solve this over the next 5-10 years (agent-loop results cached + replayed at interaction time); the latter is how we lose the hackathon. Logged as USER-CORRECTION-024.
+
+### 2026-04-23 — Phase 3 SHIPPED: all 4 founder directives executed
+
+All four Phase 3 mandates landed TDD-driven, with **507 tests passing (427 Python + 80 TypeScript)**.
+
+**1. Multi-Agent Swarm Architecture — shipped** (`backend/agents/scouting_committee.py`)
+- 3 orthogonal agents with distinct system prompts and handoff cascading:
+  - `ANALYTICS_SPECIALIST_NAME` — DuckDB tool access (get_signal_window, compare_to_baseline, get_rally_context, get_match_phase), 5-iteration tool-use loop
+  - `TECHNICAL_COACH_NAME` — no tools, grounded in BIOMECH_PRIMER, takes Analytics output verbatim
+  - `TACTICAL_STRATEGIST_NAME` — no tools, synthesizes Vulnerability / Exploit Pattern / Watch Window markdown
+- Real handoffs: each agent's user-message is the prior agent's OUTPUT, not raw ToolContext.signals. Pinned by `test_real_handoff_cascading_inputs`.
+- Error resilience: any single agent failure produces a `[error: ...]` text event but never raises into precompute. Pinned by `test_api_error_in_middle_agent_produces_graceful_partial_trace`.
+- 7/7 Scouting Committee tests pass on first TDD cycle.
+
+**2. AgentTrace Schema (PATTERN-056) — shipped** (`backend/db/schema.py`)
+- Discriminated union over `kind`: TraceThinking / TraceToolCall / TraceToolResult / TraceText / TraceHandoff
+- `AgentStep` validates monotonic event timestamps + started_at ≤ completed_at
+- `AgentTrace` validates chronologically non-overlapping steps
+- TypeScript mirror added in `dashboard/src/lib/types.ts` with identical snake_case fields
+- 16/16 schema tests pass (including round-trip JSON + Python/TS compat)
+
+**3. Agent Trace Playback UI — shipped** (`dashboard/src/components/Scouting/OrchestrationConsoleTab.tsx`)
+- Loads `/match_data/agent_trace.json` via `fetch()` in `useEffect` (GOTCHA-026-compliant, NEVER as RSC prop)
+- Three agent columns reveal events with deterministic pacing:
+  - thinking → 800ms dramatic pause
+  - tool_call → 300ms
+  - tool_result → 700ms
+  - text → 400-1200ms scaled to content length
+  - handoff → 1600ms (state transition emphasis)
+- Transport controls: Play / Pause / Skip-to-brief / Replay; live progress bar
+- "ARCHITECTURAL PREVIEW: SWARM ACCELERATED FOR DEMO" banner (honest disclosure)
+- Final Tactical Strategist markdown renders at the end with prose styling
+- 9/9 `agentTracePlayback.test.ts` vitest cases pass (pacing monotonicity, total-duration bounds, flattening correctness)
+
+**4. Threshold Tuning — shipped with empirical evidence** (`backend/cv/thresholds.py` + PATTERN-058)
+- Consolidated `KINEMATIC`, `POSE_CONF`, `NUMERIC` typed constants into one module
+- `state_machine.py` + `recovery_latency.py` now import from `thresholds.py` (single-file diff when re-tuning)
+- Ran real 3-Pass precompute on `utr_match_01_segment_a.mp4` (60s, 1800 frames) — measured compression:
+  - `lateral_work_rate` max: 3.983 → 2.119 m/s = **-47% peak compression** (confirms founder's 2.4 → 1.6 intuition empirically, validates PATTERN-057)
+  - `lateral_work_rate` median: 0.369 → 0.378 (robust — noise was adding spurious HIGH values)
+  - FSM not starved: 13 ACTIVE_RALLY signals emitted at current `ACTIVE_RALLY_SPEED_THRESHOLD_MPS = 0.2`
+- `split_step_latency_ms = 0` emissions under BOTH regimes — that's GOTCHA-016 (Player B undetectable), NOT a threshold issue
+- `post_rts_calibrated` flag kept at `False` — true empirical calibration requires histograms across multiple clips, not just this one
+
+**Wiring into `precompute.py`**
+- New CLI flags: `--skip-scouting-committee`, `--agent-trace-json <path>`
+- Committee runs AFTER the existing Coach/Designer/Narrator block, reuses the same anthropic_client + ToolContext
+- Writes to `<out-json-dir>/agent_trace.json` by default; frontend loads from there
+
+**Documentation landed**:
+- 5 new MEMORY.md entries: PATTERN-056, PATTERN-057, PATTERN-058, GOTCHA-026, USER-CORRECTION-024
+- 3 new project-scoped skills: `multi-agent-trace-playback`, `threshold-tuning-debt`, `nextjs-hydration-traps`
+- CLAUDE.md updated with DECISION-010 (Demo Vision) so every future session loads the swarm-vision framing at turn 0
+
+**Test counts repo-wide**:
+- Backend: 427 passing (was 313 → 397 Phase 2B → 427 now = +14 new this Phase 3)
+- Frontend: 80 passing (was 71 → 80 = +9 playback tests)
+- Total: **507 passing**, zero regression across the entire refactor
+
+**Ready-for-demo posture**: the physics engine is pristine, the agent swarm is real, the UI is decoupled from the deploy envelope, and the 2030 vision is showcased without hanging a single serverless function. Phase 4 (Vercel deploy + 3-min demo video) can now proceed.
+
+### 2026-04-23 — Phase 4 PREP SHIPPED: 5 audit directives executed, zero deploy touched
+
+Founder audit exposed 5 orthogonal failure modes across the stack. All resolved TDD-first. **516 tests pass** (434 Python + 82 TS), TypeScript + `next build` both clean.
+
+**1. Ghost Opponent CODE-DOCS DESYNC → FIXED** (`backend/cv/signals/split_step_latency.py`)
+USER-CORRECTION-025 surfaced a catastrophic credibility bug: Phase 1 Lite updated `signalCopy.ts` and `system_prompt.py` to anchor `split_step_latency_ms` on Player A's isolated mechanics, but the underlying Python math still read `opponent_state` transitions. My Phase 3 report then blamed GOTCHA-016 (Player B undetectable) for the zero-emissions starvation — wrong diagnosis. Real cause: code never got updated to match the overridden definition.
+- **Patched semantics**: `split_step_latency_ms = t_target_entered_ACTIVE_RALLY − t_target_entered_PRE_SERVE_RITUAL`. Purged all `opponent_state` reads from the math.
+- **Rewrote `test_signal_split_step_latency.py` from scratch** (13 tests, all passing): happy path, occluded-opponent, server-side emission restored, multi-rally cycling, flush/reset semantics, missing-match-id fail-fast.
+- **Updated cascade rule** logged as USER-CORRECTION-025: any signal override MUST touch UI copy + agent prompts + extractor math + tests in the same commit. Never leave the math behind.
+
+**2. Shared Blackboard Handoffs → SHIPPED** (`backend/agents/scouting_committee.py`, PATTERN-059)
+Previous handoffs were strict Markov-chain substitution: agent N+1 saw ONLY agent N's output. Trap: if Analytics Specialist under-reports, Technical Coach hallucinates biomech claims unconstrained by the raw data.
+- **New architecture**: `_build_baseline_context()` produces a ground-truth frame (match_id, player identity, signal taxonomy, transition counts, match duration) that's carried VERBATIM into every agent's user message.
+- **`_compose_user_prompt(baseline, focus, instructions)` helper**: additive composition — baseline stays constant, focus (upstream output) and instructions vary per turn.
+- **2 new regression tests**: baseline appears in all 3 user messages; downstream agents see both baseline AND upstream focus.
+
+**3. Trace Payload Truncation → SHIPPED** (GOTCHA-027)
+`TRACE_MAX_OUTPUT_JSON_CHARS = 2000` enforced in `_EventRecorder.tool_result()`. Truncation is UI-SIDE ONLY — the LLM still received the full tool output during execution; only the disk-written `agent_trace.json` is truncated with `" ... [Array truncated for UI playback]"` marker. Prevents 100MB+ payload blow-up if Analytics Specialist runs 5 DuckDB queries that each return hundreds of samples.
+- **2 new tests**: huge tool result gets truncated with marker; small tool result passes through unchanged.
+
+**4. Baud-Rate Typewriter Pacing → SHIPPED** (GOTCHA-028, via parallel agent dispatch)
+`TEXT_BAUD_CHARS_PER_SEC = 25` (mid-point of 20-30 founder range). A 500-char Tactical brief takes ~20s to stream (was 1.2s under the old cap). `TEXT_MIN_DELAY_MS = 300` floor prevents near-instant flashes for empty/1-char outputs.
+- Removed arbitrary 400-1200ms clamp — long outputs are supposed to feel long.
+- Added `[>> 4× SPEED]` / `[▶ 1× SPEED]` toggle to the Orchestration Console transport bar so judges can skim.
+- 11 vitest cases (was 9; +2 net) covering linear-scaling, no-artificial-cap, min-floor, realistic 3-agent trace under 3-min budget.
+
+**5. Vercel Bifurcation → CONFIGURED (NOT DEPLOYED)** (GOTCHA-029)
+Created three new files at project root:
+- `vercel.json` — `framework: "nextjs"`, installCommand + buildCommand both `cd dashboard && …`, `outputDirectory: "dashboard/.next"`, `ignoreCommand` that skips the build unless `dashboard/` or `backend/db/schema.py` changed. Cache-Control headers for `/match_data/*.json` and `/clips/*.mp4`.
+- `.gitattributes` — marks match_data.json + agent_trace.json as `-diff linguist-generated=true` so GitHub PR views don't freeze; binary flag on `.duckdb`, `.pt`, `.mp4`.
+- `docs/VERCEL_DEPLOYMENT.md` — full monorepo architecture + deploy checklist + do-not-deploy constraint front-and-center.
+
+**HARD CONSTRAINT OBSERVED**: founder flagged that a parallel branch is already live on Vercel (https://panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app/). In this session I:
+- did NOT run `vercel deploy` / `vercel --prod` / `vercel link`
+- did NOT push to GitHub
+- only created config FILES for the founder to review + merge manually
+- local `bun run build` ran cleanly (Next.js 16.2.4 Turbopack, 1327ms compile, 4 static pages) — but it's local-only, zero Vercel contact
+
+**Agent teams used**
+Dispatched parallel general-purpose agent for Task #4 (Baud-Rate Pacing + UI) while I handled the Ghost Opponent fix (Task #1) in the foreground. The agent returned a clean result in 147s: 3 files changed, 11 vitest cases passing, tsc silent. This is the pattern — orthogonal, independently-verifiable tasks get parallelized; shared-file tasks stay sequential.
+
+**5 new MEMORY.md entries logged**: USER-CORRECTION-025, PATTERN-059, GOTCHA-027, GOTCHA-028, GOTCHA-029, plus PROJECT-2026-04-23 pinning the do-not-deploy constraint. Every lesson is durable across sessions.
+
+**What's NOT done** (Andrew-gated):
+- **The Golden Run** — requires ANTHROPIC_API_KEY which I don't have in this session. When you set it and run `python -m backend.precompute … --out-json dashboard/public/match_data/utr_01_segment_a.json --agent-trace-json dashboard/public/match_data/agent_trace.json`, both assets will be generated with the corrected physics engine + corrected handoffs + truncation enforced.
+- **Git commit + push** — holding per the do-not-deploy instruction. Files are uncommitted locally; you can review the diff before committing.
+- **Demo video storyboard** — the `hackathon-demo-director` skill is ready to activate when you want to start scripting the 3-min reel.
+
+### Research findings worth remembering
+
+**Literature support is REAL for 4 of 7 signals:**
+- PMC12298469: jump height = #1 fatigue marker → `crouch_depth_degradation_deg` ✓
+- PMC12298469: wrist velocity decline → `recovery_latency_ms` ✓
+- PMC12294548: toss variance >5-10cm → serve errors → `serve_toss_variance_cm` ✓
+- PMC10302430: agility decline 11% post-fatigue → `lateral_work_rate` ✓
+
+**3 signals are novel (no direct literature but not unsupported):**
+- `ritual_entropy_delta`: no direct fatigue-entropy link but motor variability literature (PMC8312934) is valid indirect support
+- `baseline_retreat_distance_m`: tactical positioning adapts (PMC12069318) but not a direct fatigue marker
+- `split_step_latency_ms`: structurally novel; no literature directly validates state-proxy approach
+
+**The real moat**: No competitor (not SwingVision, not any 2025-2026 startup) is doing real-time injury-risk prediction from broadcast video with clinical validation. This is a multi-year research program — post-hackathon roadmap.
+
+### Calibration: what the steelmanning process produced
+
+The dialectical mapping process saved 10+ hours of misallocated work:
+- Prevented 5-8h Kalman CA upgrade (invisible to judges, breaks split-step physics)
+- Prevented 2-3h Szeliski reading (zero code output)
+- Prevented ByteTrack integration (wrong for 2-player broadcast tracking)
+- Identified RTS smoother as the correct 30-min Kalman improvement
+- Identified the ghost opponent contradiction before it went into production
+- Identified the SG polyorder physics trap before it corrupted velocity signals
+
+This is the "team-lead QA cheap before it becomes expensive" pattern at its most valuable.

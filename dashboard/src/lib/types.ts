@@ -229,3 +229,70 @@ export interface MatchData {
   hud_layouts: ReadonlyArray<HUDLayoutSpec>;
   transitions: ReadonlyArray<StateTransition>;
 }
+
+// ──────────────────────────── Multi-Agent Trace (PATTERN-056) ────────────────────────────
+//
+// Mirrors `backend/db/schema.py::AgentTrace`. Discriminated union on `kind`
+// lets the Orchestration Console narrow safely at render time.
+
+export interface TraceThinking {
+  kind: 'thinking';
+  t_ms: number;
+  content: string;
+}
+export interface TraceToolCall {
+  kind: 'tool_call';
+  t_ms: number;
+  tool_name: string;
+  input_json: string;
+}
+export interface TraceToolResult {
+  kind: 'tool_result';
+  t_ms: number;
+  tool_name: string;
+  output_json: string;
+  is_error: boolean;
+}
+export interface TraceText {
+  kind: 'text';
+  t_ms: number;
+  content: string;
+}
+export interface TraceHandoff {
+  kind: 'handoff';
+  t_ms: number;
+  from_agent: string;
+  to_agent: string;
+  payload_summary: string;
+}
+export type TraceEvent =
+  | TraceThinking
+  | TraceToolCall
+  | TraceToolResult
+  | TraceText
+  | TraceHandoff;
+
+export interface AgentStep {
+  agent_name: string;
+  agent_role: string;
+  started_at_ms: number;
+  completed_at_ms: number;
+  events: ReadonlyArray<TraceEvent>;
+}
+
+export interface AgentTrace {
+  match_id: string;
+  generated_at: string;
+  committee_goal: string;
+  steps: ReadonlyArray<AgentStep>;
+  final_report_markdown: string;
+  total_compute_ms: number;
+  /**
+   * Match-timecode anchor: [start_ms, end_ms] of the match-time window the
+   * committee analyzed. Drives the "Analyzing match X:XX–Y:YY" chip in the
+   * Orchestration Console header (lets judges map the swarm's reasoning to
+   * the video timecode they're watching). Null when no signals were analyzed.
+   * Optional for backwards-compat with pre-Phase-4-audit traces.
+   */
+  match_time_range_ms?: [number, number] | null;
+}

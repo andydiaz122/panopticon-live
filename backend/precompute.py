@@ -46,6 +46,7 @@ import numpy as np
 from backend.agents.haiku_narrator import generate_narrator_beat
 from backend.agents.hud_designer import generate_hud_layout
 from backend.agents.opus_coach import AnthropicClientLike, generate_coach_insight
+from backend.agents.scouting_committee import generate_scouting_report
 from backend.agents.tools import ToolContext
 from backend.cv.compiler import FeatureCompiler, build_frame_wrist_hip_inputs
 from backend.cv.homography import CourtMapper
@@ -510,6 +511,8 @@ def run_precompute(
     beat_cap: int = DEFAULT_BEAT_CAP,
     warmup_ms: int = DEFAULT_WARMUP_MS,
     min_trigger_gap_ms: int = DEFAULT_MIN_TRIGGER_GAP_MS,
+    agent_trace_json_path: Path | None = None,
+    enable_scouting_committee: bool = True,
 ) -> tuple[int, int]:
     """Run the full pre-compute pipeline on one clip.
 
@@ -579,59 +582,103 @@ def run_precompute(
         court_corners_json=corners_text,
     )
 
-    # 5. Main loop — wrap in torch.inference_mode() (or nullcontext when torch absent).
+    # 5-7. Strict 3-Pass DAG (PATTERN-055 / USER-CORRECTION-023).
+    #   Pass 1 — Forward Sweep: decode → YOLO → player assignment → CourtMapper
+    #             → kalman.update(). FORBIDDEN in Pass 1: RollingBounceDetector,
+    #             MatchStateMachine, signal extractors, FeatureCompiler.
+    #   Pass 2 — Backward Sweep: kalman.rts_smooth() per player (zero-lag, optimal).
+    #   Pass 3 — Semantic Sweep: iterate chronologically, feed smoothed
+    #             velocities into bounce → state_machine → compiler.tick.
+    #
+    #   Why the inversion: RTS uses future data to locate true velocity-impulse
+    #   centers. Running the FSM in Pass 1 on forward-only data would fire
+    #   transitions at noise-induced peaks, then Pass 3 signals would read
+    #   against those wrong timestamps — Temporal Decoupling. The 3-Pass DAG
+    #   keeps transition timing, velocity values, and signal features in the
+    #   same temporal frame.
     with DuckDBWriter(db_path, match_id) as writer, _get_inference_mode_ctx():
         writer.write_match_meta(provisional_meta)
 
+        # ---- Pass 1: Forward Sweep --------------------------------------
         for frame_idx, frame_bgr in iter_frames_from_ffmpeg(clip_path, width, height):
             t_ms = int(frame_idx * 1000.0 / fps)
             last_t_ms = t_ms
 
-            # 5a. YOLO inference (PoseExtractor.infer already calls assign_players internally)
+            # 1a. YOLO inference (PoseExtractor.infer already calls assign_players internally)
             players = pose_extractor.infer(frame_bgr)
             detection_a = players.get("A")
             detection_b = players.get("B")
 
-            # 5b. Kalman: always call update() — update(None) is predict-only (docs),
-            #     returning a valid (x, y, vx, vy) tuple.
+            # 1b. Kalman FORWARD pass only — state is NOT consumed here. Pass 3
+            #     reads kalman_a.rts_smooth()[i] for the velocities the FSM sees.
             a_meas = detection_a.feet_mid_m if detection_a is not None else None
             b_meas = detection_b.feet_mid_m if detection_b is not None else None
-            kalman_a_state = kalman_a.update(a_meas)
-            kalman_b_state = kalman_b.update(b_meas)
+            kalman_a.update(a_meas)
+            kalman_b.update(b_meas)
 
-            # 5c. Build FrameKeypoints wrapper (for DuckDB + JSON).
+            # 1c. Build FrameKeypoints wrapper (for DuckDB + JSON + Pass 3 input).
             frame_kp = _build_frame_from_detections(t_ms, frame_idx, detection_a, detection_b)
             all_keypoints.append(frame_kp)
             writer.queue_keypoint_frame(frame_kp)
 
-            # 5d. Bounce detector (Stage 4.5, pre-state-machine, USER-CORRECTION-013).
+            frames_processed += 1
+            _empty_mps_cache_if_due(frame_idx, device)
+
+        # ---- Pass 2: Backward Sweep -------------------------------------
+        # rts_smooth() catches LinAlgError / non-finite output internally and
+        # falls back to forward means (GOTCHA-023). Empty clips skip entirely.
+        if frames_processed > 0:
+            smoothed_a = kalman_a.rts_smooth()
+            smoothed_b = kalman_b.rts_smooth()
+        else:
+            smoothed_a = np.empty((0, 4))
+            smoothed_b = np.empty((0, 4))
+
+        # ---- Pass 3: Semantic Sweep -------------------------------------
+        converge_threshold = PhysicalKalman2D.CONVERGENCE_FRAMES
+        for i, frame_kp in enumerate(all_keypoints):
+            t_ms = frame_kp.t_ms
+            # Convert smoothed row to the (x_m, y_m, vx_mps, vy_mps) tuple the
+            # compiler + _kalman_speed expect. RTS-smoothed values replace
+            # forward-only values as the canonical kinematic state for Pass 3.
+            a_smoothed: tuple[float, float, float, float] = (
+                float(smoothed_a[i, 0]), float(smoothed_a[i, 1]),
+                float(smoothed_a[i, 2]), float(smoothed_a[i, 3]),
+            )
+            b_smoothed: tuple[float, float, float, float] = (
+                float(smoothed_b[i, 0]), float(smoothed_b[i, 1]),
+                float(smoothed_b[i, 2]), float(smoothed_b[i, 3]),
+            )
+
+            # 3a. Bounce detector (Stage 4.5, pre-state-machine, USER-CORRECTION-013).
+            #     Consumes pose keypoints (wrist/hip), not Kalman. Still Pass-3
+            #     because its output feeds the state machine, which uses smoothed vel.
             a_inputs = build_frame_wrist_hip_inputs(frame_kp, "A")
             b_inputs = build_frame_wrist_hip_inputs(frame_kp, "B")
             bounce_detector.ingest_player_frame("A", *a_inputs)
             bounce_detector.ingest_player_frame("B", *b_inputs)
             a_bounce, b_bounce = bounce_detector.evaluate()
 
-            # 5e. State machine (USER-CORRECTION-009/010/011). Gate velocity on Kalman convergence.
-            a_speed = _kalman_speed(kalman_a_state) if kalman_a.is_converged else None
-            b_speed = _kalman_speed(kalman_b_state) if kalman_b.is_converged else None
+            # 3b. State machine (USER-CORRECTION-009/010/011). Preserve the legacy
+            #     10-frame convergence gate so warm-up semantics stay identical to
+            #     pre-RTS. (i+1) mirrors the old frames_since_init sequence.
+            a_speed = _kalman_speed(a_smoothed) if (i + 1) >= converge_threshold else None
+            b_speed = _kalman_speed(b_smoothed) if (i + 1) >= converge_threshold else None
             states = state_machine.update(a_speed, b_speed, a_bounce, b_bounce, t_ms)
             transitions = state_machine.drain_transitions()
             all_transitions.extend(transitions)
 
-            # 5f. FeatureCompiler tick.
+            # 3c. FeatureCompiler tick — fed by RTS-smoothed velocities.
             samples = compiler.tick(
                 frame=frame_kp,
                 states=states,
-                kalmans={"A": kalman_a_state, "B": kalman_b_state},
+                kalmans={"A": a_smoothed, "B": b_smoothed},
                 t_ms=t_ms,
             )
             for s in samples:
                 writer.queue_signal(s)
                 all_signals.append(s)
                 signals_emitted += 1
-
-            frames_processed += 1
-            _empty_mps_cache_if_due(frame_idx, device)
 
         # 6. Finalize — flush remaining extractor buffers.
         final_samples = compiler.finalize(t_ms=last_t_ms)
@@ -677,6 +724,35 @@ def run_precompute(
             all_coach_insights = list(coach_list)
             all_hud_layouts = list(design_list)
             all_narrator_beats = list(beat_list)
+
+            # 8b. Scouting Committee (PATTERN-056 / USER-CORRECTION-024) — 3-agent
+            # orchestrated swarm generating agent_trace.json for Tab 3 playback.
+            if enable_scouting_committee:
+                scout_ctx = ToolContext(
+                    match_id=match_id,
+                    signals=all_signals,
+                    transitions=all_transitions,
+                )
+                scout_trace = asyncio.run(
+                    generate_scouting_report(
+                        anthropic_client,
+                        scout_ctx,
+                        match_id=match_id,
+                        player_a_name=player_a_name,
+                        committee_goal=(
+                            f"Analyze {player_a_name}'s biomechanical signals over the "
+                            f"{final_meta.duration_ms // 1000}s match window. Identify "
+                            "fatigue drift + anomalies; translate to physical breakdown; "
+                            "synthesize tactical exploit recommendations."
+                        ),
+                    )
+                )
+                trace_out_path = agent_trace_json_path or (
+                    match_data_json_path.parent / "agent_trace.json"
+                )
+                trace_out_path.parent.mkdir(parents=True, exist_ok=True)
+                trace_out_path.write_text(scout_trace.model_dump_json(exclude_none=True))
+
             for ci in all_coach_insights:
                 writer.queue_coach_insight(ci)
             for nb in all_narrator_beats:
@@ -754,6 +830,20 @@ def main(argv: list[str] | None = None) -> int:
             "real rallies instead of a single noise burst. See GOTCHA-015."
         ),
     )
+    parser.add_argument(
+        "--skip-scouting-committee", action="store_true",
+        help=(
+            "Skip the Multi-Agent Scouting Committee swarm (PATTERN-056). "
+            "Default: enabled when --skip-agents is NOT set AND ANTHROPIC_API_KEY present."
+        ),
+    )
+    parser.add_argument(
+        "--agent-trace-json", type=Path, default=None,
+        help=(
+            "Path to write the captured AgentTrace (default: <out-json-dir>/agent_trace.json). "
+            "Consumed by the Orchestration Console in Tab 3."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # Build Anthropic client lazily — only if agents are enabled AND key is present
@@ -783,6 +873,8 @@ def main(argv: list[str] | None = None) -> int:
         beat_cap=args.beat_cap,
         warmup_ms=args.warmup_ms,
         min_trigger_gap_ms=args.min_trigger_gap_ms,
+        enable_scouting_committee=not args.skip_scouting_committee,
+        agent_trace_json_path=args.agent_trace_json,
     )
     print(f"processed {frames} frames -> {signals} signals")
     print(f"  DuckDB: {args.db}")

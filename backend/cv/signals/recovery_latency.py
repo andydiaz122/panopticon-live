@@ -32,11 +32,12 @@ import math
 from typing import Any
 
 from backend.cv.signals.base import BaseSignalExtractor
+from backend.cv.thresholds import KINEMATIC
 from backend.db.schema import FrameKeypoints, PlayerSide, PlayerState, SignalSample
 
-# Speed threshold distinguishing "moving" from "still". Below this the player is
-# considered to have completed deceleration (recovered to a resting baseline).
-RECOVERY_SPEED_THRESHOLD_MPS: float = 0.5
+# Speed threshold distinguishing "moving" from "still" (PATTERN-057: sourced from
+# backend/cv/thresholds.py::KINEMATIC so re-tuning is one-file-diff, not grep-safari).
+RECOVERY_SPEED_THRESHOLD_MPS: float = KINEMATIC.recovery_speed_mps
 
 
 class RecoveryLatency(BaseSignalExtractor):

@@ -32,8 +32,6 @@ import type {
   StateTransition,
 } from '@/lib/types';
 
-export const maxDuration = 60;
-
 const MODEL = 'claude-opus-4-7';
 
 /**

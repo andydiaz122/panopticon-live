@@ -6,7 +6,7 @@ This is a non-technical decision log, bug journal, and "talk to Andrew tomorrow 
 
 ## What We're Building (in one paragraph)
 
-Panopticon Live is a web app that takes a pro tennis match video and renders a **2K-Sports-style video-game HUD** over the footage. As the match plays, animated bars and meters pulse to show each player's live biomechanical state — fatigue, power, momentum, footwork. Below the video, **Claude Opus 4.7** streams coach-grade commentary, with its extended-thinking tokens visible in a collapsible panel (*"here's Opus reasoning about Alcaraz's crouch depth degradation..."*). The HUD layout itself is dynamically designed by Opus as match state changes — generative UI in action. A second tab shows the raw JSON signal stream as the B2B product ("this is what Valence, Sequence, Dome subscribe to"). A third tab generates a full PDF scouting report via Claude Managed Agents. **The demo is the product** — we ship this Sunday April 26 by 8pm EST.
+Panopticon Live is a web app that takes a pro tennis match video and renders a **2K-Sports-style video-game HUD** over the footage — a **world-class single-player biomechanics deep-dive** (DECISION-008, 2026-04-22). As the match plays, animated bars and meters pulse to show Player A's live biomechanical state — fatigue, serve toss variance, baseline retreat, lateral work rate. Below the video, **Claude Opus 4.7** streams coach-grade commentary, with its extended-thinking tokens visible in a collapsible panel (*"here's Opus reasoning about A's crouch depth degradation..."*). The HUD layout itself is dynamically designed by Opus as match state changes — generative UI in action. A second tab shows the raw JSON signal stream as the B2B product ("this is what Valence, Sequence, Dome subscribe to"). A third tab generates a full PDF scouting report via Claude Managed Agents. The "Moneyball for tennis" angle — deep forensic analysis of ONE player — is a stronger demo story than shallow two-player coverage, AND it matches our CV detector's capacity on broadcast clips (GOTCHA-016). **The demo is the product** — we ship this Sunday April 26 by 8pm EST.
 
 ---
 
@@ -479,3 +479,56 @@ source .venv/bin/activate && python -m backend.precompute \
 ```
 
 After either completes, we'll have a real `match_data.json` that Phase 3 (Next.js HUD) can consume. That's the bridge to the next phase.
+
+---
+
+## 2026-04-22 (deep into the night) — Skeleton Sanitation Sprint + Single-Player Pivot
+
+### The incident
+
+Andrew opened localhost:3000 after the Phase 3 scaffold landed and saw erratic cyan skeletons drifting in mid-court with no player underneath them — cling to left frame edge, tiny shrunken figures on line judges, ghosts hovering during warm-up. Eleven screenshots in `screenshot_errors/` document the failure modes.
+
+### Root cause (diagnosed via bimodal bbox_conf histogram)
+
+YOLO11m-Pose at `conf=0.001` (our max-recall floor) emits garbage detections for line judges, ball kids, scoreboard graphics, banner images, and shadows. These have LOW `bbox_conf` (0.001–0.01) but HIGH `mean_keypoint_confidence` (0.6–0.8) — YOLO is confident WHERE the pseudo-joints are, just not that it's a real person. Our `assign_players` picked by mean_kp_conf and ignored bbox_conf, so ghosts regularly won identity assignment. **964 of 1731 "Player A" detections (55.7%) were ghosts.**
+
+Worse, Player B was 0% detected — the far-court player is ~80–100 px tall in broadcast frames (vs 253 px for near) and partially occluded by the FAB LETICS / DUN KIN' banners. YOLO11m-Pose simply cannot detect them at ANY imgsz. This is GOTCHA-016, a detector-capacity limit, not a pipeline bug.
+
+### Phase Alpha + Phase Beta (team-lead approved; Phase Gamma temporal coherence HELD per YAGNI)
+
+- **Frontend** (`PanopticonEngine.tsx`): skip drawing when `bbox_conf < 0.5`. Defense in depth.
+- **Backend** (`backend/cv/pose.py:assign_players`), three filters in canonical order:
+  1. `bbox_conf >= BBOX_CONF_THRESHOLD (0.5)` gate BEFORE projection → kills ghosts
+  2. Lowered `ASSIGN_PLAYERS_FALLBACK_THRESHOLD` 0.3 → 0.15 globally → rescues small far-court player (PATTERN-040 chicken-and-egg resolution — safe because ghosts already dead)
+  3. Tight lateral polygon `-0.5 ≤ x_m ≤ court_width_m + 0.5` → drops ball kids / line judges
+
+### Decision on Player B
+
+Andrew chose option **#3 (Accept the limitation — demo Player A only)** with the directive *"focus on one player and master that player and make sure we do it exceptionally well at a world-class level."* We refactored all four agent prompts for explicit single-player focus:
+
+- Coach `BIOMECH_PRIMER`: new SINGLE-PLAYER FOCUS prologue; signal 7 (split_step_latency_ms) flagged as "often unavailable, don't fabricate"
+- Coach user prompt: Player A = "target", Player B = "opponent (may be undetected, that's OK)"
+- HUD Designer: removed `PlayerNameplate@top-right`, banned `MomentumMeter` + `PredictiveOverlay`; fallback layout is 2-widget single-player default
+- Haiku Narrator: "Player A must be subject of every beat"
+
+### V6 Crucible (the polished golden run)
+
+- Player A: 806/1800 frames, 0% bbox_conf<0.5 ghosts, clean x_m [1.38, 11.46]
+- Coach: 4 insights with real quantitative anchors ("A's baseline_retreat collapsed from 1.67m → 0.10m (slope -0.70 m/s)")
+- Designer: 10 HUD layouts, all 4-5 widgets, zero B-widgets (verified via set membership check)
+- Narrator: 6 broadcast-quality beats ("Player A explodes laterally, covering the court with explosive urgency")
+- Cost: ~$0.30
+- Tests: 383/383 passing, ruff clean
+
+### New patterns + learnings logged
+
+- **USER-CORRECTION-030** — Skeleton Sanitation: bbox_conf gate in assign_players
+- **PATTERN-039** — Max Recall at Sensor, High Precision at Selector (architectural principle for any two-stage ML pipeline)
+- **PATTERN-040** — Chicken-and-Egg dependency resolution via upstream filtering (the team lead caught this design flaw in my initial plan; generalized into a reusable pattern)
+- **PATTERN-041** — Scope Narrowing as Demo Craft (commit fully to the narrow scope; no half-hearted "kinda still supports both")
+- **GOTCHA-016** — Far-court player invisible to YOLO11m-Pose on broadcast tennis clips (detector capacity, not pipeline bug)
+- **DECISION-008** — Single-Player Focus as Deliberate Demo Scope
+
+### Meta-learning
+
+The bimodal `bbox_conf` histogram was the diagnostic that broke the investigation open. "Run the smoke test against real data and plot what comes out" is a higher-ROI debugging move than adding more tests or reading more code. It's the CV analog of PATTERN-038 (mocked SDK tests validate shape-of-call, not shape-API-accepts) — mocked test fixtures validate the shape of our CODE, not the shape of DATA the real world produces.

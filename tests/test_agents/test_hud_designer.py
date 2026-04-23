@@ -132,8 +132,10 @@ def test_designer_no_json_returns_fallback() -> None:
         client, t_ms=0, trigger_description="t", state_summary="s",
     ))
     assert layout.reason.startswith("[designer_parse_error]")
-    # Fallback layout has exactly 3 widgets (2 nameplates + momentum meter)
-    assert len(layout.widgets) == 3
+    # Single-player fallback: Player A nameplate + one signal bar = 2 widgets.
+    assert len(layout.widgets) == 2
+    # Must NOT include any top-right nameplate (would mean Player B).
+    assert all(w.slot != "top-right" for w in layout.widgets)
 
 
 def test_designer_malformed_json_returns_fallback() -> None:
@@ -181,9 +183,9 @@ def test_designer_api_exception_returns_fallback_no_raise() -> None:
     ))
     assert layout.reason.startswith("[designer_error:")
     assert "connection reset" in layout.reason
-    # Fallback is still a valid HUDLayoutSpec
+    # Fallback is still a valid HUDLayoutSpec — single-player (2 widgets).
     assert layout.timestamp_ms == 500
-    assert len(layout.widgets) == 3
+    assert len(layout.widgets) == 2
 
 
 def test_designer_default_layout_id_generated_when_missing() -> None:
@@ -272,10 +274,10 @@ def test_designer_strips_fence_with_trailing_prose_containing_brace() -> None:
     assert layout.widgets[0].widget == "PlayerNameplate"
 
 
-def test_designer_binds_player_names_into_user_prompt() -> None:
-    """Player names from run_agent_phase should reach Designer's user message even
-    though Designer's widget props use 'A' / 'B' — future Designer prompt variants
-    might reference names in the `reason` field."""
+def test_designer_binds_target_player_name_into_user_prompt() -> None:
+    """Player A's name must reach Designer's user message. Per single-player focus
+    (2026-04-22 GOTCHA-016), Player B's name is NOT injected — we don't design
+    widgets for a player we can't detect."""
     client = _ScriptedClient([_response_with_text(
         '{"reason": "ok", "widgets": [{"widget": "PlayerNameplate", "slot": "top-left", "props": {"player": "A"}}]}',
     )])
@@ -285,7 +287,23 @@ def test_designer_binds_player_names_into_user_prompt() -> None:
     ))
     user_msg = client.call_log[0]["messages"][0]["content"]
     assert "Rafael Nadal" in user_msg
-    assert "Carlos Alcaraz" in user_msg
+    # Player B's name must NOT appear — Designer only operates on Player A
+    assert "Carlos Alcaraz" not in user_msg
+
+
+def test_designer_rejects_player_b_widgets_in_prompt_instruction() -> None:
+    """The user prompt must explicitly instruct Opus to avoid MomentumMeter,
+    PredictiveOverlay, and top-right nameplate (all require Player B data)."""
+    client = _ScriptedClient([_response_with_text(
+        '{"reason": "ok", "widgets": [{"widget": "PlayerNameplate", "slot": "top-left", "props": {}}]}',
+    )])
+    _run(generate_hud_layout(
+        client, t_ms=0, trigger_description="t", state_summary="s",
+    ))
+    user_msg = client.call_log[0]["messages"][0]["content"]
+    assert "top-right" in user_msg.lower() or "PlayerNameplate@top-right" in user_msg
+    assert "MomentumMeter" in user_msg
+    assert "PredictiveOverlay" in user_msg
 
 
 def test_designer_empty_widgets_array_is_valid() -> None:

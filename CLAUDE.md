@@ -11,6 +11,10 @@
 
 **Win the Demo criterion (25%) + Opus 4.7 Use criterion (25%) with visible craft.** Judges evaluate a 3-minute video. The demo IS the product. We optimize for visual "cool factor," creative Opus usage (generative UI + visible extended thinking + Managed Agents), and engineering craft. We DO NOT optimize for predictive accuracy or backtest R² — that is the wrong attack vector in a time-boxed event.
 
+## SCOPE: SINGLE-PLAYER DEEP-DIVE (DECISION-008, 2026-04-22)
+
+Panopticon Live is a WORLD-CLASS SINGLE-PLAYER biomechanics intelligence system targeting Player A (the near-court player). The "Moneyball for tennis" angle — deep forensic analysis of ONE pro player — is a stronger demo story than shallow two-player coverage, and matches our CV detector's effective resolution on broadcast tennis clips (GOTCHA-016: YOLO11m-Pose cannot reliably detect the small, partially-occluded far-court player). Any widget, prompt, or signal that depends on Player B data (MomentumMeter, PredictiveOverlay, split_step_latency_ms) is explicitly out of scope. Commit fully to the narrow scope — no half-hearted "kinda still supports both" implementations.
+
 ## HARD CONSTRAINTS (rule-based)
 
 1. **New Work Only** — Every line of code in this repo is written during the hackathon (Apr 21–26). **No copy-paste from `Alternative_Data`.** We implement patterns fresh using public libraries (`ultralytics`, `filterpy`, `scipy`, `opencv-python`, `duckdb`, `anthropic`, `fastapi`).

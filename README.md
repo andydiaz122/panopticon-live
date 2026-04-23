@@ -10,14 +10,17 @@ Built for the Anthropic × Cerebral Valley **Built with Opus 4.7** virtual hacka
 
 ## What it does
 
-Panopticon Live ingests a professional tennis match video, extracts seven biomechanical fatigue signals from broadcast-quality pose estimation, and renders the match as a **live video-game-style HUD**:
+Panopticon Live ingests a professional tennis match video, extracts seven biomechanical fatigue signals from broadcast-quality pose estimation, and renders the match as a **live video-game-style HUD** — a **world-class single-player biomechanics deep-dive**:
 
-- **Skeleton overlay** tracing both players frame-by-frame
-- **Pulsing signal bars** — fatigue, power, footwork, ritual stability — that animate when a player deviates from their match-opening baseline
-- **Opus 4.7 Coach panel** — streaming coach-register commentary with visible `extended_thinking` tokens
-- **Generative HUD layout** — Opus 4.7 re-designs the overlay in real time as the match state changes
+- **Cyan skeleton overlay** tracking the target player (Player A, near court) frame-by-frame — drawn via a zero-React-render rAF canvas loop at 30 FPS
+- **Pulsing signal bars** — fatigue, serve toss variance, baseline retreat, lateral work rate — animate when the player deviates from their match-opening baseline
+- **Opus 4.7 Coach panel** — coach-register commentary with visible `extended_thinking` tokens and real quantitative anchors ("A's baseline_retreat collapsed 1.67m → 0.10m")
+- **Generative HUD layout** — Opus 4.7 Designer re-arranges widgets in real time as match state changes (serve ritual → toss tracer; rally → footwork heatmap)
+- **Haiku 4.5 narrator ticker** — per-N-second broadcast-style color commentary ("Player A explodes laterally, covering the court with explosive urgency")
 - **Signal Feed** (2nd tab) — raw JSON stream, the B2B product surface for prediction-market infrastructure (Valence, Sequence, Dome)
 - **Scouting Report** (3rd tab) — Claude Managed Agent generates a full PDF report on demand
+
+**Scope note (DECISION-008, 2026-04-22)**: Panopticon is deliberately a single-player system. We master ONE player's biomechanics at a world-class level rather than two players superficially. The "Moneyball for tennis" angle. See [MEMORY.md](MEMORY.md) GOTCHA-016 for the CV detector-capacity rationale.
 
 ## Why it matters
 
@@ -27,16 +30,22 @@ Nobody extracts biomechanical fatigue signals from free broadcast video today. T
 
 ```
 Video (MP4)
-  → ffmpeg stdout (BGR24 pipe, Zero-Disk)
-  → YOLO11m-Pose on Apple MPS (17 COCO keypoints per player)
-  → Kalman 2D smoothing (filterpy) + spike suppression
+  → ffmpeg stdout (BGR24 pipe, Zero-Disk per CLAUDE.md)
+  → YOLO11m-Pose on Apple MPS (17 COCO keypoints per detection)
+  → assign_players (bbox_conf ≥ 0.5 gate, court-half topology, tight lateral polygon)
+  → Kalman 2D smoothing (filterpy) on court meters via homography
   → 3-state kinematic state machine (PRE_SERVE_RITUAL / ACTIVE_RALLY / DEAD_TIME)
-  → 7 biomechanical signal extractors (state-gated)
-  → DuckDB (pre-computed panopticon.duckdb)
-  → FastAPI SSE replay at video wallclock
-  → Claude Opus 4.7 (Reasoner + Designer + Voice) + Haiku 4.5 (Narrator) + Managed Agent (Scouting)
-  → Next.js 16 dashboard on Vercel (Tab 1 HUD, Tab 2 Signal Feed, Tab 3 Scouting Report)
+  → 7 biomechanical signal extractors (state-gated, BaseSignalExtractor ABC)
+  → DuckDB (pre-computed panopticon.duckdb) + match_data.json export
+  → [OFFLINE] Claude Opus 4.7 Coach (tool-use loop over signal queries)
+  → [OFFLINE] Claude Opus 4.7 HUD Designer (generative widget layouts)
+  → [OFFLINE] Claude Haiku 4.5 Narrator (per-10s color-commentary beats)
+  → match_data.json shipped to Next.js /public/match_data/
+  → Next.js 16 dashboard (PanopticonEngine rAF canvas loop; target 30 FPS, zero React renders)
+  → [LIVE @ demo time] Claude Managed Agent scouting report via Vercel Server Action
 ```
+
+All Opus/Haiku work is **pre-computed** at build time, so there's no network wobble during the demo. The only live Anthropic call is the scouting-report Managed Agent, which the user initiates by clicking.
 
 ## The Three Roles of Opus 4.7
 
@@ -110,21 +119,39 @@ pip install -r requirements-local.txt
 
 # 2. Env
 cp .env.example .env
-# Set ANTHROPIC_API_KEY for Phase 2+ agent work
+# Set ANTHROPIC_API_KEY (required for the Phase 2 agent layer)
 
-# 3. Pre-compute one clip to DuckDB (requires ~60s of MP4 in data/clips/)
-python -m scripts.probe_clip \
+# 3. Place a tennis MP4 at data/clips/utr_match_01_segment_a.mp4 and
+#    annotate the 4 court corners via tools/court_annotator.html →
+#    saves to data/corners/utr_match_01_segment_a_corners.json
+
+# 4. Run the pre-compute pipeline (~2:30 on Mac Mini M4 Pro, ~$0.30 in API spend)
+python -m backend.precompute \
   --clip data/clips/utr_match_01_segment_a.mp4 \
-  --out data/probe_out.parquet
+  --corners data/corners/utr_match_01_segment_a_corners.json \
+  --match-id utr_01_segment_a \
+  --player-a "Player A" --player-b "Player B" \
+  --db data/panopticon.duckdb \
+  --out-json dashboard/public/match_data/utr_01_segment_a.json \
+  --device mps --doubles-corners \
+  --coach-cap 10 --design-cap 10 --beat-cap 20 --beat-period-sec 10.0
 
-# 4. (once Phase 2 lands) Start the backend
-uvicorn backend.api.main:app --reload --host 127.0.0.1 --port 8000
+# For a fast CV-only smoke (no API cost), add --skip-agents
 
-# 5. (once Phase 3 lands) Start the dashboard
+# 5. Start the dashboard
 cd dashboard
 bun install
 bun run dev
+# Open http://localhost:3000 — PanopticonEngine renders the cyan Player A
+# skeleton overlay synchronized to video playback
 ```
+
+**CLI flags worth knowing** (`python -m backend.precompute --help`):
+- `--doubles-corners` — use when the court annotation traces the doubles alleys (USER-CORRECTION-026)
+- `--coach-cap`, `--design-cap`, `--beat-cap` — hard budgets on agent invocations (rate-limiter safety, cost control)
+- `--warmup-ms` — skip state transitions in first N ms (default 10000; GOTCHA-015)
+- `--min-trigger-gap-ms` — dedupe rapid-fire transitions (default 2000; USER-CORRECTION-028)
+- `--skip-agents` — CV-only mode, no API calls
 
 ## Acknowledgments
 

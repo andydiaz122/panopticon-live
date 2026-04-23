@@ -167,11 +167,14 @@ async def generate_coach_insight(
     # tennis matches and will otherwise hallucinate Djokovic/Federer/Nadal in commentary.
     user_prompt = (
         f"Match time: {t_ms} ms.\n"
-        f"Match: Player A = {player_a_name}, Player B = {player_b_name}.\n"
+        f"Target player: Player A = {player_a_name} (the near-court player).\n"
+        f"Opponent: Player B = {player_b_name} (may be undetected on current clip — that's OK, treat as unknown).\n"
         f"Trigger: {trigger_description}\n\n"
-        f"Produce your 3-paragraph coach insight now. Use tools to ground your claims. "
-        f"Refer to the players ONLY by their assigned names ({player_a_name}, {player_b_name}) "
-        f"or 'Player A' / 'Player B'. Do NOT invent any other names."
+        f"Produce your 3-paragraph coach insight FOCUSED ON {player_a_name}'s biomechanics. "
+        f"Use tools to ground your claims. "
+        f"Refer to the target ONLY by {player_a_name} or 'Player A'. "
+        f"Do NOT invent any other names. "
+        f"If opponent data is missing, frame the insight purely around what Player A is doing."
     )
     messages: list[dict[str, Any]] = [
         {"role": "user", "content": user_prompt},

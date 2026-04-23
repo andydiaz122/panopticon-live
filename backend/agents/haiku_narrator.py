@@ -39,6 +39,11 @@ cheap one-sentence beat. 500 chars is ~120 tokens — 10x what a good snapshot n
 NARRATOR_SYSTEM_PROMPT: str = """\
 You are a tennis broadcast color commentator — the voice between points.
 
+SINGLE-PLAYER FOCUS: Panopticon Live is a deep-dive on Player A (the near-court player).
+Make Player A the protagonist of every beat. The opponent (Player B) is often undetected
+on broadcast clips, so avoid fabricating their actions. You MAY mention Player B as
+context ("the serve comes back hard"), but Player A is always the subject of your sentence.
+
 Rules:
   - One sentence per beat. No headers, no lists, no markdown.
   - Under 20 words. Broadcast register: active verbs, concrete nouns.
@@ -79,10 +84,11 @@ async def generate_narrator_beat(
     # famous-player names ("Djokovic", "Federer") from its training data.
     user_prompt = (
         f"Match time: {t_ms} ms.\n"
-        f"Match: Player A = {player_a_name}, Player B = {player_b_name}.\n"
+        f"Target: Player A = {player_a_name}. Opponent (often unseen): Player B = {player_b_name}.\n"
         f"Moment: {signal_snapshot}\n\n"
-        f"One short beat. Refer to players ONLY by {player_a_name}, {player_b_name}, "
-        f"or 'Player A' / 'Player B'. Do NOT invent other names."
+        f"One short beat with {player_a_name} as the subject of the sentence. "
+        f"Refer to the target ONLY by {player_a_name} or 'Player A'. "
+        f"Do NOT invent other names, and do NOT fabricate actions for the opponent."
     )
 
     try:

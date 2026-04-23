@@ -388,7 +388,26 @@ def test_coach_falls_back_to_generic_names_when_not_supplied() -> None:
     ))
     user_msg = client.call_log[0]["messages"][0]["content"]
     assert "Player A" in user_msg
-    assert "Player B" in user_msg
+    assert "Player B" in user_msg  # B still mentioned as "the opponent" for context
+
+
+def test_coach_user_prompt_designates_player_a_as_target() -> None:
+    """Single-player focus (GOTCHA-016): Coach must be instructed to frame the
+    insight around Player A, treating B as context-only 'opponent' rather than
+    a co-equal subject. Regression lock against re-introducing two-player
+    framing."""
+    client = _ScriptedClient([_response(_text_block("ok"), stop_reason="end_turn")])
+    _run(generate_coach_insight(
+        client, _ctx_with_signal(),
+        t_ms=0, match_id="utr_01", insight_id="ins1", trigger_description="t",
+        player_a_name="Alice",
+    ))
+    user_msg = client.call_log[0]["messages"][0]["content"]
+    # Key single-player framing phrases
+    assert "Target player" in user_msg or "FOCUSED ON" in user_msg
+    assert "near-court" in user_msg
+    # Must NOT frame as two-player peer analysis
+    assert "match analysis" not in user_msg.lower()
 
 
 def test_coach_multi_tool_use_in_one_response() -> None:

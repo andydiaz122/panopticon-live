@@ -394,6 +394,50 @@ Duplicate HTML IDs are syntactically VALID. `<input>.src = blobURL` is a harmles
 
 ---
 
-## Day 3 (Apr 23 — Phase 3 Next.js HUD PENDING)
+## Day 2 evening / Skeleton Sanitation Sprint — HIGHEST-ROI DEBUG SESSION SO FAR
 
-(To be populated when frontend work begins.)
+The bimodal-histogram diagnostic pattern that broke open the Skeleton Sanitation investigation is the single highest-ROI tool-use pattern in the project. Worth studying.
+
+### The debug sequence (20-minute forensic sweep)
+
+| Tool | Action | What it revealed |
+|---|---|---|
+| Image MCP | Read 11 screenshots from `screenshot_errors/` | Characterized failure modes visually: ghosts in mid-court, edge-clinging, mis-scale, zero Player B |
+| `grep -n + Read` | Opened `backend/cv/pose.py:assign_players` | Found the selector used `mean_keypoint_confidence` as tiebreaker, ignored `bbox_conf` |
+| Python `json` + `statistics` | Ran bucketed histogram of `bbox_conf` across 1731 detections | **THE BREAKTHROUGH** — revealed bimodal distribution: 55.7% <0.05 (ghosts), 44.3% ≥0.5 (real), empty 0.2–0.5 gap → 0.5 cutoff is obvious |
+| `subprocess.run(ffmpeg)` + inline YOLO | Extracted frame 1200 + ran inference directly, bypassing assign_players | Proved Player B truly invisible at ANY imgsz — detector-capacity limit, not pipeline bug |
+| `assign_players` replay | Manually ran the function on the extracted frame's raw detections | Confirmed the remaining edge case: high-conf "far player" detections are actually crowd members whose feet project off-court |
+
+**Total wall time**: ~20 minutes from screenshot inspection to definitive root-cause diagnosis.
+
+### Tool ROI observations
+
+- **Real-data histogram over synthetic-test-fixture checking**: ~100x the diagnostic power per minute. The mocked tests for `assign_players` used HAND-CRAFTED detections with plausible bbox_conf; they could never surface the REAL YOLO-at-conf=0.001 pathology. PATTERN-038 applied to CV: mocked tests validate shape of our code, not shape of data reality.
+- **Image MCP for screenshot inspection**: reading the 11 error screenshots took ~2 minutes and gave failure-mode categorization that would have taken 10+ minutes to extract from verbal description. Worth always including when user reports visual bugs.
+- **Inline `ffmpeg` subprocess for frame extraction**: avoided standing up a full debugging harness. One-shot `ffmpeg -vf "select=eq(n\,1200)"` grabs a specific frame for manual YOLO interrogation.
+- **`np.nanvar/nanmax/nanmin` + bucketed histograms**: the numerical-diagnostic toolkit that surfaces bimodality / trimodality / heavy-tail patterns. Always try these BEFORE assuming "it's probably a bug in code X."
+
+### New patterns entrenched
+
+1. **When UI misbehaves on real data, INSTRUMENT the real data first, not the code.** Run a histogram/quantile over every numerical field before assuming the problem is in the logic.
+2. **PATTERN-038 (mocked tests validate our-call shape, not API shape) has a CV analog**: mocked test fixtures validate the code path, not the pathology the real detector produces. Add ONE integration-smoke-test assertion for every new model-in-the-loop layer.
+
+### V6 Crucible ROI table (post-Skeleton Sanitation Sprint)
+
+| Metric | V4 (pre-fix) | V6 (post-fix + single-player pivot) |
+|---|---|---|
+| Player A detections | 1731 (96.2%, 55.7% ghosts) | 806 (44.8%, 0% ghosts) |
+| `bbox_conf < 0.5` ghost count | 964 | **0** |
+| `x_m` range | [-0.92, 12.95] (edge-clinging) | [1.38, 11.46] (clean) |
+| Coach insights with real anchors | ~0 (all "warm-up artifacts") | 4 of 4 (e.g., "baseline_retreat collapsed 1.67m → 0.10m") |
+| HUD layouts with B widgets | 4 (MomentumMeter etc.) | **0** (verified via set check) |
+| Narrator "Djokovic/Federer" hallucinations | present | zero |
+| Tests | 381/381 | 383/383 |
+| Wall time | 2:24 | 2:30 |
+| API spend | ~$0.30 | ~$0.30 |
+
+---
+
+## Day 3 (Apr 23 — Phase 3 Next.js HUD continuation)
+
+(To be populated as Phase 3 visual polish, motion animations, and HUD widget library development progresses.)

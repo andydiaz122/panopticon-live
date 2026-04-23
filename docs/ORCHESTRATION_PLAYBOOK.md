@@ -148,14 +148,20 @@ They form a "virtual team" where each member owns one domain:
 
 **Owner**: `hud-auteur`
 
+**Scope note (DECISION-008, 2026-04-22)**: Single-player deep-dive on Player A.
+Player B widgets (MomentumMeter, PredictiveOverlay, top-right nameplate) are
+EXPLICITLY OUT OF SCOPE — GOTCHA-016 documents the detector-capacity limit.
+
 **Activities:**
-- `dashboard/` — Next.js 16 App Router scaffolded with Bun
-- Tab 1 (Broadcast): `<video>` + canvas skeleton + HUD widgets + CoachPanel
-- Tab 2 (Signal Feed): raw JSON with syntax highlighting
-- Tab 3 (Scouting Report): button → Managed Agent → PDF
-- Normalized-coord rAF rendering via `useRef` + `ResizeObserver`
+- `dashboard/` — Next.js 16 App Router scaffolded with Bun (DONE, commit `e702afd`)
+- Tab 1 (Broadcast): `<video>` + cyan canvas skeleton (Player A only) + HUD widgets + CoachPanel
+- Tab 2 (Signal Feed): raw JSON with syntax highlighting (Player A signals)
+- Tab 3 (Scouting Report): button → Managed Agent → PDF (deep single-player analysis)
+- Normalized-coord rAF rendering via `useRef` + `ResizeObserver` (DONE, `PanopticonEngine.tsx`)
+- Single-player HUD widgets: `PlayerNameplate@top-left`, `SignalBar@right-1..4`, `TossTracer@center-overlay` (PRE_SERVE), `FootworkHeatmap@center-overlay` (RALLY)
 - Motion animations: pulsing signal bars, HUD slide-in, typewriter commentary
 - Opus thinking tokens in collapsible panel
+- Visible quantitative anchors in coach commentary (from V6: "A's baseline_retreat collapsed 1.67m → 0.10m")
 
 **Tools that fire:**
 - `figma` MCP — iterate on HUD visual spec with Opus 4.7 design muscle

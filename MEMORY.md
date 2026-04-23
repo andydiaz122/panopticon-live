@@ -693,6 +693,26 @@ Cross-session recall. Every entry is:
 - **Severity**: HIGH for demo quality (half the biomech signals vanish); MEDIUM for architectural correctness (the Phase Beta filters are still mathematically correct, this is a detector-capacity issue)
 - **File**: Emergent limitation visible in `backend/precompute.py` output; not fixable at the pipeline level, only at the detector or input level.
 
+### DECISION-008 — Single-Player Focus as Deliberate Demo Scope (Not a Fallback)
+- **Decision** (2026-04-22, team-lead approved): Panopticon Live is a WORLD-CLASS SINGLE-PLAYER deep-dive system, targeting Player A (near-court). Player B remediation (upgrading to yolo11l-pose, tile-based inference, etc.) is EXPLICITLY deferred out of scope. The project commits to mastering ONE player exceptionally well rather than covering TWO superficially.
+- **Why this is a stronger narrative (not a weaker one)**: The "Moneyball for tennis" angle — deep forensic biomechanics on ONE pro — is a more credible demo story than shallow two-player match analysis. Judges see depth, not coverage. Post-DECISION-008 V6 Crucible output showed 10 HUD layouts (all 4-5 widgets, Player A only), 4 Coach insights with real quantitative anchors (e.g., "A's baseline_retreat collapsed from 1.67m → 0.10m, slope -0.70 m/s"), and 6 Haiku beats with broadcast-quality single-player copy ("Player A explodes laterally, covering the court with explosive urgency").
+- **Implementation scope**:
+  - `backend/agents/system_prompt.py`: added SINGLE-PLAYER FOCUS prologue to `BIOMECH_PRIMER`
+  - `backend/agents/hud_designer.py`: removed `PlayerNameplate@top-right`, banned `MomentumMeter` + `PredictiveOverlay`, fallback layout is 2-widget single-player default
+  - `backend/agents/haiku_narrator.py`: SINGLE-PLAYER FOCUS clause; "Player A must be subject of every beat"
+  - `backend/agents/opus_coach.py`: user prompt labels A as "target", B as "opponent (may be undetected — that's OK)"
+  - Tests: 5 new regression tests lock the single-player contract (no top-right nameplates, no MomentumMeter/PredictiveOverlay, Player B name excluded from Designer prompt, etc.)
+- **How to apply**: When CV detector capacity is the bottleneck (per GOTCHA-016), embrace the narrower scope as a DESIGN CHOICE. Explicit scope narrowing enables better prompts, cleaner HUD, more varied commentary. Apply the "focus on one thing and master it" heuristic any time scope is forced by a constraint you can't change in the time available.
+- **Severity**: HIGH (product direction for the hackathon demo)
+- **File**: Across all four `backend/agents/*.py` modules + `tests/test_agents/*.py`.
+
+### PATTERN-041 — Scope Narrowing as Demo Craft
+- **Type**: Product / demo strategy
+- **Context**: When a hard constraint (detector capacity, API limit, data gap) prevents the feature you originally designed, the weakest move is apologetic ("we would have had X but..."). The STRONGEST move is to reframe the constraint as a deliberate focus choice and upgrade every remaining piece to "world-class" at the narrower scope. For Panopticon: Player B invisible → "we deeply analyze ONE player instead of shallowly covering two" is a better demo pitch than "two players with patchy data on one of them."
+- **How to apply**: When a constraint forces scope reduction, audit every output layer and make it EXPLICITLY align with the new narrower scope. Half-hearted "kinda still supports both" implementations fall into an uncanny valley. Commit to the narrow scope fully. System prompts, fallback layouts, default widgets, user prompts, docs, demo script — all should reference the new scope as PRIMARY, not a fallback.
+- **Severity**: MEDIUM (hackathon / demo strategy, reusable)
+- **File**: Captured in DECISION-008 implementation.
+
 ### DECISION-007 — HUDLayoutSpec Stays JSON-Only (No DuckDB Table)
 - **Context**: Coach and Narrator insights have DuckDB tables; HUD layouts do not.
 - **Why**: Layouts are low-frequency (one per match-state transition, ~10 per clip) and consumed exclusively by the frontend via match_data.json. Storing them in DuckDB too would be redundancy for zero read-path benefit.

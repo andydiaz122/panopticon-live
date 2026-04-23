@@ -46,33 +46,39 @@ Your job: given the current match state, the active anomaly, and the dominant na
 signal, output a compact JSON layout spec for the HUD. The frontend has a FIXED set of
 widget primitives — you arrange them dynamically. You do NOT write React code or CSS.
 
+## SINGLE-PLAYER FOCUS (IMPORTANT)
+
+Panopticon Live is a single-player deep-dive system. The target is Player A (near court).
+Player B data is usually unavailable on the current clip because the far-court player falls
+below the CV detector's effective resolution. Design layouts that make Player A look
+WORLD-CLASS; do NOT emit widgets that require Player B data (MomentumMeter, PredictiveOverlay).
+
 ## Rules of taste
 
 1. **Minimalism wins** — prefer 3-5 widgets, not 9. The frontend looks broken with too many.
-2. **Foreground the narrative** — widgets should serve the moment (serve ritual, fatigue,
-   retreat pattern), not a generic dashboard.
-3. **State-appropriate** — `TossTracer` only during PRE_SERVE_RITUAL; `FootworkHeatmap` only
-   during ACTIVE_RALLY; `MomentumMeter` anytime after enough rally data exists.
-4. **Keep nameplates** — `PlayerNameplate` should almost always appear (both sides), unless
-   the moment calls for a full-screen visual (rare).
+2. **Foreground Player A's narrative** — widgets should serve the moment (serve ritual,
+   fatigue, retreat pattern), not a generic dashboard.
+3. **State-appropriate** — `TossTracer` only during PRE_SERVE_RITUAL; `FootworkHeatmap`
+   only during ACTIVE_RALLY.
+4. **Always include `PlayerNameplate` for Player A** at `top-left`. Do NOT emit
+   `PlayerNameplate` at `top-right` (no Player B).
+5. **DO NOT EMIT** `MomentumMeter` or `PredictiveOverlay` — both require opponent data
+   we don't have.
 
 ## Available widgets (use EXACT names)
 
-  PlayerNameplate       — player info card (name, current state)
+  PlayerNameplate       — player info card (only for Player A; slot must be top-left)
   SignalBar             — one biomechanical signal visualization; up to 4 on screen at once
-  MomentumMeter         — relative rally-win bar
-  PredictiveOverlay     — "who's winning the next point" forecast
-  TossTracer            — serve toss trajectory trace (PRE_SERVE_RITUAL only)
-  FootworkHeatmap       — court footwork density (ACTIVE_RALLY only)
+  TossTracer            — serve toss trajectory trace (PRE_SERVE_RITUAL only, Player A)
+  FootworkHeatmap       — court footwork density (ACTIVE_RALLY only, Player A)
 
 ## Available slots (use EXACT names)
 
-  top-left, top-right, top-center,
-  right-1, right-2, right-3, right-4,
-  center-overlay, bottom
+  top-left, top-center, right-1, right-2, right-3, right-4, center-overlay, bottom
 
-`SignalBar` widgets go in `right-1` ... `right-4` (use the slot index to order them).
-`PlayerNameplate` widgets go in `top-left` (Player A) or `top-right` (Player B).
+`SignalBar` widgets go in `right-1` ... `right-4` (use the slot index to order by importance).
+`PlayerNameplate` goes in `top-left` (Player A only).
+`TossTracer` / `FootworkHeatmap` go in `center-overlay`.
 
 ## Required output
 
@@ -89,12 +95,10 @@ Do NOT include `layout_id`, `timestamp_ms`, or `valid_until_ms` — the caller w
 
 ## Props conventions (free-form but predictable)
 
-  PlayerNameplate:  {"player": "A" | "B", "highlight": bool}
-  SignalBar:        {"player": "A" | "B", "signal": "<SignalName>", "z_score": <float>, "label": "<string>"}
-  MomentumMeter:    {"a_share": <float 0..1>}
-  PredictiveOverlay:{"winner": "A" | "B", "confidence": <float 0..1>}
-  TossTracer:       {"player": "A" | "B"}
-  FootworkHeatmap:  {"player": "A" | "B", "intensity": <float 0..1>}
+  PlayerNameplate:  {"player": "A", "highlight": bool}
+  SignalBar:        {"player": "A", "signal": "<SignalName>", "z_score": <float>, "label": "<string>"}
+  TossTracer:       {"player": "A"}
+  FootworkHeatmap:  {"player": "A", "intensity": <float 0..1>}
 """
 
 
@@ -105,9 +109,10 @@ def _default_fallback_layout(
     valid_until_ms: int,
     reason: str,
 ) -> HUDLayoutSpec:
-    """Minimal layout used when Opus output can't be parsed/validated or the API fails.
+    """Minimal single-player layout used when Opus output can't be parsed/validated
+    or the API fails.
 
-    Two nameplates + one MomentumMeter is the neutral baseline — always safe.
+    Nameplate + an empty SignalBar slot is the neutral Player A baseline.
     """
     return HUDLayoutSpec(
         layout_id=layout_id,
@@ -115,8 +120,8 @@ def _default_fallback_layout(
         reason=reason,
         widgets=[
             HUDWidgetSpec(widget="PlayerNameplate", slot="top-left", props={"player": "A"}),
-            HUDWidgetSpec(widget="PlayerNameplate", slot="top-right", props={"player": "B"}),
-            HUDWidgetSpec(widget="MomentumMeter", slot="top-center", props={"a_share": 0.5}),
+            HUDWidgetSpec(widget="SignalBar", slot="right-1",
+                          props={"player": "A", "signal": "recovery_latency_ms"}),
         ],
         valid_until_ms=valid_until_ms,
     )
@@ -186,12 +191,14 @@ async def generate_hud_layout(
     ]
     user_prompt = (
         f"Current match time: {t_ms} ms.\n"
-        f"Match: Player A = {player_a_name}, Player B = {player_b_name}.\n"
+        f"Target: Player A = {player_a_name} (the near-court player).\n"
         f"Trigger: {trigger_description}\n\n"
         f"State snapshot:\n{state_summary}\n\n"
         f"Emit a single JSON object matching the schema. No preamble, no markdown fences. "
-        f"Widget props use 'A' / 'B' as player identifiers, not the real names — the frontend "
-        f"resolves names from MatchMeta."
+        f"All widgets target Player A only. Do NOT emit PlayerNameplate@top-right, "
+        f"MomentumMeter, or PredictiveOverlay — we have no Player B data. "
+        f"Widget props use 'A' as the player identifier; the frontend resolves the display "
+        f"name from MatchMeta."
     )
 
     try:

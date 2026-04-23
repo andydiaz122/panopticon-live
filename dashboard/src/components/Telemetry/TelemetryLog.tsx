@@ -110,7 +110,15 @@ export default function TelemetryLog({
             # telemetry buffer clear — play the video to stream events
           </div>
         ) : (
-          visibleRows.map((row, i) => <FeedLine key={i} row={row} compact={isCompact} />)
+          visibleRows.map((row, i) => (
+            <FeedLine
+              key={`${row.t}-${row.kind}-${
+                row.kind === 'signal' ? row.signal.signal_name : i
+              }`}
+              row={row}
+              compact={isCompact}
+            />
+          ))
         )}
       </div>
     </div>

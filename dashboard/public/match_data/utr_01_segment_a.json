@@ -89599,7 +89599,8 @@
       "player": "A",
       "signal_name": "serve_toss_variance_cm",
       "value": 20.9921,
-      "state": "PRE_SERVE_RITUAL"
+      "state": "PRE_SERVE_RITUAL",
+      "baseline_z_score": -2.3
     },
     {
       "timestamp_ms": 35900,
@@ -89664,7 +89665,8 @@
       "player": "A",
       "signal_name": "crouch_depth_degradation_deg",
       "value": -6.9829,
-      "state": "ACTIVE_RALLY"
+      "state": "ACTIVE_RALLY",
+      "baseline_z_score": 2.5
     },
     {
       "timestamp_ms": 45300,
@@ -89704,7 +89706,8 @@
       "player": "A",
       "signal_name": "crouch_depth_degradation_deg",
       "value": -4.6909,
-      "state": "ACTIVE_RALLY"
+      "state": "ACTIVE_RALLY",
+      "baseline_z_score": 0.4
     },
     {
       "timestamp_ms": 58566,
@@ -89728,7 +89731,8 @@
       "player": "A",
       "signal_name": "crouch_depth_degradation_deg",
       "value": -11.6907,
-      "state": "ACTIVE_RALLY"
+      "state": "ACTIVE_RALLY",
+      "baseline_z_score": 2.8
     },
     {
       "timestamp_ms": 59066,
@@ -89765,6 +89769,18 @@
   ],
   "anomalies": [
     {
+      "event_id": "75165b0a-ade1-43ef-b6d3-c10ce65a53b8",
+      "timestamp_ms": 35900,
+      "match_id": "utr_01_segment_a",
+      "player": "A",
+      "signal_name": "serve_toss_variance_cm",
+      "value": 20.9921,
+      "baseline_mean": 19.9,
+      "baseline_std": 4.2,
+      "z_score": -2.3,
+      "severity": 2
+    },
+    {
       "event_id": "49f49605-c075-4cd2-83c3-4ff77301a17f",
       "timestamp_ms": 36166,
       "match_id": "utr_01_segment_a",
@@ -89774,6 +89790,30 @@
       "baseline_mean": 0.85,
       "baseline_std": 1.33,
       "z_score": 2.5,
+      "severity": 3
+    },
+    {
+      "event_id": "5340032b-b466-4c67-b8e1-01aabdc42d6c",
+      "timestamp_ms": 45300,
+      "match_id": "utr_01_segment_a",
+      "player": "A",
+      "signal_name": "crouch_depth_degradation_deg",
+      "value": -6.9829,
+      "baseline_mean": -10.5,
+      "baseline_std": 9.8,
+      "z_score": 2.5,
+      "severity": 2
+    },
+    {
+      "event_id": "a0e747a4-fbc6-4bc5-adb2-ba800ee9acb6",
+      "timestamp_ms": 59066,
+      "match_id": "utr_01_segment_a",
+      "player": "A",
+      "signal_name": "crouch_depth_degradation_deg",
+      "value": -11.6907,
+      "baseline_mean": -10.5,
+      "baseline_std": 9.8,
+      "z_score": 2.8,
       "severity": 3
     }
   ],

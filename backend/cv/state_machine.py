@@ -169,14 +169,22 @@ class MatchStateMachine:
          CRITICAL: only rescue PRE_SERVE_RITUAL opponents — NEVER force ACTIVE_RALLY
          opponents into DEAD_TIME, as that would truncate their legitimate deceleration
          curve and destroy recovery_latency_ms + lateral_work_rate.
-      3. USER-CORRECTION-010: if EITHER player emits a BOUNCE_DETECTED event, force BOTH
-         into PRE_SERVE_RITUAL (bouncer is server, non-bouncer is returner re-syncing).
+      3. USER-CORRECTION-010 + PATTERN-053 (edge-triggered bounce coupling):
+         RollingBounceDetector.evaluate() is a pure spectral probe over a ~3s rolling
+         buffer — it returns True every frame while a bounce signature lives in the
+         buffer. We must couple only on the RISING EDGE (False → True) per player,
+         not on every True tick. Otherwise continuous True pins the FSM in
+         PRE_SERVE_RITUAL for the entire signature window, across the actual rally.
       4. Consumers drain transitions via `drain_transitions()`.
     """
 
     def __init__(self) -> None:
         self._a = PlayerStateMachine(player="A")
         self._b = PlayerStateMachine(player="B")
+        # PATTERN-053: track prior-tick bounce levels for rising-edge detection.
+        # The detector is a pure spectral probe (idempotent evaluate()); the edge
+        # semantics live here at the consumer boundary.
+        self._last_bounce_state: tuple[bool, bool] = (False, False)
 
     def update(
         self,
@@ -189,10 +197,11 @@ class MatchStateMachine:
         """Advance both players one tick, applying match-level coupling.
 
         Coupling order per tick:
-          i.  Per-player kinematic update (independent).
-          ii. USER-CORRECTION-011: Conditional DEAD_TIME uncoupling (PRE_SERVE_RITUAL-only rescue).
-          iii. USER-CORRECTION-010: Bounce → PRE_SERVE_RITUAL (runs last; a simultaneous
-               DEAD_TIME + bounce event correctly lands everyone in PRE_SERVE_RITUAL).
+          i.   Per-player kinematic update (independent).
+          ii.  USER-CORRECTION-011: Conditional DEAD_TIME uncoupling (PRE_SERVE_RITUAL-only rescue).
+          iii. USER-CORRECTION-010 + PATTERN-053: Rising-edge bounce → PRE_SERVE_RITUAL
+               (runs last; a simultaneous DEAD_TIME + bounce rising edge correctly
+               lands everyone in PRE_SERVE_RITUAL).
         """
         a_prev, b_prev = self._a.state, self._b.state
         self._a.update(a_speed_mps, t_ms)
@@ -209,7 +218,17 @@ class MatchStateMachine:
         if b_entered_dead and self._a.state == "PRE_SERVE_RITUAL":
             self._a.force_state("DEAD_TIME", t_ms)
 
-        if a_bounce or b_bounce:
+        # PATTERN-053: edge-trigger the bounce coupling.
+        # RollingBounceDetector.evaluate() returns True every frame the signature is
+        # in its ~90-frame buffer. Firing force_state on every True tick would pin
+        # the players in PRE_SERVE_RITUAL for the whole ~3s window, across the rally.
+        # Rising-edge detection (False → True per player) fires once per bounce signature.
+        prev_a_bounce, prev_b_bounce = self._last_bounce_state
+        a_bounce_edge = a_bounce and not prev_a_bounce
+        b_bounce_edge = b_bounce and not prev_b_bounce
+        self._last_bounce_state = (a_bounce, b_bounce)
+
+        if a_bounce_edge or b_bounce_edge:
             # USER-CORRECTION-010: bouncer is server, non-bouncer is returner re-syncing.
             self._a.force_state("PRE_SERVE_RITUAL", t_ms)
             self._b.force_state("PRE_SERVE_RITUAL", t_ms)

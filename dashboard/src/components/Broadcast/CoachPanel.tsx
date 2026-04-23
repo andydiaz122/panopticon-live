@@ -3,7 +3,10 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 
-import { usePanopticonState } from '@/lib/PanopticonProvider';
+import {
+  usePanopticonState,
+  usePanopticonStatic,
+} from '@/lib/PanopticonProvider';
 import { colors, motion as motionTokens } from '@/lib/design-tokens';
 import type { CoachInsight } from '@/lib/types';
 
@@ -20,6 +23,8 @@ import type { CoachInsight } from '@/lib/types';
  */
 
 const TYPEWRITER_STEP_MS = 18;
+/** Broadcast "hold" after typewriter completes before resuming the video. */
+const TELESTRATOR_HOLD_MS = 3500;
 
 export default function CoachPanel() {
   const { activeCoachInsight } = usePanopticonState();
@@ -39,33 +44,69 @@ export default function CoachPanel() {
 }
 
 function InsightCard({ insight }: { insight: CoachInsight }) {
+  const { videoRef } = usePanopticonStatic();
   const spanRef = useRef<HTMLSpanElement>(null);
   const [thinkingOpen, setThinkingOpen] = useState(false);
   const hasThinking = Boolean(insight.thinking);
   const isCached = insight.cache_read_tokens > 0;
 
-  // Typewriter via DOM mutation — NEVER setState (PATTERN-047).
+  /**
+   * Telestrator pacing (PATTERN-051):
+   *   1. On insight mount: pause the video so judges can read.
+   *   2. Typewriter reveals commentary via DOM mutation (PATTERN-047).
+   *   3. When typewriter completes, hold TELESTRATOR_HOLD_MS, then resume.
+   *   4. Cleanup (insight changes OR unmount): clear timers and resume video
+   *      so the demo never stalls in a forced-pause state.
+   *
+   * We bind the pause/play calls to the videoRef FROM STATIC CONTEXT so this
+   * component remains decoupled from any specific <video> element lifecycle.
+   */
   useEffect(() => {
     const span = spanRef.current;
     if (!span) return;
+    // Capture the video element at effect start — avoids the
+    // react-hooks/exhaustive-deps warning about ref-changed-by-cleanup, and
+    // is safe here because videoRef is stable (singleton <video>).
+    const video = videoRef.current;
+
     const commentary = insight.commentary;
     span.textContent = '';
     let i = 0;
+    let resumeTimeoutId: number | undefined;
 
-    const id = setInterval(() => {
+    // Step 1: pause the video. Guard — videoRef may be null during hydration.
+    video?.pause();
+
+    const typewriterId = window.setInterval(() => {
       i += 1;
       if (!spanRef.current) {
-        clearInterval(id);
+        window.clearInterval(typewriterId);
         return;
       }
       spanRef.current.textContent = commentary.slice(0, i);
       if (i >= commentary.length) {
-        clearInterval(id);
+        window.clearInterval(typewriterId);
+        // Step 3: hold, then resume
+        resumeTimeoutId = window.setTimeout(() => {
+          video?.play().catch(() => {
+            /* ignore autoplay-blocked / video-ended errors */
+          });
+        }, TELESTRATOR_HOLD_MS);
       }
     }, TYPEWRITER_STEP_MS);
 
-    return () => clearInterval(id);
-  }, [insight.commentary, insight.insight_id]);
+    return () => {
+      window.clearInterval(typewriterId);
+      if (resumeTimeoutId !== undefined) {
+        window.clearTimeout(resumeTimeoutId);
+      }
+      // Step 4: on insight change or unmount, always resume so the demo
+      // never leaves the viewer stranded at a paused frame.
+      video?.play().catch(() => {
+        /* ignore */
+      });
+    };
+  }, [insight.commentary, insight.insight_id, videoRef]);
 
   return (
     <motion.section

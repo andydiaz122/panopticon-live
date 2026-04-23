@@ -868,6 +868,37 @@ Cross-session recall. Every entry is:
 - **Why**: Technical constraints become demo polish when reframed. "Calibrating" reads as professional broadcast UX, not "empty app."
 - **Severity**: HIGH (demo-credibility — avoids "is it broken?" first impression)
 
+### PATTERN-050 — Tab Keep-Alive via `display: none` (never unmount)
+- **Type**: React architecture
+- **Context**: Phase 3.5 TabShell. Naïve tab implementation unmounts inactive tab content → the `<video>` element + rAF loop + match_data fetch all re-initialize every tab switch. Demo pacing (auto-pause timeline, typewriter state) breaks immediately.
+- **Rule**: In a tabbed app with shared state across tabs, render ALL tab bodies always. Hide inactive tabs with `style={{ display: id === activeId ? 'block' : 'none' }}`. Unmount is NEVER used for tab switches.
+- **Why**: `display: none` keeps the DOM node alive + keeps React state mounted. Video continues playing, scroll position is preserved, refs remain valid. Zero re-fetching, zero re-hydration flicker.
+- **How to apply**: `TabShell` renders a `<div>` per tab unconditionally; only the CSS display bit changes. The `<video>` inside Tab 1 keeps firing `timeupdate` events while the user is on Tab 2/3 → the telemetry feed auto-scrolls in real time even when invisible.
+- **Trade-off**: slightly higher memory (all tabs mounted). In our app this is ~200KB of components — negligible vs the UX win.
+- **Severity**: HIGH (demo-pacing-preserving)
+
+### PATTERN-051 — Telestrator Auto-Pause Pacing Pattern
+- **Type**: Demo-craft / video UX
+- **Context**: Andrew's feedback on the 60s continuous-video pacing: judges can't absorb data that fast. Traditional sports video + data dashboard forces the viewer to choose where to look. The fix is "Telestrator Mode" — the video cooperates with the data.
+- **Rule**: When a coach insight becomes active, pause the video. Typewriter the commentary (DOM mutation per PATTERN-047). When typewriter finishes, hold for `TELESTRATOR_HOLD_MS` (3500ms) so the judge reads the complete sentence. Then resume automatically. On unmount / insight-change, always resume so the demo never strands the viewer in a forced-pause state.
+- **Why**: Transforms a passive dashboard into an interactive analytical presentation. The video stops speaking to let the biomechanics data speak. Judges see a directed, broadcast-quality walkthrough instead of a frenetic data-overlay.
+- **How to apply**: `CoachPanel.tsx` captures `videoRef` at effect start (React 19 ref-cleanup safety), calls `video.pause()` on mount, schedules `video.play()` via `setTimeout` after typewriter completion. Cleanup clears the timeout AND unconditionally calls `play()` so panel exits don't leave a paused frame.
+- **Non-obvious insight**: `video.play()` returns a Promise that REJECTS on autoplay-blocked contexts OR when the video has ended. Always `.catch(() => {})` to avoid unhandled rejections.
+- **Severity**: HIGH (demo-polish win — changes "cool dashboard" to "cinematic product")
+
+### PATTERN-052 — Frontend State-Gating as Defense-in-Depth Against LLM Layout-Lag
+- **Type**: Coupling discipline / frontend safety net
+- **Context**: Phase 3 visual QA (Andrew): "biometric telemetry on the right-hand side is showing things like toss consistency in the middle of a rally, where the toss consistency is only relevant to the fan before the serve." Root cause: the backend Opus HUD Designer picks signals at HUD-layout-creation time, but the player's match-state transitions continuously. The layout's suggested signals become inappropriate within seconds of creation.
+- **Rule**: The frontend enforces a HARD mapping from `PlayerState → allowed SignalName[]`, applied as a filter on top of whatever `activeHUDLayout.widgets` contains. Specifically:
+  - `ACTIVE_RALLY` → hide `serve_toss_variance_cm`, `ritual_entropy_delta`, `crouch_depth_degradation_deg` (serve-ritual signals)
+  - `PRE_SERVE_RITUAL` / `DEAD_TIME` → hide `lateral_work_rate`, `baseline_retreat_distance_m` (rally-movement signals)
+  - `recovery_latency_ms`, `split_step_latency_ms` → state-agnostic, always permitted
+  - `UNKNOWN` / `null` → permissive (don't filter before we have state)
+- **Why**: The UI should look CORRECT at every frame. LLM layout-lag is a systemic issue — even a smarter Designer will have second-scale lag. A client-side filter is cheap and makes the bad-layout case impossible to observe.
+- **How to apply**: `lib/stateSignalGating.ts` owns the mapping. `SignalRail.tsx` calls `isSignalAllowedInState(signalName, state)` before pushing a SignalBar. Backend Designer prompts can stay focused on semantic choice; frontend guarantees contextual correctness.
+- **Generalizes to**: any case where an LLM produces a structured UI spec that consumers must render in a changing context. Always have a client-side contract check — LLMs will produce valid-looking output for stale contexts.
+- **Severity**: HIGH (UX correctness)
+
 ### PATTERN-049 — Bleeding-Edge Test-Stack Time Guardrail
 - **Type**: Process / time budget
 - **Context**: Setting up Vitest + JSDOM + React Testing Library + Next.js 16 + React 19 + Tailwind 4 for component tests is a bleeding-edge combo. Known to hit config rabbit-holes (transform pipelines, JSX runtime mismatches, Tailwind plugin resolution, RSC-boundary confusion) that can eat 2-3 hours to debug.

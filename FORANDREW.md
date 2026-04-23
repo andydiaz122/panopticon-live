@@ -599,3 +599,66 @@ Orthogonality check (what each skill would say about "how should this SignalBar 
 - `panopticon-hackathon-rules`: "New work only. No copy-paste from Alternative_Data."
 
 Each skill answers a DIFFERENT question. Together they specify the widget completely without overlap. That's the orthogonality discipline codified from `~/.claude/CLAUDE.md`.
+
+---
+
+## 2026-04-22 (pivot evening, part 2) — Phase 3.5 "Walking Skeleton" + Demo-Craft Patches
+
+### The strategic call
+
+You did a visual QA on the Core Trio and immediately spotted three things I'd missed:
+
+1. **The 60s continuous video is too fast.** Judges can't process a data-dashboard that scrolls by in real time. "Look at the data" and "watch the rally" are competing demands on their attention.
+2. **The telemetry was bleeding across match states.** Toss Consistency showed up mid-rally. Lateral Work showed up during serve ritual. The biometric category didn't match the moment.
+3. **The product scope isn't complete.** We've built Tab 1 (the HUD). We haven't built Tab 2 (Raw Telemetry) or Tab 3 (Opus Scouting). Judging a demo of an incomplete app is harder than judging a complete one — even if each piece is rougher.
+
+Your directive was surgical: **finish the scaffold first, polish later**. Breadth before depth. That's the right call at a hackathon where Sunday is non-negotiable.
+
+### The three patches we landed
+
+**1. Telestrator Auto-Pause (PATTERN-051)** — when a coach insight mounts, the video pauses. Typewriter reveals the commentary (still via DOM mutation — no re-render death spiral). When typewriter finishes, we hold 3.5s, then auto-resume. On unmount or insight-change we always `.play()` so the demo never gets stuck paused.
+
+The subtle-but-important bit: we captured `videoRef.current` at effect start, not in cleanup. React 19's `react-hooks/exhaustive-deps` rule flags ref access in cleanup because the ref MIGHT change between setup and cleanup. In our case it can't (the video element is singleton), but capturing the ref into a local `const video` variable makes the promise-of-stability explicit and satisfies the lint rule.
+
+This one patch changes the feel of the demo more than any other. The video now COOPERATES with the analysis instead of racing it.
+
+**2. State-Signal Gating (PATTERN-052)** — new file `stateSignalGating.ts` owns a hard map from `PlayerState → allowed SignalName[]`. `SignalRail` filters layouts through it before rendering. Rules:
+- ACTIVE_RALLY: no serve_toss, no ritual_entropy, no crouch_depth
+- PRE_SERVE_RITUAL / DEAD_TIME: no lateral_work, no baseline_retreat
+- recovery_latency / split_step: state-agnostic, always shown
+- UNKNOWN / null: permissive (don't filter pre-first-transition)
+
+The generalization I took from this: any time an LLM produces a structured UI spec that a client renders across a changing context, the client needs a schema-level contract check. LLMs are reliably good at producing "valid-looking output" — they're not good at reasoning about stale context. A client-side filter is cheap insurance.
+
+**3. 3-Tab Application Shell (PATTERN-050)** — new `TabShell` component handles keep-alive via `display: none` on inactive panels. All three tabs stay mounted, so:
+- The `<video>` keeps playing even when you're on Tab 2 or 3
+- SignalFeed auto-scrolls in real time even if you come back after 20s
+- Scouting report stays rendered if you generate it and switch tabs
+
+Tab 2 (Raw Telemetry) is a syntax-highlighted terminal-style feed of every signal / state transition / insight ≤ current time. It's deliberately "developer aesthetic" — the judges should see the proprietary stream of data, not a marketing abstraction.
+
+Tab 3 (Opus Scouting) is a Next.js Server Action (`"use server"` → `generateScoutingReport`) that currently returns a hand-authored markdown brief. The stub report is the VOICE we want the Phase 4 live-Opus call to match — biometrics-first, tactical consequences as evidence of physiology, fan-legible without watering down the rigor. When we swap the stub for the real Opus Managed Agent in Phase 4, the demo story is already written.
+
+### Prompt tuning (ready for Phase 4 rerun)
+
+I updated both agent prompts in-place but we did NOT re-run `precompute.py` yet. The new primer text is:
+
+- **BIOMETRICS → TACTICS MANDATE** section added to `BIOMECH_PRIMER` and to `NARRATOR_SYSTEM_PROMPT`.
+- Explicit rule: "Do NOT narrate tactics without explicitly citing a signal NAME + a NUMERIC value."
+- Worked example: bad = "Player A is retreating" / good = "baseline_retreat_distance_m has drifted 0.10 m → 1.67 m in four rallies (z=1.67) — he's conceding court position."
+- Narrator rule: "Connect what's HAPPENING tactically back to what's SHOWING up in the biomechanics. The fan should feel: 'I'm seeing inside the athlete's body.'"
+
+When we re-run `precompute.py` in Phase 4 (Friday/Saturday Sports Science sprint), the golden data will be rebuilt with this voice. The frontend already supports it — every SignalBar, CoachPanel, and ScoutingReport renders identical markup regardless of the specific text.
+
+### The "Walking Skeleton" roadmap
+
+Finishing the scaffold was the right move. Now the map is clear:
+
+- **Friday / Saturday — Phase 4 Sports Science Sprint**: re-run precompute with the updated prompts, verify the Coach+Narrator output matches the "biometrics-first" voice, potentially tune signal thresholds based on what the reviewed data reveals. Wire the live Opus Managed Agent into `generateScoutingReport`.
+- **Sunday — Phase 5 Record & Submit**: 3-minute video, storyboard via the `hackathon-demo-director` skill.
+
+### Meta-learning
+
+The team-lead review pattern (team-lead-then-execution) keeps paying dividends. Every time I wrote a plan, you came back with 5-9 patches BEFORE code was written. Each patch was genuinely load-bearing. I'm going to keep making drafts, not final plans, and letting you QA them cheap before they become expensive bugs.
+
+The orthogonal skill team is also paying off. When we designed SignalRail's state-gating, we didn't touch the `2k-sports-hud-aesthetic` skill (visuals), didn't touch `biomechanical-signal-semantics` (thresholds), didn't touch `react-30fps-canvas-architecture` (render pattern). The new discipline ("which signals are contextually appropriate in which state") belongs to a new concern layer, and it crystallized as a separate module (`stateSignalGating.ts`) + a new MEMORY pattern (PATTERN-052). That's the orthogonal-skill approach actually working in practice — not just aspirationally.

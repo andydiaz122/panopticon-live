@@ -8,7 +8,13 @@ import {
   usePanopticonState,
 } from '@/lib/PanopticonProvider';
 import { colors } from '@/lib/design-tokens';
-import type { HUDWidgetSpec, SignalName, SignalSample } from '@/lib/types';
+import { isSignalAllowedInState } from '@/lib/stateSignalGating';
+import type {
+  HUDWidgetSpec,
+  PlayerState,
+  SignalName,
+  SignalSample,
+} from '@/lib/types';
 
 import SensorCalibratingPlaceholder from './SensorCalibratingPlaceholder';
 import SignalBar from './SignalBar';
@@ -29,8 +35,12 @@ import SignalBar from './SignalBar';
  * spring out, new cards spring in.
  */
 export default function SignalRail() {
-  const { activeHUDLayout, activeSignalsByName, currentTimeMs } =
-    usePanopticonState();
+  const {
+    activeHUDLayout,
+    activeSignalsByName,
+    activePlayerState,
+    currentTimeMs,
+  } = usePanopticonState();
   const { getFirstLayoutMs } = usePanopticonStatic();
 
   const firstLayoutMs = getFirstLayoutMs();
@@ -42,7 +52,10 @@ export default function SignalRail() {
       aria-label="Biometric signal rail"
       className="flex h-full flex-col gap-3"
     >
-      <RailHeader layoutId={activeHUDLayout?.layout_id ?? 'calibrating'} />
+      <RailHeader
+        layoutId={activeHUDLayout?.layout_id ?? 'calibrating'}
+        state={activePlayerState}
+      />
 
       <AnimatePresence mode="wait">
         {isCalibrating ? (
@@ -52,6 +65,7 @@ export default function SignalRail() {
             key={activeHUDLayout.layout_id}
             widgets={activeHUDLayout.widgets}
             signals={activeSignalsByName}
+            state={activePlayerState}
           />
         )}
       </AnimatePresence>
@@ -59,7 +73,13 @@ export default function SignalRail() {
   );
 }
 
-function RailHeader({ layoutId }: { layoutId: string }) {
+function RailHeader({
+  layoutId,
+  state,
+}: {
+  layoutId: string;
+  state: PlayerState | null;
+}) {
   return (
     <header className="flex items-center justify-between">
       <span
@@ -72,32 +92,46 @@ function RailHeader({ layoutId }: { layoutId: string }) {
         className="mono text-[9px] uppercase tracking-[0.14em]"
         style={{ color: colors.textMuted }}
       >
-        {layoutId === 'calibrating' ? 'warmup' : `layout ${layoutId.slice(-6)}`}
+        {layoutId === 'calibrating'
+          ? 'warmup'
+          : `${formatState(state)} · layout ${layoutId.slice(-6)}`}
       </span>
     </header>
   );
 }
 
+function formatState(state: PlayerState | null): string {
+  if (!state || state === 'UNKNOWN') return '—';
+  return state.toLowerCase().replace(/_/g, ' ');
+}
+
 interface ActiveBarsProps {
   widgets: ReadonlyArray<HUDWidgetSpec>;
   signals: Record<string, SignalSample>;
+  state: PlayerState | null;
 }
 
-function ActiveBars({ widgets, signals }: ActiveBarsProps) {
+function ActiveBars({ widgets, signals, state }: ActiveBarsProps) {
   const barEntries = useMemo(() => {
     // Pull out SignalBar widgets targeting Player A. Belt-and-suspenders filter
     // — the backend already guarantees Player A only (DECISION-008).
+    //
+    // State-gating (PATTERN-052 / Action 1.2): reject signals inappropriate
+    // for the current PlayerState. Frontend defense-in-depth against LLM
+    // layout-lag where the Designer selected serve-ritual signals during an
+    // ACTIVE_RALLY (or vice versa).
     const entries: Array<{ signalName: SignalName }> = [];
     for (const w of widgets) {
       if (w.widget !== 'SignalBar') continue;
       if (w.props.player !== undefined && w.props.player !== 'A') continue;
       const signalName = w.props.signal as SignalName | undefined;
       if (!signalName) continue;
+      if (!isSignalAllowedInState(signalName, state)) continue;
       entries.push({ signalName });
       if (entries.length >= 4) break;
     }
     return entries;
-  }, [widgets]);
+  }, [widgets, state]);
 
   if (barEntries.length === 0) {
     return (
@@ -108,7 +142,7 @@ function ActiveBars({ widgets, signals }: ActiveBarsProps) {
         className="text-[12px] italic"
         style={{ color: colors.textMuted }}
       >
-        No biometric signals selected for the current layout.
+        Telemetry quiet for this phase of play.
       </motion.p>
     );
   }

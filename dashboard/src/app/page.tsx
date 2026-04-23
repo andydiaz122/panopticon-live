@@ -1,18 +1,20 @@
-import CoachPanel from '@/components/Broadcast/CoachPanel';
-import PlayerNameplate from '@/components/Broadcast/PlayerNameplate';
-import SignalRail from '@/components/Broadcast/SignalRail';
-import PanopticonEngine from '@/components/PanopticonEngine';
+import HudView from '@/components/Hud/HudView';
+import ScoutingReportTab from '@/components/Scouting/ScoutingReportTab';
+import SignalFeed from '@/components/Telemetry/SignalFeed';
+import TabShell from '@/components/TabShell';
 import PanopticonProvider from '@/lib/PanopticonProvider';
 
 /**
- * The main HUD stage. 12-column CSS grid:
- *   - Top-left:    PlayerNameplate (cols 1-3)
- *   - Center:      PanopticonEngine (video + skeleton, cols 4-9)
- *   - Right rail:  SignalRail (cols 10-12, rows 1-4)
- *   - Bottom:      CoachPanel (subordinate footer chip, cols 3-10)
+ * The PANOPTICON LIVE application shell.
  *
- * Single-player scope (DECISION-008): no Player B nameplate, no MomentumMeter,
- * no PredictiveOverlay. SignalBar stack is the hero (DECISION-009).
+ * PanopticonProvider wraps the TabShell so all tabs share ONE video ref,
+ * ONE match_data fetch, and ONE rAF loop. Tab content stays MOUNTED across
+ * tab switches (PATTERN-050), so video playback + feed scroll position +
+ * scouting-report state all survive navigation.
+ *
+ * Tab 1 — Live HUD: video + skeleton + signal rail + coach panel
+ * Tab 2 — Raw Telemetry: terminal-style signal log, streams with currentTime
+ * Tab 3 — Opus Scouting: Server-Action-triggered scouting report (Opus 4.7)
  */
 export default function Home() {
   return (
@@ -20,34 +22,29 @@ export default function Home() {
       videoSrc="/clips/utr_match_01_segment_a.mp4"
       matchDataSrc="/match_data/utr_01_segment_a.json"
     >
-      <main className="relative flex min-h-screen flex-col items-stretch justify-center gap-6 bg-[var(--color-bg-0)] p-6 lg:p-10">
-        <div className="mx-auto grid w-full max-w-[1600px] grid-cols-12 gap-5">
-          {/* Top-left: identity chrome */}
-          <header className="col-span-12 flex items-start justify-between gap-4 lg:col-span-3">
-            <PlayerNameplate />
-          </header>
-
-          {/* Center: video + skeleton — the hero of the screen */}
-          <section className="col-span-12 lg:col-span-6">
-            <div
-              className="relative w-full overflow-hidden rounded-[var(--radius-lg,12px)] ring-1 ring-[var(--color-border)]"
-              style={{ boxShadow: '0 0 60px rgba(0, 229, 255, 0.12)' }}
-            >
-              <PanopticonEngine />
-            </div>
-          </section>
-
-          {/* Right rail: SignalBar stack (the hero widget per DECISION-009) */}
-          <aside className="col-span-12 lg:col-span-3">
-            <SignalRail />
-          </aside>
-
-          {/* Bottom: CoachPanel — subordinate, only visible when insight active */}
-          <div className="col-span-12 mt-2 flex justify-center">
-            <CoachPanel />
-          </div>
-        </div>
-      </main>
+      <TabShell
+        initialTabId="hud"
+        tabs={[
+          {
+            id: 'hud',
+            label: 'Live HUD',
+            sublabel: 'Broadcast overlay',
+            content: <HudView />,
+          },
+          {
+            id: 'telemetry',
+            label: 'Raw Telemetry',
+            sublabel: 'Signal feed',
+            content: <SignalFeed />,
+          },
+          {
+            id: 'scouting',
+            label: 'Opus Scouting',
+            sublabel: 'On-demand brief',
+            content: <ScoutingReportTab />,
+          },
+        ]}
+      />
     </PanopticonProvider>
   );
 }

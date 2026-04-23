@@ -949,6 +949,28 @@ Cross-session recall. Every entry is:
 - **Severity**: HIGH (unlocks offline advantage; phase 2 implementation target)
 - **Source**: Founder override, 2026-04-23
 
+### GOTCHA-033 — Multi-line Paste Silently Embeds Newlines Inside Single-Quoted Env Vars
+- **Type**: Gotcha (shell / terminal)
+- **Context**: Apr 23, 2026 — Phase 4 Crucible Run. The user pasted a long `export ANTHROPIC_API_KEY='...'` command where the terminal display wrapped the key across two visual lines, AND the paste preserved a literal newline + two spaces of indent inside the quotes. Shell single-quoted strings span physical newlines lawfully — the embedded `\n  ` became part of the env var. Expected Anthropic key length 108 chars; actual `${#ANTHROPIC_API_KEY}` = 111 chars. The Anthropic SDK attempted HTTPS requests with a malformed Authorization header, which failed at the HTTP transport layer with `APIConnectionError: Connection error.` — NOT `AuthenticationError`, because the header never made it onto the wire. ALL 26 agent calls (10 Coach + 10 Designer + 6 Narrator) failed identically, producing `[coach_error: APIConnectionError: Connection error.]` commentaries. The underlying network + DNS + TLS + HTTPS to `api.anthropic.com` was perfectly healthy.
+- **Lesson**: NEVER paste a multi-line export command that quotes a long token across physical newlines. Two defenses, pick both:
+  1. Put the entire `export KEY=VALUE` on ONE physical line, preferably with `&&` chaining to the next command so the shell sees it as a single statement.
+  2. Validate the env var length immediately: `echo "len=${#ANTHROPIC_API_KEY}"` — Anthropic API keys are exactly 108 chars (7-char literal prefix + `api03-` + 95-char body).
+- **How to apply**:
+  - When giving a user an export command to paste, prefer NO surrounding single-quotes (Anthropic keys are alphanumeric + dashes + underscores, no shell-metas) AND chain it to a length-check so a malformed paste fails loudly rather than silently producing `APIConnectionError`.
+  - Template: `export ANTHROPIC_API_KEY=<the-key-body> && echo "len=${#ANTHROPIC_API_KEY} (expect 108)"`
+- **Diagnostic ladder when Anthropic calls mysteriously fail with APIConnectionError**:
+  1. DNS/TCP/TLS probe via `python -c "import socket; socket.create_connection(('api.anthropic.com', 443))"`. If healthy, network is not the problem.
+  2. `echo ${#ANTHROPIC_API_KEY}` — should be 108 for current Anthropic keys. Any other length = malformed.
+  3. Inspect the key with `echo -n "$ANTHROPIC_API_KEY" | od -c | head` — reveals embedded newlines, spaces, or non-printable bytes.
+  4. Only after steps 1-3 pass, blame rate-limits / regional outages.
+- **Severity**: MEDIUM (cost a full Crucible run (~8 min compute) before diagnosis; catchable in <10s with a `${#KEY}` length check)
+- **Note**: Originally numbered GOTCHA-018 in commit a0093e7; renumbered to GOTCHA-033 during merge to avoid collision with prior GOTCHA-018 (SG polyorder).
+
+### USER-CORRECTION-031 — Direct User Directive Overrides Forwarded Team-Lead Text
+- **Type**: User-Correction
+- **Context**: User forwarded a team-lead citadel-upgrade message that asserted "DO NOT create or switch to `hackathon-stage-3`. Claude hallucinated this path increment. Stay in `hackathon-stage-2`." The Environment block at session start explicitly set `/Users/andrew/Documents/Coding/hackathon-stage-3` as the primary working directory and `hackathon-stage-3` as the current branch. I reflexively switched my plan to stage-2 based on the forwarded text. User then issued an override: "I am overriding the team leads override. Work strictly inside stage-3 worktree."
+- **Lesson**: When the Environment block and forwarded human/agent text disagree about working directory, the Environment block is the authoritative source-of-truth for the current session. Forwarded text (from a team lead, another session, pasted directive) is historical context that may reflect a prior or sibling session. Empirically verify (git log, directory contents) BEFORE switching paths; surface the discrepancy to the user as a question, not as a silent switch.
+
 ### GOTCHA-021 — Ghost Opponent Contradiction: split_step_latency Cannot Reference Player B
 - **Type**: Gotcha / Scope Contradiction
 - **Context**: signalCopy.ts and system_prompt.py both described split_step_latency_ms as "delay from OPPONENT's racket contact to Player A's split-step." DECISION-008 (single-player scope) + GOTCHA-016 (Player B undetectable) means this reference is logically impossible.

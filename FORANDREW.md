@@ -983,6 +983,56 @@ The founder's final pre-flight audit before taking the `run_golden_data.sh` keys
 
 The sibling repo at `/Users/andrew/Documents/Coding/hackathon-demo-v1` contains parallel work that needs reconciling with `hackathon-research`. This is post-Golden-Run priority (Monday's Seed-Round prep). Approach: READ-ONLY survey first (git log diff, file tree comparison, unique-code detection) → propose a merge strategy → wait for explicit founder approval before any cross-repo file movement. No `git merge` is possible (different .git roots) — this is a manual cherry-pick / file-comparison exercise.
 
+### 2026-04-23 — MERGE EXECUTED: origin/hackathon-demo-v1 UI + CV fix absorbed (pre-Golden-Run)
+
+Founder overrode the "Monday post-submission" directive to combine demo-v1's UI work with our hackathon-research backend depth before the Golden Run. Plan at `/Users/andrew/.claude/plans/resilient-hatching-sundae.md`. Executed cleanly with zero regressions.
+
+**Six cherry-picks applied** (via isolated git worktree, ordered by conflict-surface growth):
+1. `591b950` (was `a0093e7`) — docs: GOTCHA-018 (env var newline paste trap). Renumbered locally to GOTCHA-033 due to ID clash with our existing GOTCHA-018 (SG polyorder).
+2. `e6e75c9` (was `47edaf0`) — **fix(cv): edge-trigger MatchStateMachine bounce coupling**. The one CV correctness fix we were missing. Previously our state_machine.py could fire match-coupling on EVERY tick while a bounce signature persisted in the rolling buffer (~3s window); now it fires only on the False→True rising edge per player. 139 lines of new regression tests included. Renumbered locally to **PATTERN-060**.
+3. `26f9102` (was `888acb5`) — **feat(dashboard): visible anomaly injections + dual TelemetryLog slots**. The UI feature the founder specifically wanted. Added `dashboard/src/lib/telemetry.ts` (+115) + new `dashboard/src/components/Telemetry/TelemetryLog.tsx` (+200), simplified `SignalFeed.tsx` (-250 net), integrated into HudView with two slots.
+4. `ece24d2` (was `787a5d1`) — fix(telemetry): stable FeedLine keys + Tab 2 progress counter.
+5. `920c6ec` (was `1558805`) — docs: Phase 4 kickoff. Client-Driven Payload concept renumbered locally to **PATTERN-061** — we did NOT adopt that approach; our Multi-Agent Trace Playback (PATTERN-056) supersedes it.
+6. `9913c23` (was `e79bca8`) — docs: 1749-line Phase 4 team-lead handoff + `.claude/settings.json`.
+
+**Three cherry-picks deliberately SKIPPED:**
+- `26cc73f` (Client-Driven Payload implementation) — architecturally obsolete; our Orchestration Console replaces it.
+- `def7b66` (merge commit) — individual cherry-picks supersede.
+- `4f9df37` (force-add 25MB match_data + 3.9MB mp4) — stays gitignored per our policy.
+
+**Phase 3 post-merge review panel** caught 3 HIGH findings (zero CRITICAL), all fixed in-worktree via `2557419`:
+- `HudView.tsx` inline array-literal props broke `useMemo` at 10 Hz → hoisted to module consts `SIDE_RAIL_ROW_KINDS` + `HEADLINE_STRIP_ROW_KINDS`.
+- `docs/PHASE_4_TEAM_LEAD_HANDOFF.md` had 52 stale ID references → renumbered via sed: PATTERN-053→060 (25×), PATTERN-054→061 (17×), GOTCHA-018→033 (10×).
+- `.claude/settings.json` had Windows-specific permissions (`powershell -c`, `del /f`, `format`, `shutdown`, `type`, `dir`) from cross-platform contamination → stripped.
+
+**Final state (local only, NOT pushed)**: `hackathon-research` @ `2557419`. Linear history from shared ancestor `0c2aac7`:
+```
+2557419 fix(merge): Phase-3 review findings — 3 HIGH fixes
+9913c23 docs: Phase 4 team-lead handoff + local settings
+920c6ec docs: Phase 4 kickoff (renumbered content)
+ece24d2 fix(telemetry): stable FeedLine keys + Tab 2 progress counter
+26f9102 feat(dashboard): visible anomaly injections + dual TelemetryLog slots
+e6e75c9 fix(cv): edge-trigger MatchStateMachine bounce coupling (local PATTERN-060)
+591b950 docs: GOTCHA-018 (local GOTCHA-033)
+defd5a6 docs: pre-flight audit + B2B seed-round roadmap
+d6ebc1e feat(panopticon): Phase 2B→4.5 — RTS + 3-Pass DAG + Multi-Agent Swarm + Trace Playback
+0c2aac7 [shared ancestor]
+```
+
+**Verified green post-merge (main workdir):** 440 pytest (was 437; +3 edge-trigger bounce tests) + 96 vitest + TypeScript strict clean + Next.js production build compiles in ~1.3s.
+
+**Methodology logged as PATTERN-062** (Isolated-Worktree + Ordered-Cherry-Pick + Orthogonal-Review) for future sessions to reuse.
+
+**Phase 2 skip (correctly):** `actions.ts` is still our Phase 3.5 stub (no live Opus call), so no server-action `maxDuration` override needed. Demo-v1's `b20c370` concept not applicable to our architecture.
+
+**Constraint observed throughout**: branch NOT pushed to origin. Live Vercel deploy at `panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app/` (serves `origin/main` = `def7b66`) untouched. The merged local branch is ready for Golden Run + demo recording on localhost; post-submission decision on whether to open a PR against main.
+
+**Reviewer LOW findings deferred to follow-up** (not blockers):
+- MatchStateMachine missing explicit `reset()` — caller must re-instantiate between matches (docstring-level contract).
+- TelemetryLog key-stability could use stable `id` per FeedRow.
+- `aria-live="polite"` at 10 Hz floods screen readers — consider `aria-live="off" + role="log"`.
+- `anomalyText` should null-guard `.toFixed()` calls for schema-drift resilience.
+
 > **Merge note (cherry-pick 1558805):** PATTERN-053 below originally referenced commit 47edaf0's edge-trigger fix. To avoid clashing with PATTERN-053 (RTS Smoother) already in this repo, the renumbered ID is PATTERN-060. Likewise PATTERN-054 (Client-Driven Payload) is renumbered to PATTERN-061. The narrative below preserves the original prose; refer to MEMORY.md for the canonical PATTERN-060/PATTERN-061 entries with notes.
 
 ## 2026-04-23 — Phase 4 kickoff: Sports Science & Polish Sprint (Actions 1 & 2 landed)

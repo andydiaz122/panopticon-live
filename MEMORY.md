@@ -1126,6 +1126,21 @@ Cross-session recall. Every entry is:
 - **Severity**: CRITICAL (deploying from this branch could clobber the founder's live demo site)
 - **Source**: Founder directive, 2026-04-23
 
+### PATTERN-062 — Isolated-Worktree + Ordered-Cherry-Pick + Orthogonal-Review Merge Methodology
+- **Type**: Pattern / Merge Engineering
+- **Context**: 2026-04-23 merged 6 commits from `origin/hackathon-demo-v1` into `hackathon-research` without regressions. 10 files touched, +2463/-251 lines, 440 pytest + 96 vitest + Next.js prod build all green post-merge. Canonical recipe for any multi-commit cross-branch merge where some commits are architecturally obsolete and must be skipped.
+- **Rule**: For complex merges where a plain `git merge <branch>` would pull in commits you don't want (architecturally obsolete, deploy-critical data blobs, etc.), DO NOT use `git merge` or `git rebase`. Use this four-layer approach:
+  1. **Read-only conflict preview**: `git merge-tree --write-tree HEAD <candidate_sha>` for each candidate cherry-pick. Zero working-tree impact. Tells you which commits will apply clean and which will conflict BEFORE you commit to a strategy.
+  2. **Isolated worktree execution**: dispatch an `Agent` with `isolation: "worktree"`. Auto-cleans if the agent makes no changes; returns path+branch if successful. The main workdir is untouched no matter what happens in the worktree.
+  3. **Ordered cherry-pick with `-x` + `rerere`**: `git config rerere.enabled true && git config rerere.autoupdate true` up front. Then `git cherry-pick -x <sha>` per commit in dependency order (backend first, UI main second, UI polish third, docs last — docs conflict most, stable content on top). Run full test suite between each cherry-pick; abort on red.
+  4. **Post-merge orthogonal review panel** (parallel): dispatch 4 specialized reviewers — general `code-reviewer` + language-specific (`python-reviewer` + `typescript-reviewer`) + `security-reviewer`. Each has a distinct failure-mode lens; HIGH findings get fixed IN THE WORKTREE before integration. Only fast-forward back to the main workdir after reviewers green-light.
+- **When to use**: multi-commit cross-branch merge with (a) an explicit skip list for obsolete commits, (b) renumbering-cascades (e.g., competing PATTERN-053 meanings), (c) demo-performance-critical UI code, (d) uncommitted working-tree work in the main workdir you don't want to disturb.
+- **When NOT to use**: single-commit merges, same-author linear continuation, zero-conflict fast-forwards — use plain `git merge --ff-only` for those.
+- **Canonical ID-clash handling**: if the incoming branch used the same PATTERN/GOTCHA number for a different concept, renumber the INCOMING side to the next available slot and add a "originally numbered PATTERN-N" note. DO NOT renumber your existing entries — they're already referenced from prior commits. Then run a `sed -i` / `rg --files-with-matches` pass to update any incoming docs that reference the old number.
+- **Required follow-through**: record the merge as a named PATTERN with the specific reviewer tools used, so future sessions don't re-derive the methodology. (This entry is that record.)
+- **Severity**: HIGH (unlocks safe multi-commit merges without destabilizing the main workdir)
+- **Source**: 2026-04-23 `origin/hackathon-demo-v1` merge. Plan at `/Users/andrew/.claude/plans/resilient-hatching-sundae.md`.
+
 ### GOTCHA-031 — OBS Thermal / DOM-Hydration Frame Drop Trap during demo recording
 - **Type**: Gotcha / Physical Hardware
 - **Context**: 1080p60 OBS recording of the Next.js dashboard on Mac Mini M4 Pro. Simultaneous load: 15-25MB match_data.json hydration + 60fps canvas rasterization over broadcast video + video decode + video H.264 encode (for OBS output). All four compete for the same unified memory + GPU.

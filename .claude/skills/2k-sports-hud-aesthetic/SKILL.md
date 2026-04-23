@@ -1,6 +1,6 @@
 ---
 name: 2k-sports-hud-aesthetic
-description: Design language for the PANOPTICON LIVE HUD — color palette, typography, motion timings, widget variants, aesthetic references. Use when building or styling any dashboard/components/Broadcast/* component. Inspired by NBA 2K, FIFA, Madden, NFL broadcast overlays, and F1 telemetry.
+description: Design language for the PANOPTICON LIVE HUD — color palette, typography, canonical spring physics, widget variants, calibration states, aesthetic references. Use when building or styling any dashboard/components/Broadcast/* component. Covers single-player layout grid (DECISION-008), broadcast springs (PATTERN-044), CoachPanel unmount safety (PATTERN-047), and sensor calibration placeholders (PATTERN-048 / GOTCHA-017). Inspired by NBA 2K, FIFA, Madden, NFL broadcast overlays, and F1 telemetry.
 ---
 
 # 2K-Sports HUD Aesthetic
@@ -70,11 +70,7 @@ export const motion = {
 
 ## Widget Catalog
 
-### PlayerNameplate
-- Top-left (Player A) / Top-right (Player B)
-- Flag icon + seed + current-server dot
-- Accent color = player color
-- Enter: fade + slide 20px from edge, 400ms easeOutQuart
+Single-player focus (DECISION-008): every widget is Player-A-only. `MomentumMeter` and `PredictiveOverlay` are explicitly REMOVED — do not re-introduce them.
 
 ### SignalBar
 - Horizontal progress bar (height 8px)
@@ -83,37 +79,34 @@ export const motion = {
 - Deviation: interpolate fill toward `energized` / `fatigued` / `anomaly` based on z-score
 - On anomaly (z ≥ 2): pulse animation (scale 1.0 → 1.04 → 1.0, 900ms loop) + glow shadow
 - Sparkline below (~40px tall) via Recharts `<LineChart>`
+- Right-rail stack (up to 4 slots) driven by `activeHUDLayout.widgets`
+- Bar-fill transitions use `motion.springFirm` — see "Broadcast Spring Physics" below (PATTERN-044)
 
-### MomentumMeter
-- Horizontal bar split in the middle
-- Left half = Player A fatigue composite; Right half = Player B
-- Whichever is higher gets visual emphasis
-- Updates on match-state change, not per frame
-
-### PredictiveOverlay
-- Floats above a player
-- Shows Opus's next-shot prediction: "Cross-court forehand · 68%"
-- Glow gradient matching player color
-- Fade in 300ms when Opus emits, fade out 600ms on shot lands
+### PlayerNameplate
+- Top-left ONLY (Player A)
+- Flag icon + seed + current-server dot
+- Accent color = `playerA` cyan
+- Enter: fade + slide 20px from edge, mounted via `motion.springStandard`
 
 ### TossTracer
 - SVG path traced over the live video during PRE_SERVE_RITUAL
-- Stroke color = player color
+- Stroke color = `playerA`
 - Stroke-dashoffset animation (0 → 1) to "draw" the path
 - Only visible during toss phase; fades as contact happens
+- Center-overlay; part of the follow-up plan (not Core Trio)
 
 ### FootworkHeatmap
-- Per-player small heatmap overlay (bottom corner of frame)
+- Small heatmap overlay (center-overlay) during ACTIVE_RALLY
 - Dots fade from recent = bright to old = dim over ~5 seconds
 - Coordinates from normalized keypoints × court dimensions
+- Follow-up plan, not Core Trio
 
 ### CoachPanel (Opus commentary)
-- Fixed bottom panel, full-width
-- Opus Coach name label with purple accent
-- Typewriter effect on commentary text (animate character-by-character, 18ms per char)
-- Collapsible "Show thinking" chevron → expands the extended-thinking block
-- Thinking block: monospace, `opusThinking` purple text, slightly dimmer than commentary
-- Cache-hit indicator: subtle "⚡ cached" chip
+- SUBORDINATE footer chip, bottom-center, `max-height: 88px`, ~60% page width.
+- Only visible when an insight is active; `<AnimatePresence>` spring in/out.
+- `key={activeCoachInsight.insight_id}` on wrapper to guarantee race-free unmount on insight change (PATTERN-047).
+- Typewriter text reveals via DOM mutation (`spanRef.current.textContent = commentary.slice(0, i)`) — NEVER setState. See PATTERN-047 in MEMORY.md for why.
+- Purple "Opus" chip + cache-hit indicator. Tolerate `insight.thinking === null | undefined`.
 
 ## Motion Principles
 
@@ -122,6 +115,20 @@ export const motion = {
 3. **Pulse on significance.** Anomaly events pulse the affected widget — scale 1.0→1.04→1.0 on a 900ms loop until user interacts or anomaly expires.
 4. **No parallax, no confetti.** Avoid decorative motion that doesn't convey info. Tennis is a serious signal product.
 5. **Throttle motion on per-frame data.** Motion only runs on state-update events, not on per-frame ref updates (that's canvas territory).
+
+## Broadcast Spring Physics
+
+Canonical springs for every `<motion.*>` inside `dashboard/src/components/Broadcast/`:
+
+```ts
+motion.springStandard = { type: 'spring', stiffness: 260, damping: 22 }  // widget mount/exit
+motion.springFirm     = { type: 'spring', stiffness: 300, damping: 30 }  // bar-fill / value changes
+motion.springGentle   = { type: 'spring', stiffness: 180, damping: 26 }  // layout shifts
+```
+
+Rule: every `<motion.*>` in `dashboard/src/components/Broadcast/` uses one of these. NO `easeOutQuart` or fixed-duration tweens for any value that updates from the 10Hz state stream (PATTERN-044). Spring physics is the bridge: 10Hz data → 60FPS fluid motion.
+
+Fixed-duration tweens are still allowed for genuinely one-shot UI events (page enter, modal mount) that do NOT touch the 10Hz stream.
 
 ## Motion Implementation
 
@@ -148,10 +155,17 @@ For pulse-on-anomaly:
 
 ## Layout Grid
 
-- 12-column CSS Grid
-- Top row: PlayerA Nameplate (cols 1-3) · MomentumMeter (cols 4-9) · PlayerB Nameplate (cols 10-12)
-- Middle rows: Video (8 cols) · SignalBar stack (4 cols)
-- Bottom row: CoachPanel (full width, 3-col tall)
+Single-player layout (DECISION-008):
+
+- Top-left: PlayerNameplate (Player A only).
+- Right rail (rows 1–4): SignalBar stack (up to 4 slots driven by `activeHUDLayout.widgets`).
+- Center: video + skeleton canvas.
+- Bottom-center: CoachPanel chip (when active).
+- Center-overlay: TossTracer (PRE_SERVE_RITUAL) / FootworkHeatmap (ACTIVE_RALLY). Follow-up plan, not Core Trio.
+
+## Fan-Facing Signal Copy
+
+Every SignalBar ships a plain-English label + one-line physiology explanation (DECISION-009). Canonical copy lives in `.claude/skills/biometric-fan-experience/SKILL.md`.
 
 ## Anti-Patterns
 
@@ -168,6 +182,17 @@ For pulse-on-anomaly:
 3. Translate to Tailwind config + `design-tokens.ts`
 4. Do NOT try to auto-generate React code from Figma — reliability is too low
 5. Use Figma as looking tool; hand-write Tailwind classes
+
+## Calibration States
+
+Because the backend drops a warmup window of CV data, `activeHUDLayout` may be `null` for the first ~11s. Instead of empty space, render `<SensorCalibratingPlaceholder/>`:
+
+- Header: "BIOMETRIC SENSORS" (Inter 700 uppercase, tabular-nums, `textSecondary`).
+- Status line: "CALIBRATING…" with 1.8s opacity pulse on a `playerA`-tinted text.
+- Sub-text: "Establishing player baselines from warmup" (Inter 400, 11px, `textSecondary`).
+- Micro-loader: three cyan dots with 0.18s-staggered pulse (`staggerChildren` via Framer Motion variants).
+
+Data-driven gate: `currentTimeMs < matchData.hud_layouts[0]?.timestamp_ms` (NOT hardcoded). See PATTERN-048 / GOTCHA-017 in MEMORY.md.
 
 ## Aesthetic Litmus Test
 

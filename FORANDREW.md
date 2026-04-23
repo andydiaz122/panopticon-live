@@ -532,3 +532,70 @@ Andrew chose option **#3 (Accept the limitation — demo Player A only)** with t
 ### Meta-learning
 
 The bimodal `bbox_conf` histogram was the diagnostic that broke the investigation open. "Run the smoke test against real data and plot what comes out" is a higher-ROI debugging move than adding more tests or reading more code. It's the CV analog of PATTERN-038 (mocked SDK tests validate shape-of-call, not shape-API-accepts) — mocked test fixtures validate the shape of our CODE, not the shape of DATA the real world produces.
+
+---
+
+## 2026-04-22 (pivot evening) — Biometrics-as-Hero Repositioning + Team-Lead Citadel Patches
+
+### The framing flip
+
+You pulled me aside (metaphorically — you were typing, not literally pulling) and said something that reframed the entire product: **"I don't want to make it about the coaching insights. The value we are providing is the biometric athlete insights."** You gave me the full sentence: the 7 signals, extracted from standard 2D broadcast pixels with no hardware sensors, are the proprietary data moat. Opus coaching is "icing on the cupcake."
+
+This is DECISION-009. It's the most important framing decision in the project so far.
+
+**Why it matters for the demo:** Judges don't care that Opus can write nice commentary about tennis — every LLM can do that. They care that we extracted fatigue-telemetry from frames anyone could scrape. That's a hard-tech differentiator. If the demo leads with Opus commentary, we look like a thin wrapper. If it leads with "here's a signal nobody else has," we look like a CV startup.
+
+**What I changed in response:**
+- CLAUDE.md gained a new top-level section "CORE VALUE PROPOSITION (DECISION-009)" right below the Prime Directive. Future sessions will read it on auto-load.
+- MEMORY.md got DECISION-009 logged with "how to apply" guidance: visual hierarchy rule (SignalBar hero, CoachPanel subordinate), fan-facing copy requirement on every signal.
+- The in-flight Phase-3-plan was rewritten. SignalBar moved to hero position. CoachPanel got demoted to a "thin footer chip" — NOT a full-width bottom panel. Every signal now ships a plain-English label + physiology caption aimed at the casual fan.
+- RESUME.md got a "Strategic Frame" block up top so new sessions inherit the pivot.
+- A new orthogonal skill is being created: `.claude/skills/biometric-fan-experience/` — owns the fan-facing copy layer (plain-English labels, why-this-matters captions, calibration states, anomaly copy). Orthogonal to `biomechanical-signal-semantics` (physics/math), `2k-sports-hud-aesthetic` (visual language), `react-30fps-canvas-architecture` (render pattern).
+
+### The team-lead citadel patches (9 architectural upgrades)
+
+After I wrote the first draft plan, you ran it past a team-lead review pass and came back with 5 (then 9) architectural patches. Each one was right, each one would have been a real bug. In plain English:
+
+**1. Kill `setInterval` for video-driven state.** My first design had a 100ms setInterval reading `video.currentTime` to refresh HUD state at 10Hz. Problem: setInterval doesn't know about video playback. It fires on pause, drifts on tab-throttle, misses scrub events. Fix: put the 10Hz gate INSIDE a `requestAnimationFrame` loop. rAF pauses when the tab is hidden, stays at 60Hz during playback, sees the true `video.currentTime`. Logged as PATTERN-042.
+
+**2. Ban Recharts for high-frequency widgets.** I proposed a Recharts sparkline inside each SignalBar. At 10Hz × 4 bars, that's 40 full React-managed SVG rerenders per second — enough to micro-stutter the skeleton canvas. Fix: omit the sparkline in Core Trio. If we add one later, hand-rolled `<svg><polyline>` only. PATTERN-043.
+
+**3. Turn the 11.5s dead-air window into cinematic framing.** The backend drops the first 10s of CV data as warmup. Result: the right rail is EMPTY for the first 11.5s of the demo. Judges would think the app is broken. Fix: stylized "BIOMETRIC SENSORS — CALIBRATING…" placeholder with a pulsing loader — turns a technical constraint into ESPN-grade polish. GOTCHA-017.
+
+**4. Spring physics, not tweens.** Framer Motion with `easeOutQuart` tweens looks "web-app-y." Real broadcast graphics use spring physics — mass + damping — so values chase their targets fluidly. With 10Hz data feeding a spring animator at 120Hz display rate, the motion reads as "physical telemetry." PATTERN-044.
+
+**5. Clamp array indices on video scrub.** Scrubbing to end-of-video makes `Math.floor(currentTime * fps)` exceed `keypoints.length`. Accessing `keypoints[oob]` returns undefined, which the renderer dereferences → React error boundary → blank screen mid-demo. Fix: `Math.min(idx, keypoints.length - 1)` everywhere. PATTERN-045.
+
+**6. Split the React context.** My first design exposed refs AND 10Hz state in one `PanopticonContext`. Every consumer re-renders every 100ms — including the canvas engine that must NOT re-render. Fix: two contexts — `PanopticonStaticContext` (refs, never changes) and `PanopticonStateContext` (10Hz state). The canvas engine consumes only the static one. PATTERN-046. This one is the most impactful fix architecturally — it's a general React pattern that applies far beyond this project.
+
+**7. Typewriter via DOM mutation, not setState.** Naïve typewriter = `setText(prev + ch)` every 18ms = 55 React renders/sec during animation = video stutter. Fix: mutate `spanRef.current.textContent` directly inside the interval; React never re-renders. Plus `key={insight_id}` on the wrapper so React fully unmounts the old typewriter when the insight changes — auto-cancels any in-flight interval, no race conditions on scrub. PATTERN-047.
+
+**8. Don't hardcode warmup thresholds.** I wrote `if (currentTimeMs < 11500) showCalibration()`. That's a hardcoded mirror of the backend's `--warmup-ms` flag. If the backend changes warmup from 10s → 7s, the UI stays broken for 11.5s on 7s-warmup data. Fix: derive from data: `firstLayoutMs = matchDataRef.current?.hud_layouts[0]?.timestamp_ms ?? Infinity`. PATTERN-048.
+
+**9. Don't burn time on a bleeding-edge test stack.** I planned full Vitest + JSDOM + RTL + Next.js 16 + React 19 + Tailwind 4 component tests. You flagged the risk: that combo is a config rabbit-hole that could eat 2-3 hours. Guardrail: prioritize pure-function tests (binary search, clamping, copy completeness, tone mapping). If component tests don't stand up in ≤30 min of config, delete them — visual smoke on localhost is the real QA gate. PATTERN-049.
+
+### Why this review loop was high-ROI
+
+Every one of those 9 would have fired as a bug, some as outright demo-killers. Catching them BEFORE writing code cost ~20 min of conversation. Finding them after writing would have cost hours of debugging, possibly with video in hand ("why is the right rail empty? why is the screen blank at 60s? why is the typewriter glitchy when I scrub?"). The lesson isn't "never write bugs" — it's "get an orthogonal architectural review on non-trivial plans before execution."
+
+**Meta-pattern**: for any multi-file Phase N plan, the team-lead review pass is cheap insurance. The orthogonal lenses are: performance (can this keep 60FPS?), coupling (does this hardcode anything it shouldn't?), state-flow (does this respect high-freq-in-ref, low-freq-in-state?), defensive programming (what happens at array bounds / null paths?), aesthetic (does this look like a 2K-Sports broadcast or a Bootstrap admin dashboard?).
+
+### The orthogonal skill team, updated
+
+Current project skill layers, each owning one concern:
+- `panopticon-hackathon-rules` — inviolable constraints
+- `cv-pipeline-engineering` — YOLO / Kalman / state machine
+- `biomechanical-signal-semantics` — physics / math / thresholds
+- `2k-sports-hud-aesthetic` — visual language, colors, typography
+- `react-30fps-canvas-architecture` — render architecture (now updated with PATTERN-042 and PATTERN-045)
+- `biometric-fan-experience` (NEW today) — plain-English fan-facing copy, calibration/no-data UX, progressive jargon
+- `hackathon-demo-director` — 3-min video
+
+Orthogonality check (what each skill would say about "how should this SignalBar look?"):
+- `biomechanical-signal-semantics`: "z-score ≥ 2 means anomaly. Use the published threshold from the academic literature."
+- `2k-sports-hud-aesthetic`: "Use `playerA` color + spring physics + neon glow on anomaly. Broadcast prominence."
+- `react-30fps-canvas-architecture`: "Consume `usePanopticonState()`. Don't re-render faster than 10Hz."
+- `biometric-fan-experience`: "Label it 'Baseline Retreat' not `baseline_retreat_distance_m`. Caption it: 'How far Player A has drifted backward from his warmup position.'"
+- `panopticon-hackathon-rules`: "New work only. No copy-paste from Alternative_Data."
+
+Each skill answers a DIFFERENT question. Together they specify the widget completely without overlap. That's the orthogonality discipline codified from `~/.claude/CLAUDE.md`.

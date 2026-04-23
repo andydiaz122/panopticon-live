@@ -6,6 +6,23 @@
 
 ---
 
+## Strategic Frame (DECISION-009, 2026-04-22 pivot-evening) — READ FIRST
+
+**The core value proposition is the 7 novel biometric fatigue-telemetry signals** (recovery latency, serve-toss variance, ritual entropy, crouch-depth degradation, baseline retreat, lateral work rate, split-step latency) — extracted from standard 2D broadcast pixels with ZERO hardware sensors. That's the proprietary data moat.
+
+**The deliverable is an improved fan experience** built around those signals. Every widget ships a plain-English fan-facing label + one-line physiology explanation.
+
+**Opus coaching is ICING, not cake.** Visual hierarchy:
+1. **SignalBar stack = hero** (right rail, prominent, spring-physics motion, fan-facing copy).
+2. **PlayerNameplate = identity chrome** (top-left, minimal).
+3. **Video + skeleton = center** (existing).
+4. **CoachPanel = subordinate footer chip** (≤88px, only when insight active).
+5. **Banned**: MomentumMeter, PredictiveOverlay, PlayerNameplate@top-right (DECISION-008).
+
+See MEMORY.md → DECISION-009 for full rationale + how-to-apply.
+
+---
+
 ## Where we are (as of commit `e854ab5` on `main`, already on `origin/main`)
 
 - **Phase 1 (CV pipeline)**: DONE. 7 biomechanical signals + DuckDB writer + precompute.py.
@@ -61,18 +78,31 @@ cd dashboard && bun run dev
 # open http://localhost:3000 — should see cyan Player A skeleton tracking video
 ```
 
-## What's next (in rough priority)
+## What's next (biometric-signals-first, per DECISION-009)
 
-1. **Visual polish on Phase 3 HUD**:
-   - Motion animations (Framer Motion already installed): pulsing signal bars on anomaly, HUD slide-in on state transition
-   - Typewriter CoachPanel rendering `CoachInsight.commentary` with collapsible `CoachInsight.thinking` panel
-   - Narrator ticker rendering `NarratorBeat.text` synchronized to `videoRef.currentTime`
-   - SignalBar widget that reads from `match_data.signals` and animates on z-score
-   - Single-player HUD widgets: `PlayerNameplate@top-left`, `SignalBar@right-1..4`, `TossTracer@center-overlay` (PRE_SERVE), `FootworkHeatmap@center-overlay` (ACTIVE_RALLY)
-2. **Tab 2 (Signal Feed)**: raw JSON view, syntax highlighted, auto-scroll to current time
-3. **Tab 3 (Scouting Report)**: scouting-report Server Action via `@anthropic-ai/sdk` TypeScript Managed Agent (see `.claude/skills/vercel-ts-server-actions/SKILL.md`)
-4. **Phase 4 Vercel deploy** (Saturday): see `docs/ORCHESTRATION_PLAYBOOK.md` Phase 4
-5. **Phase 5 demo video** (Sunday): see `.claude/skills/hackathon-demo-director/SKILL.md`
+### Phase 3 Core Trio (THIS is the current active plan — see `/Users/andrew/.claude/plans/picking-up-where-we-wobbly-crescent.md`)
+
+Hero widget first, icing last:
+
+1. **SignalBar + SignalRail** — THE hero. Right rail. Reads `activeHUDLayout.widgets[right-1..4]` and `activeSignalsByName`. Spring-physics fill widths (PATTERN-044). Plain-English fan-facing labels + physiology captions via `signalCopy.ts` / `.claude/skills/biometric-fan-experience/`. No Recharts (PATTERN-043). Omits sparkline in Core Trio.
+2. **SensorCalibratingPlaceholder** — The 11.5s dead-air guardian (GOTCHA-017 / PATTERN-048). Rendered until `currentTimeMs ≥ matchDataRef.current.hud_layouts[0].timestamp_ms`.
+3. **PlayerNameplate** — Top-left. Player A only. Minimal pill with state chip.
+4. **PanopticonProvider** (foundation) — Dual-context (PATTERN-046). Single rAF loop with 10Hz-gate (PATTERN-042). Bounds-clamped frameIdx (PATTERN-045).
+5. **CoachPanel** — SUBORDINATE footer chip. ≤88px tall. Typewriter via DOM mutation (PATTERN-047), `key={insight_id}` on wrapper. Only visible when insight active.
+
+### Phase 3 follow-up (approved backlog — next plan after Core Trio lands)
+
+- NarratorTicker (bottom bar, sync'd to `videoRef.currentTime`)
+- TossTracer SVG overlay (PRE_SERVE_RITUAL only)
+- FootworkHeatmap (ACTIVE_RALLY only)
+- Optional: SignalBar hand-rolled `<svg><polyline>` sparkline (NOT Recharts)
+
+### After Phase 3
+
+- **Tab 2 (Signal Feed)**: raw JSON view, syntax highlighted, auto-scroll to current time
+- **Tab 3 (Scouting Report)**: scouting-report Server Action via `@anthropic-ai/sdk` TypeScript Managed Agent (see `.claude/skills/vercel-ts-server-actions/SKILL.md`) — THE live-Opus demo moment
+- **Phase 4 Vercel deploy** (Saturday): see `docs/ORCHESTRATION_PLAYBOOK.md` Phase 4
+- **Phase 5 demo video** (Sunday): see `.claude/skills/hackathon-demo-director/SKILL.md`
 
 ## The exact prompt to paste into a new Claude Code session
 

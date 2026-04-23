@@ -654,6 +654,45 @@ Cross-session recall. Every entry is:
 - **Severity**: MEDIUM (demo quality — wrong names make the HUD look untrustworthy)
 - **File**: `backend/agents/opus_coach.py`, `hud_designer.py`, `haiku_narrator.py` — all three have the pattern
 
+### USER-CORRECTION-030 — Skeleton Sanitation: bbox_conf Gate in assign_players
+- **Rule**: At the identity-assignment layer (`assign_players`), reject ALL YOLO detections whose `bbox_conf < 0.5` BEFORE computing foot points, projections, or half-splits. This is independent of and additive to the keypoint confidence check.
+- **Why**: YOLO11m-Pose at `conf=0.001` (max-recall sensor setting) emits garbage detections for line judges, ball kids, scoreboard graphics, banner images, shadows. These ghost detections can have HIGH mean keypoint confidence (0.6-0.8 — YOLO is sure WHERE the pseudo-joints are) while having VERY LOW bbox confidence (0.001-0.01 — YOLO knows it's not a real person). The Apr 22 golden v4 `bbox_conf` distribution was BIMODAL: 964 frames (55.7%) at <0.05, 767 frames (44.3%) at >=0.5, with an EMPTY 0.2-0.5 gap. The 0.5 cutoff is thus unambiguous — no legitimate player ever scores below it.
+- **How to apply**: In any pose-assignment-style selector over a max-recall detector, the FIRST filter is `bbox_conf >= 0.5`. Keypoint confidence is a tiebreaker/quality signal, not a fitness gate. For Opus SDK work, analog is "response.stop_reason == end_turn" — the HIGH-level "is this actually the thing we asked for" gate must run before we inspect content.
+- **Severity**: HIGH (55.7% of pre-fix detections were ghosts; eliminates demo-killing skeleton overlays)
+- **File**: `backend/cv/pose.py:BBOX_CONF_THRESHOLD`, `assign_players`. Enforced also in frontend `PanopticonEngine.tsx` as defense-in-depth.
+
+### PATTERN-039 — Max Recall at Sensor, High Precision at Selector
+- **Type**: Architecture principle for any two-stage (detector → classifier/selector) pipeline
+- **Context**: When a DETECTOR has a knob that trades off recall for precision (like YOLO's `conf` threshold), the optimal setting for the detector is the SENSITIVITY FLOOR (max recall). The PRECISION discipline belongs downstream in the SELECTOR layer, which has structured context the detector lacks (court geometry, player-identity priors, temporal history).
+- **Examples**:
+  - YOLO detector runs at `conf=0.001` (emits every vaguely-pose-like detection); `assign_players` runs at `bbox_conf >= 0.5` AND half-split AND lateral polygon
+  - Raw signal buffers keep all `SignalSample` rows (max recall); downstream anomaly detection thresholds by z-score ≥ 2 (high precision)
+  - Opus tool-use loop accepts every tool_use block from the model (max recall); dispatch_tool validates inputs and returns structured errors for malformed requests (high precision)
+- **Why this beats the naive "tune the detector up"**: Raising YOLO's conf to 0.5 would drop garbage AND miss real partially-occluded players. Keeping the detector permissive preserves raw data for any future analysis that needs it (e.g., if we later want to compute "crowd density as proxy for rally excitement").
+- **Related**: GOTCHA-013/Ghost-Regex pattern is the complement — greedy regex is MAX-recall lookup that needs a precision gate (json.JSONDecoder.raw_decode).
+- **Severity**: MEDIUM (architectural principle, reusable across all two-stage ML pipelines)
+- **File**: `backend/cv/pose.py`, `backend/agents/tools.py:dispatch_tool`
+
+### PATTERN-040 — Chicken-and-Egg Dependency Resolution via Upstream Filtering
+- **Type**: Design pattern for filtered selection
+- **Context**: An earlier proposal was to "lower the keypoint confidence threshold only for the far-court player". Team lead correctly flagged: you cannot know they're the far-court player until you've done the projection, which requires passing the threshold. The dependency graph was circular.
+- **Resolution**: When you want a role-specific filter on data that hasn't been role-assigned yet, check whether you can instead apply a ROLE-INDEPENDENT filter EARLIER that makes the role-specific relaxation safe. For skeleton sanitation: raising `bbox_conf >= 0.5` upstream eliminates ghosts, so we can safely lower the keypoint threshold GLOBALLY inside `assign_players` without admitting false positives.
+- **How to apply**: When stuck on "how do we relax filter F only for entity type E?" — ask "is there a filter upstream of E-classification that makes F-relaxation safe for ALL entities?" Usually yes.
+- **Severity**: MEDIUM (general-purpose engineering pattern)
+- **File**: `backend/cv/pose.py:assign_players` — bbox_conf gate at step 1, lowered keypoint threshold at step 2
+
+### GOTCHA-016 — Far-Court Player Invisible to YOLO11m-Pose on Broadcast Tennis Clips
+- **Symptom**: Despite Phase Beta skeleton sanitation (bbox_conf gate, lowered keypoint threshold, tight lateral polygon), Player B (far-court) remains 0% detected in `data/clips/utr_match_01_segment_a.mp4`.
+- **Diagnosis**: YOLO11m-Pose at both `imgsz=1280` and `imgsz=1920` produces only ONE high-confidence (bbox_conf > 0.3) detection per frame — the near-court player. The far-court player's apparent height is ~80-100 px (approximately 8-10% of frame height, vs 23% for the near player). They are additionally partially occluded by the "FAB LETICS" and "DUN KIN'" advertising banners at the top of the frame. At this size, YOLO11m (the "medium" variant) simply cannot classify them above noise.
+- **When real far-half detections DO appear**: they are typically line judges / crowd members sitting in the upper-right or upper-left areas of the frame (outside the court polygon). Their feet project outside the CourtMapper's bounds, so `foot_m` returns None and they are correctly rejected.
+- **Candidate fixes (NOT IMPLEMENTED — need team-lead direction)**:
+  1. Upgrade to `yolo11l-pose.pt` (large) or `yolo11x-pose.pt` (x-large) — slower but better at small objects
+  2. Run tile-based inference (split frame into 2-3 vertical strips, run YOLO per strip, merge)
+  3. Accept as a known limitation of this specific clip + model combo; demo Player A only
+  4. Use a different clip where camera is closer or both players are at similar scale
+- **Severity**: HIGH for demo quality (half the biomech signals vanish); MEDIUM for architectural correctness (the Phase Beta filters are still mathematically correct, this is a detector-capacity issue)
+- **File**: Emergent limitation visible in `backend/precompute.py` output; not fixable at the pipeline level, only at the detector or input level.
+
 ### DECISION-007 — HUDLayoutSpec Stays JSON-Only (No DuckDB Table)
 - **Context**: Coach and Narrator insights have DuckDB tables; HUD layouts do not.
 - **Why**: Layouts are low-frequency (one per match-state transition, ~10 per clip) and consumed exclusively by the frontend via match_data.json. Storing them in DuckDB too would be redundancy for zero read-path benefit.

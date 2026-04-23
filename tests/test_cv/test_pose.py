@@ -190,7 +190,7 @@ def test_assign_players_splits_by_court_half(court_mapper: CourtMapper) -> None:
 def test_assign_players_immune_to_occlusion_swap(court_mapper: CourtMapper) -> None:
     """The critical anti-swap test.
 
-    A real (occluded) Player B on the far side has LOW bbox confidence.
+    A real (occluded-but-visible) Player B on the far side has moderate bbox confidence.
     A linesman standing inside Player A's court half has HIGH bbox confidence.
 
     Naive "top-2 by confidence" would pick: [real A, linesman-in-A-half]
@@ -200,11 +200,17 @@ def test_assign_players_immune_to_occlusion_swap(court_mapper: CourtMapper) -> N
 
     Absolute Court Half Assignment (USER-CORRECTION-007) correctly isolates:
       - Player A's half: [real A, linesman] -> picks real A (highest conf in half)
-      - Player B's half: [low-conf far-player] -> picks it even at low conf.
+      - Player B's half: [far-player] -> picks it as the only candidate in its half.
+
+    NOTE (USER-CORRECTION-030): after the Skeleton Sanitation Sprint, all three
+    candidates must have bbox_conf ≥ BBOX_CONF_THRESHOLD (0.5). The occluded B
+    here is at 0.6 (above gate, below typical-rally 0.9 values) to represent a
+    partially-but-legibly occluded far player. bbox_conf values below 0.5 are
+    now rejected upstream as ghosts before this test's logic matters.
     """
     real_a = _mk_det_with_foot_at((0.5, 0.85), bbox_conf=0.9, kpts_conf=0.88)
     linesman_in_a_half = _mk_det_with_foot_at((0.9, 0.70), bbox_conf=0.8, kpts_conf=0.82)
-    occluded_b = _mk_det_with_foot_at((0.5, 0.28), bbox_conf=0.45, kpts_conf=0.35)
+    occluded_b = _mk_det_with_foot_at((0.5, 0.28), bbox_conf=0.6, kpts_conf=0.35)
 
     result = assign_players([real_a, linesman_in_a_half, occluded_b], court_mapper)
 
@@ -213,7 +219,7 @@ def test_assign_players_immune_to_occlusion_swap(court_mapper: CourtMapper) -> N
     _, a_y_m = result["A"].feet_mid_m
     assert a_y_m > 11.885
 
-    # Player B is the low-confidence far-half detection (still picked, because it's top-1 within its half)
+    # Player B is the occluded far-half detection (picked as top-1 within its half)
     assert result["B"] is not None
     _, b_y_m = result["B"].feet_mid_m
     assert b_y_m < 11.885
@@ -268,6 +274,79 @@ def test_assign_players_carries_keypoints_and_confidence(court_mapper: CourtMapp
     assert result["A"] is not None
     assert result["A"].keypoints_xyn == d.keypoints_xyn
     assert result["A"].confidence == d.confidence
+
+
+# ──────────────────────────── USER-CORRECTION-030: Skeleton Sanitation Sprint ────────────────────────────
+
+
+def test_assign_players_rejects_low_bbox_conf(court_mapper: CourtMapper) -> None:
+    """Ghost detections (bbox_conf < 0.5) must be rejected BEFORE the half-split.
+
+    Without this gate, YOLO at conf=0.001 emits garbage (line judges, scoreboard
+    graphics, shadows) with low bbox_conf but high mean_kp_conf, and the
+    mean_kp-based tiebreaker picks them as 'Player A'.
+
+    The Apr 22 golden v4 data showed 55.7% of 'Player A' detections were these
+    ghosts (bbox_conf < 0.05). Post-fix: all ghosts land in the None bucket.
+    """
+    ghost = _mk_det_with_foot_at((0.5, 0.85), bbox_conf=0.001, kpts_conf=0.75)
+    result = assign_players([ghost], court_mapper)
+    assert result == {"A": None, "B": None}
+
+
+def test_assign_players_rejects_ghost_even_when_alone_on_court_half(court_mapper: CourtMapper) -> None:
+    """Even if no real player exists in a half, a ghost must not fill the slot."""
+    only_ghost = _mk_det_with_foot_at((0.5, 0.30), bbox_conf=0.2, kpts_conf=0.8)
+    real_a = _mk_det_with_foot_at((0.5, 0.85), bbox_conf=0.9, kpts_conf=0.88)
+    result = assign_players([only_ghost, real_a], court_mapper)
+    assert result["A"] is not None
+    assert result["B"] is None, "ghost at bbox_conf=0.2 must NOT be promoted to B"
+
+
+def test_assign_players_accepts_low_keypoint_conf_when_bbox_is_high(court_mapper: CourtMapper) -> None:
+    """PATTERN-039 (Max Recall at Sensor, High Precision at Selector): once
+    bbox_conf ≥ 0.5 gate kills ghosts, we can trust lower-confidence keypoints
+    on real humans. The far-court player is small in frame; their ankles/knees
+    often score 0.15-0.25, below the module-default 0.3 threshold. Inside
+    assign_players, we use ASSIGN_PLAYERS_FALLBACK_THRESHOLD=0.15 so this
+    detection is rescued.
+
+    Without this, Player B is 0% detected in real broadcast clips (Apr 22 v4).
+    """
+    # Far-court player: bbox YOLO is sure (0.75) but keypoints are shaky (0.2)
+    far_player = _mk_det_with_foot_at((0.5, 0.30), bbox_conf=0.75, kpts_conf=0.2)
+    result = assign_players([far_player], court_mapper)
+    assert result["B"] is not None, "low-kp but high-bbox far player must be kept"
+    _, b_y_m = result["B"].feet_mid_m
+    assert b_y_m < 11.885
+
+
+def test_assign_players_rejects_ball_kid_past_left_edge(court_mapper: CourtMapper) -> None:
+    """Tighter lateral polygon: ball kids at x_m < -0.5 (past the left alley)
+    must be rejected even though CourtMapper's 2m margin would otherwise accept them.
+    (0.001, 0.85) projects to x_m ≈ -0.586 with the trapezoid fixture — past the
+    tight margin but inside the permissive margin."""
+    ball_kid_left = _mk_det_with_foot_at((0.001, 0.85), bbox_conf=0.9, kpts_conf=0.9)
+    result = assign_players([ball_kid_left], court_mapper)
+    assert result["A"] is None, "x_m=-0.586 detection must be rejected by tight lateral polygon"
+
+
+def test_assign_players_rejects_ball_kid_past_right_edge(court_mapper: CourtMapper) -> None:
+    """Symmetric right-edge test. (0.999, 0.85) projects to x_m ≈ 8.816 with the
+    trapezoid singles fixture — past court_width_m + 0.5 = 8.73."""
+    ball_kid_right = _mk_det_with_foot_at((0.999, 0.85), bbox_conf=0.9, kpts_conf=0.9)
+    result = assign_players([ball_kid_right], court_mapper)
+    assert result["A"] is None, "x_m=8.816 detection must be rejected by tight lateral polygon"
+
+
+def test_assign_players_keeps_on_court_player_near_sideline(court_mapper: CourtMapper) -> None:
+    """Sanity: a real player NEAR the sideline (x_m ≈ 0.2) must still be kept.
+    The tight margin is 0.5m — players well inside the court must not be caught
+    by the ball-kid filter."""
+    # Normalized x=0.10 with the trapezoid fixture projects to x_m well inside 0-8.23m.
+    on_court = _mk_det_with_foot_at((0.10, 0.85), bbox_conf=0.9, kpts_conf=0.9)
+    result = assign_players([on_court], court_mapper)
+    assert result["A"] is not None
 
 
 # ──────────────────────────── Meta checks ────────────────────────────

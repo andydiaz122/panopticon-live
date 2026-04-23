@@ -42,6 +42,15 @@ const COLOR_PLAYER_B = '#FF00FF'; // magenta
 const SKELETON_LINE_WIDTH = 3;
 const JOINT_RADIUS = 4;
 
+// USER-CORRECTION-030: Skeleton Sanitation — skip drawing any detection whose
+// YOLO bounding-box confidence fell below this threshold. Data is bimodal
+// (see diagnostic 2026-04-22): real players score ≥0.5, ghosts (line judges,
+// shadows, banner images, scoreboard graphics) score <0.05. Anything in
+// between is empirically non-existent. Matches the backend BBOX_CONF_THRESHOLD
+// in assign_players; defense-in-depth in case old match_data.json is still
+// being served.
+const MIN_BBOX_CONF = 0.5;
+
 export default function PanopticonEngine({
   videoSrc,
   matchDataSrc,
@@ -188,10 +197,11 @@ function drawFrame(
   minConfidence: number,
 ): void {
   ctx.clearRect(0, 0, width, height);
-  if (frame.player_a) {
+  // Skip ghost detections — draw nothing honest over drawing a line-judge as a player.
+  if (frame.player_a && frame.player_a.bbox_conf >= MIN_BBOX_CONF) {
     drawPlayerSkeleton(ctx, width, height, frame.player_a, COLOR_PLAYER_A, minConfidence);
   }
-  if (frame.player_b) {
+  if (frame.player_b && frame.player_b.bbox_conf >= MIN_BBOX_CONF) {
     drawPlayerSkeleton(ctx, width, height, frame.player_b, COLOR_PLAYER_B, minConfidence);
   }
 }

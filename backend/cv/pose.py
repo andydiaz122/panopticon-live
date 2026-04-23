@@ -33,7 +33,37 @@ from backend.db.schema import (
 # ──────────────────────────── Constants ────────────────────────────
 
 FALLBACK_CONF_THRESHOLD: float = 0.3
-"""Minimum per-keypoint confidence before we fall back to the next body segment."""
+"""Minimum per-keypoint confidence before we fall back to the next body segment.
+
+Module-level default — used by external callers (signal extractors) that do NOT
+benefit from the bbox_conf pre-filter. assign_players uses a LOWER threshold
+(see ASSIGN_PLAYERS_FALLBACK_THRESHOLD) because its ghosts are already killed by
+the bbox_conf gate."""
+
+BBOX_CONF_THRESHOLD: float = 0.5
+"""USER-CORRECTION-030: reject any YOLO detection whose bbox_conf falls below this
+BEFORE the identity-assignment half-split. The Apr 22 skeleton-sanitation audit
+surfaced a bimodal bbox_conf distribution: real players score 0.8-0.95, ghosts
+(line judges, ball kids, shadows, banner images, scoreboard graphics) score
+≤0.05. There's a clean empty gap between 0.2 and 0.5, so 0.5 is the canonical
+cutoff. 55.7% of pre-filter detections in the golden v4 run are ghosts."""
+
+ASSIGN_PLAYERS_FALLBACK_THRESHOLD: float = 0.15
+"""PATTERN-039 (Max Recall at Sensor, High Precision at Selector): once ghosts
+are rejected by BBOX_CONF_THRESHOLD, we can TRUST lower-confidence keypoints
+on bounding boxes YOLO is ≥50% sure are humans. The far-court player is small
+in frame, so their ankle/knee/hip keypoints often score 0.15-0.25. Raising
+this from 0.3 to 0.15 rescues Player B without admitting new ghosts, because
+the chicken-and-egg paradox (can't test 'far-court-player-only' until after
+projection) is resolved by filtering upstream instead of by player role."""
+
+ASSIGN_PLAYERS_LATERAL_MARGIN_M: float = 0.5
+"""Tight lateral tolerance for on-court player selection. CourtMapper's own
+bounds-check uses margin_m=2.0 (so a player chasing a ball 2m past the
+sideline still maps), but for IDENTITY assignment we require tighter bounds.
+Ball kids and line judges sit at x ≈ -0.5 to -2.0 and x ≈ 11.5 to 13 (just
+outside the doubles alleys); 0.5m margin drops them without affecting real
+on-court play."""
 
 MPS_EMPTY_CACHE_EVERY_N_FRAMES: int = 50
 
@@ -115,26 +145,51 @@ def assign_players(
 ) -> dict[PlayerSide, PlayerDetection | None]:
     """Attribute raw YOLO detections to Player A / Player B via court-half topology.
 
-    Algorithm (canonical per topological-identity-stability skill):
-      1. For each detection, compute robust foot point (ankle -> knee -> hip fallback).
-      2. Project the foot point to court meters; discard if off-court.
-      3. Split by net line: y_m > NET_Y_M = Player A's half; y_m <= NET_Y_M = Player B's.
-      4. Within each half, pick the detection with highest mean keypoint confidence.
+    Algorithm (USER-CORRECTION-030 Skeleton Sanitation Sprint, Apr 2026):
+      1. REJECT any detection with bbox_conf < BBOX_CONF_THRESHOLD (0.5). YOLO at
+         conf=0.001 emits garbage detections (line judges, shadows, banner images);
+         these score <0.05 in bbox_conf while real players score ≥0.5. Kills ghosts.
+      2. Compute robust foot point using the LOWERED threshold (0.15) — safe now
+         that ghosts are dead; rescues the small far-court player whose keypoints
+         often fall below the 0.3 module-level default.
+      3. Project the foot point to court meters via homography; discard if off-court.
+      4. REJECT detections whose x_m falls outside [-0.5, court_width_m + 0.5].
+         Ball kids / line judges sit in the 0.5-2m off-court zone that CourtMapper
+         accepts by default. Identity assignment uses the tighter bound.
+      5. Split by net line: y_m > NET_Y_M = Player A's half; y_m <= NET_Y_M = Player B's.
+      6. Within each half, pick the detection with highest mean keypoint confidence.
 
-    Immune to occlusion-induced identity swapping: a linesman with high bbox_conf on
-    Player A's half cannot steal Player B's identity.
+    PATTERN-039 (Max Recall at Sensor, High Precision at Selector): The YOLO sensor
+    stays at conf=0.001 to maximize recall — we never miss a real person who's
+    partially occluded. The GUARDS live in the selector layer (this function),
+    where we can use bbox_conf to discriminate real-vs-ghost cleanly.
     """
     a_candidates: list[tuple[RawDetection, tuple[float, float], tuple[float, float], FallbackMode, float]] = []
     b_candidates: list[tuple[RawDetection, tuple[float, float], tuple[float, float], FallbackMode, float]] = []
 
     for det in raw_detections:
-        foot_xyn = robust_foot_point(det.keypoints_xyn, det.confidence)
+        # 1. bbox_conf gate — kill ghosts BEFORE any expensive processing
+        if det.bbox_conf < BBOX_CONF_THRESHOLD:
+            continue
+        # 2. Foot point with lowered threshold (safe because ghosts are gone)
+        foot_xyn = robust_foot_point(
+            det.keypoints_xyn, det.confidence,
+            threshold=ASSIGN_PLAYERS_FALLBACK_THRESHOLD,
+        )
         if foot_xyn is None:
-            continue  # no reliable lower-body reference
+            continue  # no reliable lower-body reference even at the permissive threshold
+        # 3. Homography projection
         foot_m = court_mapper.to_court_meters(foot_xyn)
         if foot_m is None:
-            continue  # off-court (SP1 bounds guard)
-        fallback = infer_fallback_mode(det.confidence)
+            continue  # off-court (SP1 bounds guard, CourtMapper's 2m margin)
+        # 4. Tight lateral polygon — drop ball kids / line judges in the side zones
+        if not (
+            -ASSIGN_PLAYERS_LATERAL_MARGIN_M
+            <= foot_m[0]
+            <= court_mapper.court_width_m + ASSIGN_PLAYERS_LATERAL_MARGIN_M
+        ):
+            continue
+        fallback = infer_fallback_mode(det.confidence, threshold=ASSIGN_PLAYERS_FALLBACK_THRESHOLD)
         assert fallback is not None, "robust_foot_point succeeded so infer_fallback_mode must too"
         # Mean keypoint confidence drives the within-half tiebreaker (not bbox_conf)
         mean_conf = float(np.mean(det.confidence))

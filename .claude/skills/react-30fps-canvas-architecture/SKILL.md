@@ -1,6 +1,6 @@
 ---
 name: react-30fps-canvas-architecture
-description: The ref + requestAnimationFrame + ResizeObserver + canvas pattern required for PANOPTICON LIVE's 30 FPS skeleton overlay. Use when building any dashboard/ component that consumes per-frame keypoint data. Prevents the React 30-FPS death spiral and keeps skeleton-video alignment on window resize.
+description: The ref + requestAnimationFrame + ResizeObserver + canvas pattern required for PANOPTICON LIVE's 30 FPS skeleton overlay. Use when building any dashboard/ component that consumes per-frame keypoint data. Prevents the React 30-FPS death spiral, keeps skeleton-video alignment on window resize, and covers rAF-slaved 10Hz state gates (PATTERN-042), bounds-clamped video-indexed lookups (PATTERN-045), and split static/state contexts for re-render isolation (PATTERN-046).
 ---
 
 # React 30-FPS Canvas Architecture
@@ -80,6 +80,21 @@ React state triggers re-renders. 1200 re-renders/sec = browser tab crash. Refs m
 | Anomaly events | <0.1 Hz | `useState` |
 
 If an update happens more than once per second, it goes into a ref, not state.
+
+## Split Contexts: Static vs State
+
+When a provider exposes BOTH stable refs AND state that updates at ≥1Hz, split it into two contexts:
+
+```tsx
+const PanopticonStaticContext = createContext<StaticAPI | null>(null);  // refs, never changes
+const PanopticonStateContext  = createContext<StateAPI  | null>(null);  // 10Hz state
+export const usePanopticonStatic = () => useContext(PanopticonStaticContext)!;
+export const usePanopticonState  = () => useContext(PanopticonStateContext)!;
+```
+
+Canvas engines subscribe to static only (never re-render). Widgets that need reactive values subscribe to state. Prevents 10Hz re-render fanout across unrelated consumers. PATTERN-046.
+
+A single combined context with `{ refs, state }` forces every consumer to re-render whenever `state` flips — even consumers that only read `refs`. The split is mechanical but non-negotiable once any state in the provider updates at ≥1Hz.
 
 ## Canonical Pattern: `<SkeletonCanvas>`
 
@@ -226,18 +241,45 @@ The parent `<div>` is `position: relative`; the `<canvas>` is `position: absolut
 
 ## Signal Bars: Mixed High+Low Frequency
 
-Signal values update at ~30 Hz (per-frame), but we don't need to re-render bars 30 times/sec. Throttle to ~10 Hz state updates via the existing ref pattern:
+Signal values update at ~30 Hz (per-frame), but we don't need to re-render bars 30 times/sec. Throttle to ~10 Hz state updates — but the throttle MUST be slaved to `requestAnimationFrame`, NOT `setInterval` (PATTERN-042):
 
 ```tsx
-// Read from ref every 100ms, throttle to state update
+let lastStateUpdateMs = 0;
 useEffect(() => {
-  const iv = setInterval(() => {
-    const latest = signalRef.current;
-    if (latest) setDisplayedSignal(latest);  // setState at 10 Hz is fine
-  }, 100);
-  return () => clearInterval(iv);
+  let rafId = 0;
+  const tick = () => {
+    rafId = requestAnimationFrame(tick);
+    // high-frequency ref writes (every tick)
+    const frame = latestFrameRef.current;
+    // ...update refs...
+    const now = performance.now();
+    if (now - lastStateUpdateMs < 100) return;
+    lastStateUpdateMs = now;
+    setDisplayedSignal(derive(frame));  // ≤10Hz setState
+  };
+  rafId = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(rafId);
 }, []);
 ```
+
+Why NOT `setInterval(100)`:
+- Disconnected from the render cycle — fires on a wall-clock timer that knows nothing about paint.
+- Keeps firing when the video is paused, wasting setState cycles on frozen data.
+- Drifts aggressively when the tab is throttled (background tabs clamp intervals to ≥1s) — state resumes out-of-phase with video position.
+- Misses scrub events because interval cadence is independent of `currentTime` changes.
+
+A rAF-slaved gate piggybacks on the render cycle we already pay for, respects pause/scrub automatically, and stops cleanly when the tab is hidden. PATTERN-042.
+
+## Bounds Clamping on Video-Indexed Lookups
+
+```ts
+const clampFrameIdx = (t: number, fps: number, len: number): number =>
+  Math.min(Math.max(0, Math.floor(t * fps)), len - 1);
+```
+
+Every lookup of the form `keypoints[Math.floor(video.currentTime * fps)]` is a demo-crash waiting to happen (scrub to end → out-of-bounds → undefined → React error boundary → blank screen). Clamp every time. PATTERN-045.
+
+Applies identically to `coach_insights`, `hud_layouts`, `signals`, or any other array indexed by derived video time. Never trust `currentTime` to stay inside the clip's duration — browsers overshoot by a frame on `ended`, and scrubs can land one sample past the last recorded frame.
 
 ## Verification
 

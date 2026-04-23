@@ -761,6 +761,152 @@ Cross-session recall. Every entry is:
 - **Non-obvious insight**: ALWAYS run both in parallel after 3+ failed iterations. The "just one more fix" instinct after each failure is what cost us 5 iterations here. Set a 3-failure circuit breaker: on iteration 4, escalate to research+diagnostics.
 - **Severity**: MEDIUM (process — prevents future sessions from burning iterations on sticky bugs)
 
+### DECISION-009 — Biometric Signals as Hero, Opus Coaching as Icing (2026-04-22, pivot evening)
+- **Type**: Decision / strategic-framing
+- **Context**: Mid-Phase-3 HUD polish. The original `2k-sports-hud-aesthetic` skill implied a full-width CoachPanel as a dominant footer, and the Haiku Narrator / Opus Coach outputs were conceptually "the product." Andrew intervened and reframed: **the proprietary value is the 7 biomechanical fatigue telemetry streams extracted from 2D broadcast pixels with zero hardware sensors — a hard-tech data moat**. The deliverable is an **improved fan experience** around those signals. Opus is icing.
+- **Rule**: Visual hierarchy for every Panopticon UI surface:
+  1. SignalBar stack = hero (right rail, prominent, spring-physics motion, fan-facing copy).
+  2. PlayerNameplate = identity chrome (top-left, minimal).
+  3. Video + skeleton = center (unchanged).
+  4. CoachPanel = SUBORDINATE footer chip (≤88px tall, only when an insight is active).
+  5. Every signal ships a plain-English fan-facing label + one-sentence physiology explanation, NOT the dev name.
+- **Why**: Judges watch 3 minutes. They should leave thinking "they extracted fatigue telemetry nobody else is picking up from broadcast footage," not "they wrote nice commentary." Opus commentary is fungible; proprietary CV-derived biometrics is not.
+- **How to apply**: When building or styling any HUD widget, ask: "Does this foreground the novel biometric data, or does it foreground Opus?" If the latter, reduce its visual weight. The fan-experience narrative is the differentiator.
+- **Source**: Andrew, 2026-04-22 (late). Confirmed twice in the same session (worktree-scope + upgrade-set approval).
+- **Severity**: CRITICAL (product-vision anchor)
+
+### PATTERN-042 — rAF-Slaved State-Update Throttle (NOT setInterval)
+- **Type**: React architecture
+- **Context**: PanopticonProvider derives low-frequency state (activeHUDLayout, activeCoachInsight, activeSignalsByName) from `video.currentTime`. Original design used `setInterval(100)` to throttle state updates to 10Hz.
+- **Rule**: Put the 10Hz gate INSIDE a `requestAnimationFrame` loop. Track `lastStateUpdateMs` with `performance.now()`; only `setState` when `performance.now() - lastStateUpdateMs ≥ 100`.
+- **Why**: `setInterval` is disconnected from the browser render cycle AND from video playback. It keeps firing during pause, drifts on tab throttling, and misses scrub events. rAF is video-clock-slaved: it pauses when the tab is hidden, stays at 60Hz during playback, and correctly reflects `video.currentTime` whether the user is playing, paused, or scrubbing.
+- **How to apply**: Any time you want a "state-driven by video-clock" React update, use the rAF-slaved pattern. Never use `setInterval` for anything tied to video time.
+- **Copy-paste code**:
+  ```tsx
+  let lastStateUpdateMs = 0;
+  const tick = () => {
+    rafId = requestAnimationFrame(tick);
+    // high-frequency ref writes happen every tick (≥30Hz)
+    // ...update refs here...
+    const now = performance.now();
+    if (now - lastStateUpdateMs < 100) return;  // 10Hz gate
+    lastStateUpdateMs = now;
+    // compute derived values from refs + video.currentTime, then setState
+    setActiveHUDLayout(pickActiveLayoutAtTime(...));
+    setActiveCoachInsight(pickLatestBeforeOrAt(...));
+    // ...etc
+  };
+  rafId = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(rafId);
+  ```
+- **Source**: Team-lead citadel review of Phase-3-plan (2026-04-22). Original plan used setInterval.
+- **Severity**: HIGH (prevents drift + scrub-race bugs in any video-driven UI)
+
+### PATTERN-043 — Recharts Ban on High-Frequency Widgets
+- **Type**: Frontend performance
+- **Context**: Original Phase-3-plan proposed a Recharts `<LineChart>` sparkline inside each `SignalBar`, rendering at 10Hz.
+- **Rule**: Recharts (and any full-featured React SVG chart library) is acceptable at ≤1Hz re-render. BANNED at ≥10Hz re-render. For high-frequency mini-charts: hand-roll `<svg><polyline points={...}/></svg>` reading a ref-backed ring buffer.
+- **Why**: Recharts renders full React-managed SVG trees with internal state, tooltips, and responsive containers. Re-rendering 4 Recharts instances at 10Hz blocks the main thread during the video's paint window → micro-stutter on skeleton canvas at 30+FPS.
+- **How to apply**: Before adding any chart library to a real-time widget, check the target re-render rate. If ≥10Hz, reach for raw SVG primitives.
+- **Source**: Team-lead citadel review.
+- **Severity**: HIGH (prevents video-stutter regressions)
+
+### PATTERN-044 — Spring Physics Bridge (10Hz data → 60FPS visuals)
+- **Type**: Motion design + frontend architecture
+- **Context**: React state updates are capped at 10Hz for performance (PATTERN-042). But at 10Hz, a bar-fill width changing from 40% → 80% feels like a discrete jump — cheap web-app aesthetic.
+- **Rule**: Use Framer Motion spring physics (NOT `easeOutQuart` / `linear` / fixed-duration tweens) on every UI element whose value updates from the 10Hz state stream. `<motion.div style={{ width }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}>` — the `width` value updates at 10Hz, the spring animator interpolates through at display refresh rate (60-120Hz depending on monitor).
+- **Why**: Springs model mass + damping. The displayed value smoothly "chases" the target value. ESPN / NBA 2K / F1 broadcast graphics all use this feel — it reads as "physical telemetry," not "web UI."
+- **How to apply**: Codify canonical springs as `motion.springStandard` / `motion.springFirm` / `motion.springGentle` in `design-tokens.ts`. Every `<motion.*>` should reference one of these.
+- **Severity**: HIGH (core visual-polish move for broadcast-quality feel)
+
+### PATTERN-045 — Strict Array-Bounds Clamping on Video-Indexed Lookups
+- **Type**: Defensive programming
+- **Context**: Any time code does `keypoints[Math.floor(video.currentTime * fps)]`, a user scrubbing to end-of-video can produce an index > array length → `undefined` → React error boundary → blank screen mid-demo.
+- **Rule**: Always clamp: `const frameIdx = Math.min(Math.max(0, Math.floor(video.currentTime * fps)), keypoints.length - 1);`. For signals (not uniformly sampled), use binary search with clamp: `Math.min(searchResult, items.length - 1)`.
+- **Why**: Video playback past the last pre-processed frame is a legitimate user action (the MP4 ends 200ms after the last keypoint frame, for example). Defensive clamping is cheaper than the demo-crashing alternative.
+- **How to apply**: Every time-indexed lookup in `PanopticonProvider.tsx`, every `keypoints[idx]` in `PanopticonEngine.tsx`, passes through a clamping helper. Test explicitly in `frameClamp.test.ts`.
+- **Severity**: HIGH (crash prevention — demos cannot have React error boundaries)
+
+### PATTERN-046 — Split Contexts for Static Refs + Low-Freq State (anti-context-fanout)
+- **Type**: React architecture
+- **Context**: `PanopticonProvider` originally exposed BOTH stable refs (`videoRef`, `matchDataRef`, getter functions) AND 10Hz throttled state via a single React context. Every consumer of `usePanopticon()` re-rendered every 100ms, including `PanopticonEngine` which MUST stay at ≤3 renders for the zero-render canvas loop to hold.
+- **Rule**: Split into TWO contexts:
+  - `PanopticonStaticContext` — stable refs + getters, never changes after mount. Consumed via `usePanopticonStatic()`.
+  - `PanopticonStateContext` — throttled 10Hz state. Consumed via `usePanopticonState()`.
+  Consumers opt into ONLY the subset they need.
+- **Why**: React context updates trigger re-renders in ALL consumers. Mixing stable + state in one context forces every consumer to participate in state's render cadence, even if they only use stable refs. The canvas engine, which only needs refs, suffers a 10Hz render cadence it doesn't need.
+- **How to apply**: Any provider that mixes "never changes" with "changes often" → split into two contexts with two hooks. Typed contexts make the separation explicit. Applicable to ANY React state manager pattern (auth + theme, user + preferences, etc. — not just this project).
+- **Source**: Team-lead citadel review.
+- **Severity**: HIGH (universal React perf pattern)
+
+### PATTERN-047 — High-Frequency Text via DOM Mutation + `key` for Race-Free Unmount
+- **Type**: React architecture / high-frequency rendering
+- **Context**: Typewriter effect for Opus commentary — naïve impl uses `setText(prev => prev + ch)` on an 18ms interval → 55 setState/sec during animation → re-renders whole CoachPanel subtree → cuts into video paint budget. Worse, rapid video scrubbing triggers overlapping intervals → race conditions where an old typewriter finishes "after" a new one.
+- **Rule**: Use `useRef<HTMLSpanElement>(null)` + direct DOM mutation:
+  ```tsx
+  spanRef.current.textContent = commentary.slice(0, i);
+  ```
+  inside the interval callback. React never re-renders. Then apply `key={activeCoachInsight.insight_id}` to the wrapper — React fully unmounts + remounts on insight change, which auto-cancels the old interval via the useEffect cleanup.
+- **Why**: Text characters in a typewriter animation are HIGH-FREQUENCY data (55Hz). Same class as keypoints. Must not go through React state. `key`-driven unmount is the idiomatic way to guarantee effect cleanup + fresh state when identity changes.
+- **How to apply**: Any animation that reveals text, numbers, or any character stream character-by-character → ref + DOM mutation. `key` on the wrapper for identity-driven resets.
+- **Source**: Team-lead citadel review.
+- **Severity**: HIGH (universal text-animation pattern)
+
+### PATTERN-048 — Data-Driven UI Thresholds (No Hardcoded Backend-Config Mirrors)
+- **Type**: Coupling discipline
+- **Context**: Backend `--warmup-ms` flag drops the first 10000 ms of CV data. First HUD layout is at `t=11033ms`. Naïve calibration-placeholder gate: `if (currentTimeMs < 11500) showCalibration();`. Fragile: changing the backend's warmup-ms silently breaks the UI.
+- **Rule**: Derive UI thresholds from the actual data shape, not from mirrored backend config. `const firstLayoutMs = matchDataRef.current?.hud_layouts[0]?.timestamp_ms ?? Infinity; if (currentTimeMs < firstLayoutMs) showCalibration();` — auto-adapts.
+- **Why**: UI should react to what arrived in the payload, not to a guess about what MUST have arrived based on upstream config. Decouples the fronted from backend flag values.
+- **How to apply**: Every threshold in the UI that "mirrors" a backend config value is a coupling smell. Replace with a data-shape query.
+- **Severity**: MEDIUM (decoupling discipline)
+
+### GOTCHA-017 — Dead-Air Window (Warmup Filter → Empty HUD for 11.5s)
+- **Type**: Gotcha / UX
+- **Context**: The backend CV warmup filter drops 10000ms of data so Kalman / state machine have time to stabilize. Resulting `utr_01_segment_a.json` has its first `hud_layout.timestamp_ms = 11033`. A straight playback from t=0 shows a blank right rail for the first 11.5s. Judges watching demo will assume the app is broken.
+- **Rule**: Turn the dead-air into cinematic framing: render a stylized "BIOMETRIC SENSORS — CALIBRATING…" placeholder while `currentTimeMs < firstLayoutMs` (data-driven threshold per PATTERN-048). Use subtle pulse animation + staggered dot loader. On first real layout arrival, AnimatePresence spring-transitions the placeholder out and the real widgets in.
+- **How to apply**: Canonical component `SensorCalibratingPlaceholder`. Wire into SignalRail's conditional render. Do NOT hardcode 11500; derive from `matchDataRef.current?.hud_layouts[0]?.timestamp_ms`.
+- **Why**: Technical constraints become demo polish when reframed. "Calibrating" reads as professional broadcast UX, not "empty app."
+- **Severity**: HIGH (demo-credibility — avoids "is it broken?" first impression)
+
+### PATTERN-050 — Tab Keep-Alive via `display: none` (never unmount)
+- **Type**: React architecture
+- **Context**: Phase 3.5 TabShell. Naïve tab implementation unmounts inactive tab content → the `<video>` element + rAF loop + match_data fetch all re-initialize every tab switch. Demo pacing (auto-pause timeline, typewriter state) breaks immediately.
+- **Rule**: In a tabbed app with shared state across tabs, render ALL tab bodies always. Hide inactive tabs with `style={{ display: id === activeId ? 'block' : 'none' }}`. Unmount is NEVER used for tab switches.
+- **Why**: `display: none` keeps the DOM node alive + keeps React state mounted. Video continues playing, scroll position is preserved, refs remain valid. Zero re-fetching, zero re-hydration flicker.
+- **How to apply**: `TabShell` renders a `<div>` per tab unconditionally; only the CSS display bit changes. The `<video>` inside Tab 1 keeps firing `timeupdate` events while the user is on Tab 2/3 → the telemetry feed auto-scrolls in real time even when invisible.
+- **Trade-off**: slightly higher memory (all tabs mounted). In our app this is ~200KB of components — negligible vs the UX win.
+- **Severity**: HIGH (demo-pacing-preserving)
+
+### PATTERN-051 — Telestrator Auto-Pause Pacing Pattern
+- **Type**: Demo-craft / video UX
+- **Context**: Andrew's feedback on the 60s continuous-video pacing: judges can't absorb data that fast. Traditional sports video + data dashboard forces the viewer to choose where to look. The fix is "Telestrator Mode" — the video cooperates with the data.
+- **Rule**: When a coach insight becomes active, pause the video. Typewriter the commentary (DOM mutation per PATTERN-047). When typewriter finishes, hold for `TELESTRATOR_HOLD_MS` (3500ms) so the judge reads the complete sentence. Then resume automatically. On unmount / insight-change, always resume so the demo never strands the viewer in a forced-pause state.
+- **Why**: Transforms a passive dashboard into an interactive analytical presentation. The video stops speaking to let the biomechanics data speak. Judges see a directed, broadcast-quality walkthrough instead of a frenetic data-overlay.
+- **How to apply**: `CoachPanel.tsx` captures `videoRef` at effect start (React 19 ref-cleanup safety), calls `video.pause()` on mount, schedules `video.play()` via `setTimeout` after typewriter completion. Cleanup clears the timeout AND unconditionally calls `play()` so panel exits don't leave a paused frame.
+- **Non-obvious insight**: `video.play()` returns a Promise that REJECTS on autoplay-blocked contexts OR when the video has ended. Always `.catch(() => {})` to avoid unhandled rejections.
+- **Severity**: HIGH (demo-polish win — changes "cool dashboard" to "cinematic product")
+
+### PATTERN-052 — Frontend State-Gating as Defense-in-Depth Against LLM Layout-Lag
+- **Type**: Coupling discipline / frontend safety net
+- **Context**: Phase 3 visual QA (Andrew): "biometric telemetry on the right-hand side is showing things like toss consistency in the middle of a rally, where the toss consistency is only relevant to the fan before the serve." Root cause: the backend Opus HUD Designer picks signals at HUD-layout-creation time, but the player's match-state transitions continuously. The layout's suggested signals become inappropriate within seconds of creation.
+- **Rule**: The frontend enforces a HARD mapping from `PlayerState → allowed SignalName[]`, applied as a filter on top of whatever `activeHUDLayout.widgets` contains. Specifically:
+  - `ACTIVE_RALLY` → hide `serve_toss_variance_cm`, `ritual_entropy_delta`, `crouch_depth_degradation_deg` (serve-ritual signals)
+  - `PRE_SERVE_RITUAL` / `DEAD_TIME` → hide `lateral_work_rate`, `baseline_retreat_distance_m` (rally-movement signals)
+  - `recovery_latency_ms`, `split_step_latency_ms` → state-agnostic, always permitted
+  - `UNKNOWN` / `null` → permissive (don't filter before we have state)
+- **Why**: The UI should look CORRECT at every frame. LLM layout-lag is a systemic issue — even a smarter Designer will have second-scale lag. A client-side filter is cheap and makes the bad-layout case impossible to observe.
+- **How to apply**: `lib/stateSignalGating.ts` owns the mapping. `SignalRail.tsx` calls `isSignalAllowedInState(signalName, state)` before pushing a SignalBar. Backend Designer prompts can stay focused on semantic choice; frontend guarantees contextual correctness.
+- **Generalizes to**: any case where an LLM produces a structured UI spec that consumers must render in a changing context. Always have a client-side contract check — LLMs will produce valid-looking output for stale contexts.
+- **Severity**: HIGH (UX correctness)
+
+### PATTERN-049 — Bleeding-Edge Test-Stack Time Guardrail
+- **Type**: Process / time budget
+- **Context**: Setting up Vitest + JSDOM + React Testing Library + Next.js 16 + React 19 + Tailwind 4 for component tests is a bleeding-edge combo. Known to hit config rabbit-holes (transform pipelines, JSX runtime mismatches, Tailwind plugin resolution, RSC-boundary confusion) that can eat 2-3 hours to debug.
+- **Rule**: Set a one-attempt time budget on bleeding-edge test stacks. If the stack doesn't stand up cleanly in ≤30 min, DELETE the component tests, keep the pure-function tests, and validate components via live-dev-server visual smoke. The pure-function layer (binary search, clamping, copy completeness, tone mapping) is where the logic bugs live; component rendering is validated by eye on localhost.
+- **Why**: Hackathons are time-bounded. A working demo > exhaustive test coverage. Pure-function tests catch algorithmic regressions; visual smoke catches render regressions. Component tests would be nice-to-have but cannot block Phase 3 landing.
+- **How to apply**: When adopting Vitest + JSDOM + RTL on a bleeding-edge Next.js major, set a 30-min timer. If config still fights you, drop the RTL layer.
+- **Severity**: MEDIUM (time-budget discipline)
+
 ---
 
 ## DAY 2 LEARNINGS (Apr 23, 2026)

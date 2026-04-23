@@ -6,6 +6,15 @@ import SignalRail from '@/components/Broadcast/SignalRail';
 import PanopticonEngine from '@/components/PanopticonEngine';
 import TelemetryLog from '@/components/Telemetry/TelemetryLog';
 
+// Module-level constants: prevents `useMemo` identity-break inside TelemetryLog
+// on every HudView render. TelemetryLog uses `rowKinds` as a memo dependency;
+// if we pass an inline `[...]` literal on each render, a new array is allocated
+// every tick, the memo invalidates, and `filtered` recomputes at 10 Hz —
+// degrading the 30-FPS canvas. Hoisting these to module scope gives stable
+// referential identity and lets the memo actually memoize. (Phase 3 TS review finding.)
+const SIDE_RAIL_ROW_KINDS = ['signal', 'anomaly'] as const;
+const HEADLINE_STRIP_ROW_KINDS = ['anomaly', 'insight', 'state'] as const;
+
 /**
  * Tab 1 — the main Live HUD view.
  *
@@ -40,7 +49,7 @@ export default function HudView() {
         <aside className="col-span-12 flex flex-col gap-4 lg:col-span-3">
           <SignalRail />
           <TelemetryLog
-            rowKinds={['signal', 'anomaly']}
+            rowKinds={SIDE_RAIL_ROW_KINDS}
             heightClass="h-[360px]"
             density="compact"
             showHeader
@@ -51,7 +60,7 @@ export default function HudView() {
         <div className="col-span-12 mt-2 flex flex-col items-center gap-4">
           <CoachPanel />
           <TelemetryLog
-            rowKinds={['anomaly', 'insight', 'state']}
+            rowKinds={HEADLINE_STRIP_ROW_KINDS}
             heightClass="h-[260px]"
             className="w-full max-w-[920px]"
             density="compact"

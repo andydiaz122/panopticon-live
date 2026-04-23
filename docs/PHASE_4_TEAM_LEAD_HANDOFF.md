@@ -18,10 +18,10 @@
 
 | SHA | Type | Title |
 |---|---|---|
-| `47edaf0` | `fix(cv)` | Edge-trigger MatchStateMachine bounce coupling — PATTERN-053 |
-| `26cc73f` | `feat(dashboard,actions)` | Wire Tab 3 to live Opus 4.7 via Client-Driven Payload — PATTERN-054 |
-| `1558805` | `docs` | Phase 4 kickoff — PATTERN-053 + PATTERN-054 + 2 USER-CORRECTIONs |
-| `a0093e7` | `docs` | Add GOTCHA-018 — multi-line paste embeds newlines in single-quoted env vars |
+| `47edaf0` | `fix(cv)` | Edge-trigger MatchStateMachine bounce coupling — PATTERN-060 |
+| `26cc73f` | `feat(dashboard,actions)` | Wire Tab 3 to live Opus 4.7 via Client-Driven Payload — PATTERN-061 |
+| `1558805` | `docs` | Phase 4 kickoff — PATTERN-060 + PATTERN-061 + 2 USER-CORRECTIONs |
+| `a0093e7` | `docs` | Add GOTCHA-033 — multi-line paste embeds newlines in single-quoted env vars |
 
 ### What's working end-to-end after this leg
 
@@ -88,7 +88,7 @@ Andrew QA-flagged after Phase 3.5 shipped: "PRE_SERVE_RITUAL lingers well into t
 
 ---
 
-## 3. Action 1 — State-Machine Timing Fix (PATTERN-053)
+## 3. Action 1 — State-Machine Timing Fix (PATTERN-060)
 
 ### 3.1 The visual-QA signal that seeded the fix
 
@@ -133,7 +133,7 @@ Option 1 breaks the probe's idempotence contract. That invariant is useful beyon
 
 Option 2 localizes the edge semantics to the one place that wants them, leaves the probe pure and idempotent, and the per-consumer state is just a 2-tuple (`_last_bounce_state: tuple[bool, bool]` — previous frame's `(a_bounce, b_bounce)`).
 
-We shipped option 2. This is PATTERN-053, logged to MEMORY.md.
+We shipped option 2. This is PATTERN-060, logged to MEMORY.md.
 
 ### 3.4 Files touched
 
@@ -153,7 +153,7 @@ index 1edd803..82ced55 100644
           curve and destroy recovery_latency_ms + lateral_work_rate.
 -      3. USER-CORRECTION-010: if EITHER player emits a BOUNCE_DETECTED event, force BOTH
 -         into PRE_SERVE_RITUAL (bouncer is server, non-bouncer is returner re-syncing).
-+      3. USER-CORRECTION-010 + PATTERN-053 (edge-triggered bounce coupling):
++      3. USER-CORRECTION-010 + PATTERN-060 (edge-triggered bounce coupling):
 +         RollingBounceDetector.evaluate() is a pure spectral probe over a ~3s rolling
 +         buffer — it returns True every frame while a bounce signature lives in the
 +         buffer. We must couple only on the RISING EDGE (False -> True) per player,
@@ -165,7 +165,7 @@ index 1edd803..82ced55 100644
      def __init__(self) -> None:
          self._a = PlayerStateMachine(player="A")
          self._b = PlayerStateMachine(player="B")
-+        # PATTERN-053: track prior-tick bounce levels for rising-edge detection.
++        # PATTERN-060: track prior-tick bounce levels for rising-edge detection.
 +        # The detector is a pure spectral probe (idempotent evaluate()); the edge
 +        # semantics live here at the consumer boundary.
 +        self._last_bounce_state: tuple[bool, bool] = (False, False)
@@ -182,7 +182,7 @@ index 1edd803..82ced55 100644
 -               DEAD_TIME + bounce event correctly lands everyone in PRE_SERVE_RITUAL).
 +          i.   Per-player kinematic update (independent).
 +          ii.  USER-CORRECTION-011: Conditional DEAD_TIME uncoupling (PRE_SERVE_RITUAL-only rescue).
-+          iii. USER-CORRECTION-010 + PATTERN-053: Rising-edge bounce -> PRE_SERVE_RITUAL
++          iii. USER-CORRECTION-010 + PATTERN-060: Rising-edge bounce -> PRE_SERVE_RITUAL
 +               (runs last; a simultaneous DEAD_TIME + bounce rising edge correctly
 +               lands everyone in PRE_SERVE_RITUAL).
          """
@@ -193,7 +193,7 @@ index 1edd803..82ced55 100644
              self._a.force_state("DEAD_TIME", t_ms)
 
 -        if a_bounce or b_bounce:
-+        # PATTERN-053: edge-trigger the bounce coupling.
++        # PATTERN-060: edge-trigger the bounce coupling.
 +        # RollingBounceDetector.evaluate() returns True every frame the signature is
 +        # in its ~90-frame buffer. Firing force_state on every True tick would pin
 +        # the players in PRE_SERVE_RITUAL for the whole ~3s window, across the rally.
@@ -266,11 +266,11 @@ index 580826b..55c841c 100644
      assert msm.states["B"] == "PRE_SERVE_RITUAL"
 +
 +
-+# ──────────────────────────── PATTERN-053: Edge-triggered bounce coupling ────────────────────────────
++# ──────────────────────────── PATTERN-060: Edge-triggered bounce coupling ────────────────────────────
 +
 +
 +def test_continuous_bounce_does_not_pin_player_in_pre_serve_ritual() -> None:
-+    """PATTERN-053 regression.
++    """PATTERN-060 regression.
 +
 +    RollingBounceDetector.evaluate() is a pure spectral probe over a 90-frame buffer;
 +    it returns True every frame while a bounce signature lives in the buffer
@@ -298,14 +298,14 @@ index 580826b..55c841c 100644
 +        )
 +
 +    assert msm.states["A"] == "ACTIVE_RALLY", (
-+        "PATTERN-053: continuous bounce=True must NOT re-force PRE_SERVE_RITUAL every "
++        "PATTERN-060: continuous bounce=True must NOT re-force PRE_SERVE_RITUAL every "
 +        "frame. Only the rising edge triggers coupling. Player A's 5 consecutive frames "
 +        "of motion should have transitioned the FSM to ACTIVE_RALLY."
 +    )
 +
 +
 +def test_bounce_edge_re_arms_after_going_low() -> None:
-+    """PATTERN-053: rising-edge detector must re-arm after the signal drops.
++    """PATTERN-060: rising-edge detector must re-arm after the signal drops.
 +
 +    Scenario: bounce goes True -> rise triggers coupling. Bounce stays True through
 +    the rally. Bounce eventually drops to False (buffer aged out). When a fresh bounce
@@ -376,13 +376,13 @@ index 580826b..55c841c 100644
 +        tr.player == "A" and tr.to_state == "PRE_SERVE_RITUAL" and tr.reason == "match_coupling"
 +        for tr in second_drain
 +    ), (
-+        "PATTERN-053: after bounce drops to False and rises again, the second rising "
++        "PATTERN-060: after bounce drops to False and rises again, the second rising "
 +        "edge must fire coupling. This proves the edge-detector re-arms correctly."
 +    )
 +
 +
 +def test_only_b_bounce_rising_edge_also_couples() -> None:
-+    """PATTERN-053 symmetry: a rising edge on b_bounce alone (e.g., returner's
++    """PATTERN-060 symmetry: a rising edge on b_bounce alone (e.g., returner's
 +    racket impact feeding the detector) must also trigger the coupling.
 +    """
 +    msm = MatchStateMachine()
@@ -427,7 +427,7 @@ Section 5.7 below reproduces the 34 transitions from the Run 2 golden output. Th
 
 ---
 
-## 4. Action 2 — Live Opus Scouting Report via Client-Driven Payload (PATTERN-054)
+## 4. Action 2 — Live Opus Scouting Report via Client-Driven Payload (PATTERN-061)
 
 ### 4.1 The Vercel NFT trap (USER-CORRECTION-032)
 
@@ -460,7 +460,7 @@ The trap is especially nasty because:
 
 Andrew caught this in plan review. USER-CORRECTION-032 is the formalization of the trap.
 
-### 4.2 The Client-Driven Payload pattern (PATTERN-054)
+### 4.2 The Client-Driven Payload pattern (PATTERN-061)
 
 The correction: **do not touch the filesystem in the Server Action at all.** The Client Component (`ScoutingReportTab.tsx`) already has the full `matchData` loaded via `usePanopticonState()` (a React Context provider that fetches `/public/match_data/${matchId}.json` on mount). Pass the data as an argument to the Server Action.
 
@@ -567,7 +567,7 @@ Note on the missing-key error message: the Server Action throws a `new Error('AN
 Relevant anatomy from the final committed `dashboard/src/components/Scouting/ScoutingReportTab.tsx`:
 
 ```typescript
-// PATTERN-054: Client-Driven Payload. Strip keypoints (huge per-frame data),
+// PATTERN-061: Client-Driven Payload. Strip keypoints (huge per-frame data),
 // hud_layouts (LLM design metadata — irrelevant to sports-science reasoning),
 // and narrator_beats (broadcast prose that would bias the scouting voice).
 // What remains is the LLM-relevant slice: meta + signals + transitions +
@@ -608,7 +608,7 @@ index 0182702..d5ec68a 100644
 - * `vercel-ts-server-actions` skill for the wiring pattern.
 + * `generateScoutingReport` wires Tab 3 to Claude Opus 4.7 via the official
 + * `@anthropic-ai/sdk`. It follows the Client-Driven Payload pattern
-+ * (PATTERN-054): the client passes the telemetry it already has loaded,
++ * (PATTERN-061): the client passes the telemetry it already has loaded,
 + * stripped of high-volume keys (keypoints / hud_layouts / narrator_beats).
   *
 - * Contract (stable across the stub→live transition):
@@ -702,7 +702,7 @@ index 231f882..711bc2c 100644
 - * returns a hand-authored markdown brief (Phase 4 will replace the stub with
 - * a live Claude Opus 4.7 Managed Agent call via `@anthropic-ai/sdk`).
 + * Phase 4 (live): the button triggers a Next.js Server Action that calls
-+ * Claude Opus 4.7 via the `@anthropic-ai/sdk`. We follow PATTERN-054
++ * Claude Opus 4.7 via the `@anthropic-ai/sdk`. We follow PATTERN-061
 + * (Client-Driven Payload): strip the high-volume keys on the client, then
 + * pass the remaining ~100 KB telemetry as an argument to the Server Action.
 + * This sidesteps Vercel's Node File Trace (NFT) limitation on dynamic fs
@@ -721,7 +721,7 @@ index 231f882..711bc2c 100644
 +      return;
 +    }
 +
-+    // PATTERN-054: Client-Driven Payload. Strip keypoints (huge per-frame data),
++    // PATTERN-061: Client-Driven Payload. Strip keypoints (huge per-frame data),
 +    // hud_layouts (LLM design metadata — irrelevant to sports-science reasoning),
 +    // and narrator_beats (broadcast prose that would bias the scouting voice).
 +    // What remains is the LLM-relevant slice: meta + signals + transitions +
@@ -801,7 +801,7 @@ A grep of `.gitignore` confirms the write targets are all excluded from version 
 
 ### 5.2 The Crucible command (final, working form)
 
-After the Run 1 failure (see 5.3), the canonical command form — using `source dashboard/.env.local` instead of inline export to sidestep GOTCHA-018 — is:
+After the Run 1 failure (see 5.3), the canonical command form — using `source dashboard/.env.local` instead of inline export to sidestep GOTCHA-033 — is:
 
 ```bash
 set -a && source dashboard/.env.local && set +a && \
@@ -842,7 +842,7 @@ APIConnectionError: Connection error.
 
 Not `AuthenticationError`, not `RateLimitError`, not `PermissionDeniedError`. This is a meaningful diagnostic signal — `APIConnectionError` is raised when the HTTP request itself fails to transit the wire. Malformed headers fail at the HTTP transport layer before any request reaches Anthropic's servers, so the error surfaces as a connection failure, not an auth failure.
 
-### 5.4 Root-cause of Run 1 — GOTCHA-018 pastewrap
+### 5.4 Root-cause of Run 1 — GOTCHA-033 pastewrap
 
 The shell export command I had given Andrew was multi-line because the terminal display wrapped the long API key across two visual lines. When Andrew pasted the command, the terminal preserved the **physical newline + two spaces of indent** between the wrapped segments. Shell single-quoted strings lawfully span physical newlines, so the embedded `\n  ` (newline + 2 spaces) became part of the `ANTHROPIC_API_KEY` env var.
 
@@ -1055,9 +1055,9 @@ Every snap-recover cycle is **166–167 ms**.
 
 Rounding to the nearest frame time (`1/30s = 33.3 ms`): `5 × 33.3 = 166.5 ms`. Observed is either 166 or 167 ms depending on integer-rounding of the `t_ms` field.
 
-**This is the theoretical minimum recovery time.** The FSM fires `match_coupling` (snap to PRE_SERVE_RITUAL) at the bounce rising edge, the kinematic integrator then waits for 5 consecutive frames of `>0.5 m/s` velocity (the minimum runway), and transitions back to `ACTIVE_RALLY` at exactly that runway. Pre-PATTERN-053, this cycle would have been 3000 ms (the full bounce-signature dwell window), because the state machine was re-snapping on every True tick and the kinematic integrator couldn't ever accumulate 5 consecutive frames inside the signature window.
+**This is the theoretical minimum recovery time.** The FSM fires `match_coupling` (snap to PRE_SERVE_RITUAL) at the bounce rising edge, the kinematic integrator then waits for 5 consecutive frames of `>0.5 m/s` velocity (the minimum runway), and transitions back to `ACTIVE_RALLY` at exactly that runway. Pre-PATTERN-060, this cycle would have been 3000 ms (the full bounce-signature dwell window), because the state machine was re-snapping on every True tick and the kinematic integrator couldn't ever accumulate 5 consecutive frames inside the signature window.
 
-PATTERN-053 is proven in production-grade data, not just in unit tests.
+PATTERN-060 is proven in production-grade data, not just in unit tests.
 
 ### 5.13 Run 2 — First 2 Coach insights reproduced verbatim
 
@@ -1162,10 +1162,10 @@ The `reason` string is the Designer agent's explanation of its own layout choice
 
 All new entries from `MEMORY.md` lines 912–1011 (Day 2 block). Reproduced exactly as committed in `1558805` + `a0093e7`, with zero paraphrase.
 
-### 6.1 GOTCHA-018 — Multi-line Paste Silently Embeds Newlines Inside Single-Quoted Env Vars
+### 6.1 GOTCHA-033 — Multi-line Paste Silently Embeds Newlines Inside Single-Quoted Env Vars
 
 ```
-### GOTCHA-018 — Multi-line Paste Silently Embeds Newlines Inside Single-Quoted Env Vars
+### GOTCHA-033 — Multi-line Paste Silently Embeds Newlines Inside Single-Quoted Env Vars
 - **Type**: Gotcha (shell / terminal)
 - **Context**: Apr 23, 2026 — Phase 4 Crucible Run. The user pasted a long `export ANTHROPIC_API_KEY='...'` command where the terminal display wrapped the key across two visual lines, AND the paste preserved a literal newline + two spaces of indent inside the quotes. Shell single-quoted strings span physical newlines lawfully — the embedded `\n  ` became part of the env var. Expected Anthropic key length 108 chars; actual `${#ANTHROPIC_API_KEY}` = 111 chars. The Anthropic SDK attempted HTTPS requests with a malformed Authorization header, which failed at the HTTP transport layer with `APIConnectionError: Connection error.` — NOT `AuthenticationError`, because the header never made it onto the wire. ALL 26 agent calls (10 Coach + 10 Designer + 6 Narrator) failed identically, producing `[coach_error: APIConnectionError: Connection error.]` commentaries. The underlying network + DNS + TLS + HTTPS to `api.anthropic.com` was perfectly healthy.
 - **Lesson**: NEVER paste a multi-line export command that quotes a long token across physical newlines. Two defenses, pick both:
@@ -1212,10 +1212,10 @@ All new entries from `MEMORY.md` lines 912–1011 (Day 2 block). Reproduced exac
 - **Severity**: CRITICAL (production deployment blocker — would 500 on Vercel, passing locally)
 ```
 
-### 6.4 PATTERN-053 — Edge-Triggered Match Coupling on Continuous Bounce Signal
+### 6.4 PATTERN-060 — Edge-Triggered Match Coupling on Continuous Bounce Signal
 
 ```
-### PATTERN-053 — Edge-Triggered Match Coupling on Continuous Bounce Signal
+### PATTERN-060 — Edge-Triggered Match Coupling on Continuous Bounce Signal
 - **Type**: Systems / state-machine discipline
 - **Context**: Andrew flagged in visual QA: "the pre-serve ritual stays on well into the rally." Root-cause investigation found that `RollingBounceDetector.evaluate()` is a PURE spectral probe of a 90-frame (3-second @ 30fps) rolling buffer — once a bounce signature lives in the buffer, `evaluate()` returns True **every frame for the ~3 seconds it takes the signature to age out**. The original `MatchStateMachine.update()` called `self._a.force_state("PRE_SERVE_RITUAL", t_ms); self._b.force_state("PRE_SERVE_RITUAL", t_ms)` on every tick where `a_bounce or b_bounce` was True — so kinematic ACTIVE_RALLY transitions got immediately snapped back to PRE_SERVE_RITUAL for the full ~3-second window. Player was pinned in the ritual state across an actual rally.
 - **Rule**: When a signal is a CONTINUOUS spectral/statistical probe (rolling-buffer variance, autocorrelation, Lomb-Scargle, etc.), but the CONSUMER wants a discrete EVENT (force a state change once per occurrence), do edge-detection at the CONSUMER, not the PROBE. The probe stays pure and idempotent (which enables invariants like `test_detector_evaluate_is_idempotent` in the test suite). The consumer tracks `_last_signal_state` and fires only on the rising edge (False → True).
@@ -1240,10 +1240,10 @@ All new entries from `MEMORY.md` lines 912–1011 (Day 2 block). Reproduced exac
 - **Severity**: CRITICAL (root cause of a flagship visual-QA bug, pinpointed during Phase 4)
 ```
 
-### 6.5 PATTERN-054 — Client-Driven Payload for Vercel Server Actions
+### 6.5 PATTERN-061 — Client-Driven Payload for Vercel Server Actions
 
 ```
-### PATTERN-054 — Client-Driven Payload for Vercel Server Actions (Vercel-bulletproof AI reads)
+### PATTERN-061 — Client-Driven Payload for Vercel Server Actions (Vercel-bulletproof AI reads)
 - **Type**: Frontend architecture / Vercel deployment
 - **Context**: USER-CORRECTION-032 surfaced during Phase 4 Scouting Report wiring. We wanted Tab 3 to call a Next.js Server Action that reasons over ~100KB of telemetry. The FS-read approach (`fs.readFile(path.join(process.cwd(), ...))` against a dynamic matchId) works locally in `next dev` but breaks on Vercel because NFT can't statically trace the file into the Serverless Function bundle.
 - **Rule**: For any Server Action that needs to analyze data already resident in the Client Component tree, pass the data AS AN ARGUMENT to the Server Action instead of re-reading it on the server. Destructure out high-volume fields (keypoints, per-frame arrays) on the client first; keep only LLM-relevant keys in the payload.
@@ -1292,7 +1292,7 @@ From `FORANDREW.md` lines 668–720 (the entire Phase 4 kickoff block committed 
 
 ### The two patches we landed
 
-**1. PATTERN-053 — Edge-triggered match coupling (backend state machine).**
+**1. PATTERN-060 — Edge-triggered match coupling (backend state machine).**
 
 You flagged the "pre-serve ritual lingers into the rally" bug during Phase 3.5 visual QA. I ran a root-cause investigation before opening any threshold knobs, and the cause was NOT a tuning issue — it was a structural bug in the coupling layer.
 
@@ -1308,7 +1308,7 @@ All 386 tests pass (up from 383); ruff clean. Committed as `47edaf0`.
 
 The frontend state-gating we added in Phase 3.5 (PATTERN-052, `lib/stateSignalGating.ts`) was the right band-aid at the time — it's still valuable defense-in-depth against LLM layout-lag even after the backend fix. We're keeping it.
 
-**2. PATTERN-054 — Client-Driven Payload for Vercel Server Actions (Tab 3 live-Opus wiring).**
+**2. PATTERN-061 — Client-Driven Payload for Vercel Server Actions (Tab 3 live-Opus wiring).**
 
 My first draft of `generateScoutingReport` used `fs.promises.readFile(path.join(process.cwd(), 'public', 'match_data', \`${matchId}.json\`))` to load the telemetry server-side. You caught a Vercel deploy trap I missed: NFT (Next.js's Node File Trace) cannot statically analyze dynamic paths, so the `public/match_data/*.json` files wouldn't get bundled into the Serverless Function environment. It'd work locally (`next dev`), then 500 on Vercel during judging. Classic silent-production-break.
 
@@ -1331,8 +1331,8 @@ Action 3 — the Final Golden Crucible run — is staged but blocked on you drop
 
 - **USER-CORRECTION-031** — direct user override beats forwarded team-lead text. When the Environment block says one worktree path and a forwarded message says another, trust the Environment block and verify empirically before switching.
 - **USER-CORRECTION-032** — Vercel NFT can't trace dynamic `fs.readFile` paths. Always prefer client-driven payloads for Server Action data-at-rest.
-- **PATTERN-053** — edge-trigger state-machine coupling when the upstream signal is a continuous spectral probe.
-- **PATTERN-054** — Client-Driven Payload for Vercel Server Actions. Generalizes to ANY Next.js AI Server Action that wants to reason over client-resident data.
+- **PATTERN-060** — edge-trigger state-machine coupling when the upstream signal is a continuous spectral probe.
+- **PATTERN-061** — Client-Driven Payload for Vercel Server Actions. Generalizes to ANY Next.js AI Server Action that wants to reason over client-resident data.
 
 ### Staging note (Phase 4 logistics)
 
@@ -1350,10 +1350,10 @@ Stage-3 worktree was bare: no venv, no clips, no corners, no YOLO weights. Stage
 All four commits on `hackathon-stage-3` past the stage-2 merge (`0c2aac7`), in chronological order:
 
 ```
-47edaf0df42b5e7d4a7fd941d882320f5fc3f2ca 2026-04-23 02:34:20 -0400 fix(cv): edge-trigger MatchStateMachine bounce coupling — PATTERN-053
-26cc73f74d797517a6cc41ac80947c5b3c013877 2026-04-23 02:34:36 -0400 feat(dashboard,actions): wire Tab 3 to live Opus 4.7 via Client-Driven Payload — PATTERN-054
-1558805dd1e8cf902c690dca919d7deef458b2c7 2026-04-23 02:35:41 -0400 docs: Phase 4 kickoff — PATTERN-053 + PATTERN-054 + 2 USER-CORRECTIONs
-a0093e74e69ef14efeb7e75e6363fa34d3af7753 2026-04-23 07:55:10 -0400 docs: add GOTCHA-018 — multi-line paste embeds newlines in single-quoted env vars
+47edaf0df42b5e7d4a7fd941d882320f5fc3f2ca 2026-04-23 02:34:20 -0400 fix(cv): edge-trigger MatchStateMachine bounce coupling — PATTERN-060
+26cc73f74d797517a6cc41ac80947c5b3c013877 2026-04-23 02:34:36 -0400 feat(dashboard,actions): wire Tab 3 to live Opus 4.7 via Client-Driven Payload — PATTERN-061
+1558805dd1e8cf902c690dca919d7deef458b2c7 2026-04-23 02:35:41 -0400 docs: Phase 4 kickoff — PATTERN-060 + PATTERN-061 + 2 USER-CORRECTIONs
+a0093e74e69ef14efeb7e75e6363fa34d3af7753 2026-04-23 07:55:10 -0400 docs: add GOTCHA-033 — multi-line paste embeds newlines in single-quoted env vars
 ```
 
 ### 8.1 `47edaf0` — State-machine timing fix
@@ -1362,7 +1362,7 @@ Files changed:
 - `backend/cv/state_machine.py` (+26, -8 — net +18; module now 240 lines)
 - `tests/test_cv/test_state_machine.py` (+139, -0 — three new tests; module now 500 lines)
 
-Context: Commit 1 of this leg. Locks in PATTERN-053. Zero production risk — pure fix at the consumer boundary with regression tests covering continuous-True pinning, edge re-arm after going low, and B-only symmetry. Full pytest suite went from 383 green to 386 green. Ruff reports no diagnostics.
+Context: Commit 1 of this leg. Locks in PATTERN-060. Zero production risk — pure fix at the consumer boundary with regression tests covering continuous-True pinning, edge re-arm after going low, and B-only symmetry. Full pytest suite went from 383 green to 386 green. Ruff reports no diagnostics.
 
 ### 8.2 `26cc73f` — Tab 3 live-Opus wiring
 
@@ -1372,20 +1372,20 @@ Files changed:
 - `dashboard/src/app/actions.ts` (+100 net — 60 lines of stub deleted, 160 lines of live Opus wiring added)
 - `dashboard/src/components/Scouting/ScoutingReportTab.tsx` (+34, -10 net)
 
-Context: Commit 2 of this leg. Encodes PATTERN-054 (Client-Driven Payload). Stub removed, live @anthropic-ai/sdk call landed. Opus 4.7 config per USER-CORRECTION-027 (adaptive thinking). Verification: `bunx tsc --noEmit` clean, `bun run lint` clean, `bun run test` 71/71.
+Context: Commit 2 of this leg. Encodes PATTERN-061 (Client-Driven Payload). Stub removed, live @anthropic-ai/sdk call landed. Opus 4.7 config per USER-CORRECTION-027 (adaptive thinking). Verification: `bunx tsc --noEmit` clean, `bun run lint` clean, `bun run test` 71/71.
 
 ### 8.3 `1558805` — Phase 4 kickoff docs
 
 Files changed:
 - `FORANDREW.md` (Phase 4 section added, lines 668-720)
-- `MEMORY.md` (USER-CORRECTION-031, USER-CORRECTION-032, PATTERN-053, PATTERN-054 added)
+- `MEMORY.md` (USER-CORRECTION-031, USER-CORRECTION-032, PATTERN-060, PATTERN-061 added)
 
 Context: Documentation commit bundling the four learnings from commits 1–2 into the living docs. No code changes.
 
-### 8.4 `a0093e7` — GOTCHA-018 post-Crucible
+### 8.4 `a0093e7` — GOTCHA-033 post-Crucible
 
 Files changed:
-- `MEMORY.md` (GOTCHA-018 added, lines 914–928, under the Day-2 section)
+- `MEMORY.md` (GOTCHA-033 added, lines 914–928, under the Day-2 section)
 
 Context: Commit 4 of this leg, written after Run 1 failed and we diagnosed the pastewrap trap. Captures the diagnostic ladder so the next session doesn't burn a Crucible on the same gotcha.
 
@@ -1428,7 +1428,7 @@ This is a copy of the ladder in section 5.5, promoted here for durability across
 2. Key length:
    echo ${#ANTHROPIC_API_KEY}
    → Pass (= 108): move to step 3.
-   → Fail (≠ 108): key is malformed. Most likely pastewrap (GOTCHA-018).
+   → Fail (≠ 108): key is malformed. Most likely pastewrap (GOTCHA-033).
 
 3. Key byte inspection:
    echo -n "$ANTHROPIC_API_KEY" | od -c | head
@@ -1534,7 +1534,7 @@ See section 10.5.
 6. [ ] Only after preview passes, `vercel --prod`.
 
 **Known deploy risks**:
-- NFT trace should be clean now (PATTERN-054 sidesteps all FS reads) — but verify with `vercel build` locally and inspect `.vercel/output/functions/app/.next/server/app/` for the Scouting action bundle. If any `public/match_data/*` files are missing from the function, something has regressed.
+- NFT trace should be clean now (PATTERN-061 sidesteps all FS reads) — but verify with `vercel build` locally and inspect `.vercel/output/functions/app/.next/server/app/` for the Scouting action bundle. If any `public/match_data/*` files are missing from the function, something has regressed.
 - If the 250 MB function size cap is blown, suspect the `@anthropic-ai/sdk` + MDX deps + React 19 bundle bloat. Remediation: ensure `dashboard/public/match_data/` is NOT tree-traced into the function; confirm tree-shaking is on in `next.config.js`.
 
 ### 11.4 3-minute demo video
@@ -1589,7 +1589,7 @@ All commands assume `cwd = /Users/andrew/Documents/Coding/hackathon-stage-3`.
 
 ```bash
 # Confirms the edge-triggered coupling block is present
-grep -n "PATTERN-053" backend/cv/state_machine.py | head -10
+grep -n "PATTERN-060" backend/cv/state_machine.py | head -10
 
 # Confirms the three new regression tests exist
 grep -n "test_continuous_bounce_does_not_pin_player_in_pre_serve_ritual\|test_bounce_edge_re_arms_after_going_low\|test_only_b_bounce_rising_edge_also_couples" tests/test_cv/test_state_machine.py
@@ -1735,7 +1735,7 @@ This handoff document reconstructs Phase 4 in enough depth that a senior enginee
 - Re-build the state-machine fix in any parallel project (the diff + three tests + idempotence rationale are all in section 3).
 - Re-apply the Client-Driven Payload pattern to any other Vercel Server Action that needs to reason over client-side data (sections 4.1–4.2 + the full `actions.ts` diff).
 - Re-run the full Crucible pipeline (section 13.6) and independently verify every number in sections 5.7–5.15.
-- Avoid the three sharp edges we hit: the multi-line paste trap (GOTCHA-018 + section 9.3), the Vercel NFT trap (USER-CORRECTION-032 + section 4.1), and the worktree-switch trap (USER-CORRECTION-031 + section 9.4).
+- Avoid the three sharp edges we hit: the multi-line paste trap (GOTCHA-033 + section 9.3), the Vercel NFT trap (USER-CORRECTION-032 + section 4.1), and the worktree-switch trap (USER-CORRECTION-031 + section 9.4).
 
 **Leg status**: green across the board.
 - Backend: 386/386.

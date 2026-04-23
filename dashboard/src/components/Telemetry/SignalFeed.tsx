@@ -31,7 +31,7 @@ export default function SignalFeed() {
     >
       <FeedHeader total={totalEvents} currentTimeMs={currentTimeMs} />
       <div className="mt-4 flex flex-1 flex-col">
-        <TelemetryLog heightClass="flex-1" density="comfortable" />
+        <TelemetryLog heightClass="flex-1" density="comfortable" showHeader />
       </div>
     </div>
   );

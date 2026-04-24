@@ -800,3 +800,79 @@ During the env-var rotation I flagged that the Anthropic API key had been forwar
 ### What's NEXT
 
 Saturday Apr 25 — Phase 6 polish (demo storyboard via `hackathon-demo-director` skill, `/e2e` Playwright sweep on Vercel preview URL, any remaining HUD visual tweaks). Sunday Apr 26 — record 3-min demo via OBS + computer-use, submit by 8pm EST.
+
+---
+
+## 2026-04-24 — Phase 6 Demo Production Kickoff
+
+### Context
+
+Thu Apr 23 ended with PR #4 merged (anomaly injection + TelemetryLog extraction + Vercel production-deploy journey). PR #5 (docs consolidation, non-code) is open. The live preview at `panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app` is stable and demo-ready. Submission is due Sunday Apr 26 8 PM EST; target an internal 5 PM EST submission (3-hour buffer for re-render / re-upload).
+
+### Research phase — 3 parallel agents
+
+Fired in a single message (WORKFLOW-006):
+
+1. **Explore agent (codebase audit)** — inventory of what's demo-ready, what's half-built, what the parent `CLAUDE.md` claims vs. what the code actually does. Caught the narrative-vs-code drift that became GOTCHA-022.
+2. **`general-purpose` (video production tooling)** — Remotion + `@remotion/mcp` launched 2026-04, Agent Skills pack, OBS vs Rec.Studio vs Cleanshot tradeoffs, ElevenLabs MCP state, Sportradar + Second Spectrum visual-language references. Feeds PATTERN-059 + PATTERN-060.
+3. **`general-purpose` (creative / strategic)** — past Anthropic hackathon winners' demo styles, Anthropic blog's published patterns for showing thinking / tool calls, game-theory positioning against other likely Opus-4.7 submissions.
+
+Plus a tennis-footage inventory from the local `Alternative_Data/data/videos/` tree — 8 matches available, 3 ANCHOR_OK. Hero clip is the existing 60 s segment at `dashboard/public/clips/utr_match_01_segment_a.mp4` with anomalies already tuned at t = 35.9 s / 45.3 s / 59.1 s.
+
+### Narrative audit findings
+
+Parent `CLAUDE.md` line 12 over-promised: *"generative UI + visible extended thinking + Managed Agents"*. Reality after the audit:
+- **Generative UI** → HUD layouts are static precomputed JSON via `hackathon_opus_designer`, not live Opus composition.
+- **Visible extended thinking** → collapsible static text, not token-by-token streaming.
+- **Managed Agents** → not wired; Tab 3 is a standard Next.js Server Action calling the Anthropic SDK directly (with PATTERN-054 client-driven payload).
+
+The demo narrative must not repeat these claims as-is. Captured as GOTCHA-022; reframed in storyboard v3 — Scene 2 rewrites "generative UI" to "pre-computed layouts from Opus", Scene 5 pivots Managed Agents into a 15-second *future vision* segment rather than a current-capability claim.
+
+### Storyboard evolution v1 → v3
+
+- **v1 (initial draft)** — tennis-broadcast-analyst tone. Patrick McEnroe cadence. Dramatic pauses, emotional beats on anomaly moments.
+- **User correction Thu afternoon** — *"Judges are Anthropic engineers. They value clear, simple, useful, novel, interesting, cool, beautifully aesthetic. Not childish, overly dramatic narrations."* Captured as GOTCHA-023.
+- **v3 (locked)** — technical-clinical tone. Tim Cook at WWDC register. ≤ 15 narration lines total, each carrying a fact / number / mechanism. Silence + pulsing red bar beats voice-over at anomaly moments.
+
+### Decisions locked (7 original + 4 follow-up)
+
+Captured in full as DECISION-011. Highlights:
+- Managed Agents: SKIP implementation, include 15 s future-vision segment (Scene 5B).
+- Voice: MacBook mic primary, ~12 lines, Tennis Channel analyst register (clinical, not dramatic). ElevenLabs stretch.
+- Weird feature (Opus Dreams): CUT — too theatrical for engineering-judge audience.
+- Tickertape bar (Tab 1 bottom): ADD with phase-weighted signal order (`PRE_SERVE_RITUAL` vs. `ACTIVE_RALLY`).
+- Hero clip: the existing 60 s segment — anomalies already tuned.
+- Remotion scope: chrome only (~30 s) — title / scene breaks / closing / Managed Agents fan-out graph. Full explanation of the hybrid-recording decision is in PATTERN-059.
+- Sportradar slow-mo + annotation overlay (A2): deprioritized — end-of-Saturday polish only.
+- YouTube: public, on Andrew's channel.
+- "Built with Claude Code" visibility: Scene 5A architecture overlay + Scene 2 3-second `.claude/skills/` file-tree flash (12 project-scoped skill packs visible).
+- `demo-v1` branch merge: deferred until post-submit (defaults to M1 = immediate merge to main).
+
+### Deliverables created today
+
+- `demo-presentation/CLAUDE.md` — rules + tone guide (under 200 lines, no plans).
+- `demo-presentation/PLAN.md` — storyboard, timeline, asset registry, add-ons, open questions.
+- `~/.claude/plans/phase-6-demo-production.md` — strategic trail (~80 lines).
+- `demo-presentation/{assets/references, scripts, remotion, audio, renders}/` — directory skeleton for Saturday's build sprint.
+
+### What's NEXT (Saturday Apr 25)
+
+1. Build sprint — ~5.5 h total:
+   - A1: tickertape bar on Tab 1 bottom strip.
+   - A4: Managed Agents fan-out graph (Remotion composition).
+   - A5: architecture overlay (Remotion slide).
+   - A6: Remotion chrome — `OpeningTitle.tsx`, `SceneBreak.tsx`, `ClosingCard.tsx`.
+2. Narration script draft (≤ 15 lines, each carrying a fact / number / mechanism).
+3. 2 OBS takes of the live dashboard (target: 2:30 of usable footage).
+4. Stretch if time: A2 (Sportradar slow-mo + annotation overlay), ElevenLabs voice.
+
+Sunday Apr 26 — final cut in DaVinci Resolve Free, render, YouTube upload, submission by 5 PM EST.
+
+### Non-obvious learnings captured (all in MEMORY.md)
+
+- **GOTCHA-022** — Narrative-vs-code drift must be audited before demo voice-over.
+- **GOTCHA-023** — Calibrate demo tone to the actual judge audience, not the domain audience.
+- **PATTERN-059** — Remotion hybrid for React-dashboard demos (chrome only).
+- **PATTERN-060** — Sportradar aesthetic: slow-mo + geometric primitives overlaid on live video.
+- **DECISION-011** — Phase 6 demo production decisions locked 2026-04-24.
+- **WORKFLOW-006** — Structured phase-planning protocol (3 parallel research agents + batched decisions).

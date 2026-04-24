@@ -1151,6 +1151,91 @@ Cross-session recall. Every entry is:
 
 ---
 
+## DAY 3 LEARNINGS (Apr 24, 2026) — Phase 6 Demo Production Kickoff
+
+### GOTCHA-022 — Narrative-vs-code drift must be audited before demo voice-over
+- **Type**: Gotcha / marketing-integrity
+- **Context**: 2026-04-24 Phase 6 planning session. Parent `CLAUDE.md` (line 12) promises *"generative UI + visible extended thinking + Managed Agents"*. Audit against reality showed: HUD layouts are static precomputed JSON (not live Opus composition), "thinking visible" is collapsible static text (not token-by-token streaming), Managed Agents SDK not wired at all (standard Next.js Server Action).
+- **Root cause**: `CLAUDE.md` is aspirational when written; code implementation catches a subset; nobody reconciles them before drafting marketing / demo voice-over.
+- **Lesson**: Before writing any demo narration / submission summary, do a narrative-vs-code audit. Read the top of parent `CLAUDE.md`'s "CORE VALUE PROPOSITION" / "PRIME DIRECTIVE" claims, then grep/read the code for each claim. For each claim without a code match, REFRAME or DROP from the demo narrative. Do NOT let aspirational claims leak into voice-over.
+- **Phase 6 application**: reframed Scene 2 + Scene 5 narration; Managed Agents became a 15 s future-vision segment (Scene 5B) with explicit "here's where we go next" framing, not a current-capability claim.
+- **File references**: `/Users/andrew/Documents/Coding/hackathon-demo-v1/CLAUDE.md` (parent), `demo-presentation/CLAUDE.md §3.1` (codifies the three narrative corrections), `demo-presentation/PLAN.md §5` (revised storyboard).
+- **Generalizes to**: any hackathon / demo / launch-page narrative where an aspirational spec document predates the implementation.
+- **Severity**: HIGH — false demo claims discovered by engineering judges would sink "Depth & Execution" (20 % weight).
+
+### GOTCHA-023 — Calibrate demo tone to the ACTUAL judge audience, not the domain audience
+- **Type**: Gotcha / communication
+- **Context**: 2026-04-24. Initial storyboard v1 used tennis-broadcast-analyst narration (Patrick McEnroe cadence — dramatic, emotional beats on anomaly moments). User correction Thu afternoon: *"Judges are Anthropic engineers. They value clear, simple, useful, novel, interesting, cool, beautifully aesthetic. Not childish, overly dramatic narrations."*
+- **Root cause**: Pattern-matched on "sports broadcast" as the domain; failed to model who literally watches the demo video in round 1 (Anthropic + Cerebral Valley moderators, not sports fans).
+- **Lesson**: The demo audience ≠ the product's end-user audience. Before drafting voice-over, explicitly ask: *who literally watches this video?* Calibrate tone to them. For engineering-judged hackathons the register is Tim-Cook-at-WWDC or demo-day-at-YC — measured, clinical, information-dense. Not SaaS keynote. Not sports broadcaster. Not sentimental voiceover.
+- **Phase 6 application**: rewrote storyboard v3 with ≤ 15 narration lines total (was ~25 in v2). Every line carries a fact/number/mechanism. Silence + pulsing red bar beats McEnroe-voice. File: `demo-presentation/CLAUDE.md §3.2–3.4` codifies the tone rules.
+- **Generalizes to**: any demo / marketing artifact where the consumer audience differs from the product's domain audience. Explicit audience modeling is always cheaper than a re-record.
+- **Severity**: MEDIUM-HIGH — wrong tone alienates judges even when the tech is solid.
+
+### PATTERN-059 — Remotion hybrid for React-dashboard demos (chrome only)
+- **Type**: Pattern / demo-production tooling
+- **Context**: 2026-04-24. Remotion (remotion.dev, React-based programmatic video) has an official MCP (`npx @remotion/mcp@latest`, launched 2026-04) and Agent Skills pack (`bunx skills add remotion-dev/skills`). Tempting to render the entire demo in Remotion.
+- **The trap**: Panopticon's demo is fundamentally a LIVE React dashboard being recorded. Replicating canvas/skeleton/SignalBar spring-physics in Remotion = 40+ hours of work, duplicates animation logic, and risks drift between Remotion rendering and actual dashboard behavior.
+- **Rule**: Hybrid recording. OBS records the live Vercel-deployed dashboard (~2:30 of the 3-minute video). Remotion renders ONLY the chrome: opening title card, scene-break cards, architecture slide, closing URL card, Managed Agents fan-out graph (~30 s total). Ships in ~6 hours total. Greg Ceccarelli precedent (Aug 2025): 2-hour polished chrome via Claude Code + `@remotion/mcp`.
+- **When it applies**: any product demo where the hero is a live interactive UI (dashboard, IDE, editor, game). Chrome-only Remotion = title / transitions / closing. Live capture = the product itself.
+- **When it doesn't**: pure motion-graphics explainers (data-viz walkthroughs, infographic-style talks) — full Remotion is correct there.
+- **Phase 6 application**: Saturday build list includes 4 Remotion compositions (`OpeningTitle.tsx`, `SceneBreak.tsx`, `ManagedAgentsGraph.tsx`, `ClosingCard.tsx`) + OBS for the 2:30 live dashboard recording.
+- **File reference**: `demo-presentation/PLAN.md §6` add-on A6, §7 asset registry.
+- **Severity**: HIGH-ROI (avoided a 40-hour dead end; picks the right tool per surface).
+
+### PATTERN-060 — Sportradar aesthetic: slow-mo + geometric primitives overlaid on live video
+- **Type**: Pattern / visual language
+- **Context**: 2026-04-24. Reference: https://sportradar.com landing page. Screenshots saved at `demo-presentation/assets/references/sportradar_tennis.png` + `sportradar_mma.png` (TODO Saturday).
+- **Visual language**: player mid-motion, cyan/red vector lines drawn between body keypoints (hip→knee→ankle, shoulder→elbow→wrist), small floating label in bottom-right showing a raw CV coordinate like `"y": -38.05`. Dark navy/black background, red-and-white typography.
+- **Implementation**: video playback rate animated from 1.0× → 0.25× at anomaly timestamps via `HTMLVideoElement.playbackRate`. New canvas overlay layer on top of existing skeleton canvas. Primitives:
+  - angle wedge between 3 keypoints (20° arc, cyan stroke 2 px, 15 % alpha fill)
+  - velocity arrow from keypoint position over 200 ms history (arrowhead at current frame)
+  - trajectory spline (optional, bezier approx)
+  - floating labels via absolute-positioned `<div>` with mono font + semi-transparent dark bg
+- **Why it matters**: this is the visual signature that makes biometric overlays READABLE as data, not just skeleton lines. Sportradar is the sports-data industry reference; matching that register signals "this is production tech, not a toy."
+- **Phase 6 application**: Add-on A2 in `PLAN.md §6`. Full implementation is 4 h (angle wedge + velocity arrow + floating labels). Minimal fallback is 30 min (playback-rate slowdown only, no annotations). User decision 2026-04-24: full A2 is end-of-Saturday polish ONLY; demo ships with or without.
+- **File references**: `dashboard/src/components/PanopticonEngine.tsx` (extend point), new `dashboard/src/components/AnnotationOverlay.tsx` (create under `demo-v1` branch).
+- **Severity**: HIGH-ROI if time permits, deprioritized if not.
+
+### DECISION-011 — Phase 6 demo production decisions locked 2026-04-24
+- **Type**: Decision (demo production)
+- **Single-line summary**: 3-minute demo video produced Saturday–Sunday, submitted by Sunday 5 PM EST (3-hour buffer before 8 PM deadline).
+- **Managed Agents**: SKIP implementation; include 15 s future-vision segment (Scene 5B) reasoned from first principles (per-player pre-trained agents, durable match memory, specialist skills).
+- **Voice**: MacBook mic primary (Tennis Channel analyst register, MINIMAL footprint ~12 lines); ElevenLabs stretch if time.
+- **Weird feature**: CUT (Opus Dreams skipped — too theatrical for engineering-judge audience, per GOTCHA-023).
+- **Tickertape bar (Tab 1 bottom)**: ADD; phase-weighted signal order — `PRE_SERVE_RITUAL`: `toss_variance + ritual_entropy + crouch_depth`; `ACTIVE_RALLY`: `lateral_work + baseline_retreat + recovery_latency`.
+- **Hero clip**: existing 60 s segment in repo (anomalies already tuned at t=35.9/45.3/59.1 s).
+- **Remotion scope**: chrome only (title card + scene breaks + closing card + Managed Agents fan-out graph).
+- **Sportradar slow-mo + annotation overlay (A2)**: deprioritized — end-of-Saturday polish only.
+- **YouTube**: public, on Andrew's channel.
+- **"Built with Claude Code" visibility**: Scene 5A architecture overlay + Scene 2 3-second `.claude/skills/` file-tree flash (12 project-scoped skill packs visible).
+- **Tone**: technical-clinical, Tim Cook at WWDC, NOT McEnroe. No dramatic cadence.
+- **`demo-v1` branch merge**: deferred until post-submit (defaults to M1 = immediate merge to main).
+- **Files**: `demo-presentation/CLAUDE.md`, `demo-presentation/PLAN.md`, `~/.claude/plans/phase-6-demo-production.md`.
+- **Severity**: Foundation for all Sat–Sun work.
+
+### WORKFLOW-006 — Structured phase-planning protocol (3 parallel research agents + batched decisions)
+- **Type**: Workflow / orchestration
+- **Context**: 2026-04-24. Applied to Phase 6 demo planning; generalizes to any major new phase kickoff.
+- **Protocol**:
+  1. Fire 3 parallel research agents in a SINGLE message:
+     - Explore agent → codebase state audit (what's demo-ready, what's missing, what narrative risks exist)
+     - `general-purpose` → domain-specific research (tools, references, industry visual language)
+     - `general-purpose` → creative/strategic research (past winners, blog best practices, game theory vs. other submissions)
+  2. Synthesize findings into a draft plan + open-questions list.
+  3. Use `AskUserQuestion` to BATCH the 2–4 highest-leverage decisions — never ask one-at-a-time when they can be batched.
+  4. Lock answers into the plan; identify any follow-up questions; iterate via `AskUserQuestion` until no blockers.
+  5. Split output into:
+     - `<scope-folder>/CLAUDE.md` — rules (under 200 lines, no plans).
+     - `<scope-folder>/PLAN.md` — detailed storyboard + timeline + assets + open questions.
+     - `~/.claude/plans/phase-N.md` — strategic trail (short, ~80 lines) — keeps the chain of reasoning.
+- **Why it works**: parallelizes ~30 min of research into ~15 min wall-clock. Batched `AskUserQuestion` prevents the back-and-forth where each question gets a 1:1 chat turn. Separating rules (`CLAUDE.md`) from plans (`PLAN.md`) prevents rule bloat and lets plans evolve independently.
+- **Phase 6 application today**: ~5 min of agent dispatch → ~8 min of agent-parallel work → ~10 min synthesis → ~3 min `AskUserQuestion` for 4 decisions → plan locked in ~30 min wall-clock time vs. ~2 hours if done sequentially.
+- **Generalizes to**: any phase kickoff, product launch, or strategic research sprint where decision space is large but knowable in a single synthesis pass.
+- **Severity**: HIGH-ROI (default planning protocol going forward).
+
+---
+
 ## DAY 4 LEARNINGS (Apr 25, 2026)
 
 (To be populated)

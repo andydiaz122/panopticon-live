@@ -504,3 +504,63 @@ The combined session shipped PR #4 with 4 commits and no hot-fix revert. That's 
 - Preview URL: `panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app` (as of PR #4 merge)
 - 4 commits merged to main: `4f9df37` (force-add assets) → `b20c370` (vercel.json maxDuration fix) → `888acb5` (anomaly injection + TelemetryLog slots) → `787a5d1` (PR-review feedback — stable keys + Tab 2 progress counter)
 - PR #4 URL: https://github.com/andydiaz122/panopticon-live/pull/4
+
+---
+
+## Phase 6 (Apr 24 — Demo Production Planning Kickoff)
+
+### HIGH-IMPACT tools/patterns this session
+
+| Tool / Pattern | Outcome | ROI | Notes |
+|---|---|---|---|
+| 3 parallel research agents (Explore + 2× `general-purpose`) | Parallelized codebase audit + video-production tooling research + creative/strategic research into ~8 min wall-clock. Produced the narrative-vs-code drift finding (GOTCHA-022), the Remotion hybrid pattern (PATTERN-059), the Sportradar visual-language reference (PATTERN-060) | HIGH (saved ~90 min of sequential time; the narrative-drift finding alone prevented a demo-killing claim getting into voice-over) | Codified as WORKFLOW-006 — default for any phase-kickoff going forward. |
+| `@remotion/mcp` (install planned Saturday) | Programmatic React-based video composition for opening title / scene breaks / closing URL card / Managed Agents fan-out graph | Expected HIGH for chrome rendering (~30 s of the 3-min video). Chrome-only scope = ~6 h to ship | Paired with the Remotion Agent Skills pack (`bunx skills add remotion-dev/skills`) so Claude Code generates opinionated Remotion code without hallucinated imports. PATTERN-059. |
+| Remotion Agent Skills pack | Expected: eliminates hallucinated imports / outdated-API patterns when Claude Code authors Remotion compositions | Expected MEDIUM (saves ~30 min of compile-fix loop) | Install Saturday alongside `@remotion/mcp`. |
+| ElevenLabs MCP | Stretch goal: higher-production voice-over if time permits after MacBook-mic primary take is done | Expected MEDIUM-LOW (reasonable default is MacBook mic; ElevenLabs is polish) | Skip if Saturday build sprint eats the time budget. |
+| OBS Studio | Primary live-capture of dashboard (~2:30 of the 3-minute video) | Expected CRITICAL — the hero of the demo is the live dashboard | Backup option: Playwright recording if OBS jitters. |
+| DaVinci Resolve Free | Sunday final-cut tool: assemble OBS live-capture + 4 Remotion compositions + voice-over track + music bed | Expected HIGH — Free tier is sufficient for a 3-min 1080p export | No timeline experience needed; 4 cuts + audio alignment only. |
+| Canva MCP | Fallback for architecture diagram + YouTube thumbnail if Remotion chrome hits a blocker | Expected LOW-MEDIUM (only fires if Remotion fails) | Keep in reserve. |
+| Figma MCP | Reference-only: pull Sportradar aesthetic screenshots for the `AnnotationOverlay` design study (A2) | Expected LOW (A2 is deprioritized) | Skip if A2 doesn't land. |
+| Playwright (backup live capture) | Alternative to OBS if OBS jitters or screen-capture permission fails | Expected LOW-MEDIUM — only fires as fallback | Covered under `e2e-runner` agent infra. |
+
+### Skills that FIRED this session
+
+- `explore` agent (codebase audit — caught the narrative-vs-code drift).
+- 2× `general-purpose` agents (video-production tooling + creative/strategic research).
+- `documentation-librarian` (this documentation-consolidation pass).
+
+### Skills QUEUED for Saturday (Apr 25)
+
+- `hackathon-demo-director` — recording script + storyboard-to-shot-list translation.
+- `2k-sports-hud-aesthetic` — final-polish pass on any HUD widgets that need refinement before OBS takes.
+- `biometric-fan-experience` — copy-pass on signal labels / physiology captions for fan-facing readability.
+
+### Skills NOT USED (intentional) — Citadel-level discipline
+
+- `frontend-slides` — not a slide-format demo. Panopticon is a live dashboard; chrome is Remotion, not slide deck.
+- `awwwards-animations` — over-kill for 30 s of chrome animations. Remotion primitives are sufficient; awwwards patterns add complexity without proportional demo-criterion impact.
+- `agent-harness-construction` — Phase 2 Opus wiring is stable and shipped. No new agent scaffolding in Phase 6.
+- `claude-api` — no new Anthropic SDK calls; existing Tab 3 Server Action is the surface.
+- `vercel-ts-server-actions` / `/vercel:vercel-cli` — deploy is green; no new Vercel surface in Phase 6 (all chrome lives in Remotion output, not Vercel).
+
+### Anti-patterns DODGED this session
+
+- **#22 (push content DOWN, leave pointers UP)** — new rules / tone guidance went into nested `demo-presentation/CLAUDE.md` (under 200 lines), NOT into parent `CLAUDE.md`. Parent stays at 95 lines.
+- **#29 (redundant tool inventories)** — no tool-inventory agent dispatched. System-reminder MCP list provided every tool surface at zero token cost; the three research agents were each pointed at an orthogonal research question, not at tool discovery.
+- **#32 (bypassing quality-preserving commands)** — used `documentation-librarian` skill invocation (this agent) rather than raw Write-orchestration from the parent session.
+- **#17 (parallel on dependent tasks)** — the three research agents were truly orthogonal (code audit vs. tooling research vs. creative research); none of them depended on another's output. Synthesis happened in the parent session after all three returned.
+- **#34 (skipping local-archive sweep)** — the tennis-footage inventory and codebase-state audit are instances of the same pattern: look locally before dispatching external research.
+
+### Meta-learning this session
+
+The 3-parallel-research-agent pattern (WORKFLOW-006) is now the default for any phase kickoff — the wall-clock win (30 min vs. 2 h) is the headline, but the structural win is *orthogonality by construction*. Each agent owns one research lens (code / tooling / creative), and synthesis in the parent session surfaces cross-lens findings (e.g., the narrative-vs-code audit fed directly into storyboard tone calibration, which fed into the Remotion hybrid decision). Sequential research would have missed those cross-lens connections because each research pass would have been scoped tightly to its own question.
+
+Secondary meta-learning: **the user's AskUserQuestion batch is a design choice, not a convenience**. Batching 4 questions into one turn forces us to identify the *highest-leverage* decision points and model their interdependencies upfront. One-at-a-time questions produce sequential anchoring bias and cost more turns.
+
+### Artifacts
+
+- `demo-presentation/CLAUDE.md` (rules + tone guide, under 200 lines).
+- `demo-presentation/PLAN.md` (storyboard + timeline + assets + open questions).
+- `~/.claude/plans/phase-6-demo-production.md` (strategic trail, ~80 lines).
+- `demo-presentation/{assets/references, scripts, remotion, audio, renders}/` (directory skeleton for Saturday's build sprint).
+- No commits this session (docs consolidation is a read-only audit + synthesis pass; Andrew will audit + commit himself per task instructions).

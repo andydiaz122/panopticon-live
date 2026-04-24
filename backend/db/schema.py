@@ -9,9 +9,10 @@ re-precompute if schema evolves.
 
 from __future__ import annotations
 
-from typing import Literal
+from datetime import datetime
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_serializer, field_validator, model_validator
 
 # ──────────────────────────── Serialization precision ────────────────────────────
 
@@ -381,6 +382,133 @@ class MatchMeta(PanopticonBase):
     player_a: str = Field(min_length=1)
     player_b: str = Field(min_length=1)
     court_corners_json: str  # 4 corners as JSON
+
+
+# ──────────────────────────── Multi-Agent Trace (PATTERN-056) ────────────────────────────
+#
+# Captures every event from a real offline multi-agent run so the frontend can
+# REPLAY the reasoning sequence deterministically (USER-CORRECTION-024). The
+# discriminated union on `kind` is load-bearing: the TypeScript consumer
+# narrows by `kind` to render the right UI pill, and Pydantic routes each
+# inbound dict to the correct subclass.
+
+
+class TraceThinking(PanopticonBase):
+    """Extended-thinking block emitted by an agent (Opus 4.7 internal reasoning)."""
+
+    kind: Literal["thinking"] = "thinking"
+    t_ms: int = Field(ge=0, description="ms offset from trace start, not wall clock")
+    content: str
+
+
+class TraceToolCall(PanopticonBase):
+    """A tool invocation by an agent. `input_json` is pre-serialized to avoid
+    arbitrary-dict drift between Python producer and TS consumer."""
+
+    kind: Literal["tool_call"] = "tool_call"
+    t_ms: int = Field(ge=0)
+    tool_name: str = Field(min_length=1)
+    input_json: str
+
+
+class TraceToolResult(PanopticonBase):
+    """A tool result returned to the agent. `output_json` is pre-serialized."""
+
+    kind: Literal["tool_result"] = "tool_result"
+    t_ms: int = Field(ge=0)
+    tool_name: str = Field(min_length=1)
+    output_json: str
+    is_error: bool = False
+
+
+class TraceText(PanopticonBase):
+    """A free-form text block emitted by an agent (often the final answer chunk)."""
+
+    kind: Literal["text"] = "text"
+    t_ms: int = Field(ge=0)
+    content: str
+
+
+class TraceHandoff(PanopticonBase):
+    """An explicit handoff from one agent to the next. `payload_summary` is a
+    one-line description; the FULL payload becomes the next agent's input
+    (captured in that agent's subsequent events)."""
+
+    kind: Literal["handoff"] = "handoff"
+    t_ms: int = Field(ge=0)
+    from_agent: str = Field(min_length=1)
+    to_agent: str = Field(min_length=1)
+    payload_summary: str
+
+
+# Discriminated union — Pydantic v2 routes by `kind` field
+TraceEvent = Annotated[
+    Union[TraceThinking, TraceToolCall, TraceToolResult, TraceText, TraceHandoff],
+    Field(discriminator="kind"),
+]
+
+
+class AgentStep(PanopticonBase):
+    """One agent's turn within the Scouting Committee execution."""
+
+    agent_name: str = Field(min_length=1)
+    agent_role: str = Field(min_length=1)
+    started_at_ms: int = Field(ge=0)
+    completed_at_ms: int = Field(ge=0)
+    events: list[TraceEvent]
+
+    @model_validator(mode="after")
+    def _validate_timeline(self) -> AgentStep:
+        if self.completed_at_ms < self.started_at_ms:
+            raise ValueError(
+                "completed_at_ms must be >= started_at_ms; "
+                f"got started={self.started_at_ms} completed={self.completed_at_ms}"
+            )
+        last_t: int = -1
+        for i, ev in enumerate(self.events):
+            if ev.t_ms < last_t:
+                raise ValueError(
+                    f"events[{i}] t_ms ({ev.t_ms}) is non-monotonic; "
+                    f"previous event had t_ms={last_t}. Trace events MUST be "
+                    "monotonic for deterministic UI replay."
+                )
+            last_t = ev.t_ms
+        return self
+
+
+class AgentTrace(PanopticonBase):
+    """Full captured execution of a multi-agent Scouting Committee run.
+
+    Written to `dashboard/public/match_data/agent_trace.json` during offline
+    precompute; loaded by the Orchestration Console (Tab 3) via fetch()+useEffect
+    (GOTCHA-026: never as a Server Component prop).
+    """
+
+    match_id: str = Field(min_length=1)
+    generated_at: datetime
+    committee_goal: str
+    steps: list[AgentStep]
+    final_report_markdown: str
+    total_compute_ms: int = Field(ge=0)
+    # Match-timecode anchor (founder audit, 2026-04-23): the MIN/MAX of signal
+    # timestamps this committee analyzed, in match milliseconds (NOT UI playback
+    # timestamps). Lets the Orchestration Console show "Analyzing match 0:00-1:00"
+    # so judges map the swarm's analysis to the video they're watching. Optional
+    # for backwards-compat with pre-Phase-4-audit traces.
+    match_time_range_ms: tuple[int, int] | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _validate_steps_chronological(self) -> AgentTrace:
+        for i in range(1, len(self.steps)):
+            prev = self.steps[i - 1]
+            curr = self.steps[i]
+            if curr.started_at_ms < prev.completed_at_ms:
+                raise ValueError(
+                    f"steps[{i}] started_at_ms ({curr.started_at_ms}) is before "
+                    f"steps[{i - 1}].completed_at_ms ({prev.completed_at_ms}). "
+                    "Scouting Committee steps must be chronologically non-overlapping."
+                )
+        return self
 
 
 # ──────────────────────────── DDL ────────────────────────────

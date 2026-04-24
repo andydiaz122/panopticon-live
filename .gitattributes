@@ -1,0 +1,33 @@
+# Binary treatment for precompute outputs: these files are large single-line
+# JSON blobs (match_data.json can be 15-25MB, agent_trace.json 50KB-1MB). Without
+# the -diff flag, GitHub PR views freeze trying to render a diff, and git merge
+# attempts a textual three-way merge which is useless on these files.
+#
+# Related GOTCHAs:
+#   GOTCHA-026 — Next.js Server-Component JSON Hydration Death
+#   GOTCHA-027 — Trace Payload Explosion
+
+# Static match payloads served to the dashboard
+dashboard/public/match_data/*.json -diff linguist-generated=true
+dashboard/public/match_data/*.duckdb binary
+
+# DuckDB artifacts (if checked in)
+*.duckdb binary
+
+# YOLO weights / checkpoints (treat as binary)
+*.pt binary
+*.onnx binary
+*.pth binary
+
+# Video assets
+*.mp4 binary
+*.webm binary
+*.mov binary
+
+# Python bytecode (should be gitignored, but belt-and-suspenders)
+*.pyc binary
+
+# Bun/Node lockfiles — diff-friendly but huge; mark as generated so PR reviewers know
+bun.lockb binary
+bun.lock -diff linguist-generated=true
+package-lock.json -diff linguist-generated=true

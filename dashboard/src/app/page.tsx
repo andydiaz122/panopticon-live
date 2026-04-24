@@ -1,5 +1,5 @@
 import HudView from '@/components/Hud/HudView';
-import ScoutingReportTab from '@/components/Scouting/ScoutingReportTab';
+import OrchestrationConsoleTab from '@/components/Scouting/OrchestrationConsoleTab';
 import SignalFeed from '@/components/Telemetry/SignalFeed';
 import TabShell from '@/components/TabShell';
 import PanopticonProvider from '@/lib/PanopticonProvider';
@@ -10,11 +10,13 @@ import PanopticonProvider from '@/lib/PanopticonProvider';
  * PanopticonProvider wraps the TabShell so all tabs share ONE video ref,
  * ONE match_data fetch, and ONE rAF loop. Tab content stays MOUNTED across
  * tab switches (PATTERN-050), so video playback + feed scroll position +
- * scouting-report state all survive navigation.
+ * orchestration-console playback state all survive navigation.
  *
  * Tab 1 — Live HUD: video + skeleton + signal rail + coach panel
  * Tab 2 — Raw Telemetry: terminal-style signal log, streams with currentTime
- * Tab 3 — Opus Scouting: Server-Action-triggered scouting report (Opus 4.7)
+ * Tab 3 — Scouting Committee: Multi-agent Opus 4.7 swarm trace playback
+ *         (PATTERN-056 / USER-CORRECTION-024 — the 2030-vision UX showcased
+ *         via offline-trace-capture + client-side pacing)
  */
 export default function Home() {
   return (
@@ -39,9 +41,9 @@ export default function Home() {
           },
           {
             id: 'scouting',
-            label: 'Opus Scouting',
-            sublabel: 'On-demand brief',
-            content: <ScoutingReportTab />,
+            label: 'Scouting Committee',
+            sublabel: '3-agent swarm',
+            content: <OrchestrationConsoleTab />,
           },
         ]}
       />

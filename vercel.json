@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "cd dashboard && bun install --frozen-lockfile",
+  "buildCommand": "cd dashboard && bun run build",
+  "outputDirectory": "dashboard/.next",
+  "ignoreCommand": "bash -c 'git diff HEAD^ HEAD --quiet -- dashboard/ backend/db/schema.py'",
+  "headers": [
+    {
+      "source": "/match_data/(.*).json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800" }
+      ]
+    },
+    {
+      "source": "/clips/(.*).(mp4|webm)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}

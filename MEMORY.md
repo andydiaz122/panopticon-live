@@ -911,7 +911,45 @@ Cross-session recall. Every entry is:
 
 ## DAY 2 LEARNINGS (Apr 23, 2026)
 
-### GOTCHA-018 — Multi-line Paste Silently Embeds Newlines Inside Single-Quoted Env Vars
+### GOTCHA-018 — SG polyorder=1 Is a Simple Moving Average: Smears Impulse Peaks
+- **Type**: Gotcha / Physics Trap
+- **Context**: Research campaign plan proposed `savgol_filter(window=7, polyorder=1)` for post-Kalman velocity smoothing.
+- **Lesson**: polyorder=1 Savitzky-Golay is mathematically identical to a Simple Moving Average. SMAs ruthlessly flatten high-frequency impulse peaks — exactly what we need to PRESERVE for split-step and lateral push-off detection. **MUST use polyorder=2 or polyorder=3** for sports biomechanical signals where peak velocity amplitude matters.
+- **Severity**: CRITICAL (would corrupt lateral_work_rate and crouch_depth signals)
+- **Source**: Founder override, 2026-04-23
+- **How to apply**: Any time SG filtering is proposed for sports velocity signals, default to polyorder=2 minimum. Only use polyorder=1 for position smoothing where peak amplitude is irrelevant.
+
+### GOTCHA-019 — Offline Precompute = Zero-Phase SG (No Temporal Lag)
+- **Type**: Gotcha / Architecture Advantage
+- **Context**: Plan cautioned that Savitzky-Golay adds "233ms temporal lag" to velocity signals.
+- **Lesson**: That caution applies to CAUSAL (real-time) filters. We run `precompute.py` — an offline batch pipeline with access to the full signal array. `scipy.signal.savgol_filter` applied to an array uses a CENTERED window, making it zero-phase with zero temporal lag. The "lag" warning is irrelevant for precompute architecture.
+- **Severity**: HIGH (architectural advantage we were failing to leverage)
+- **Rule**: Whenever building signal processing for precompute.py, default to non-causal (offline) algorithms — they're strictly superior. The constraint "must be real-time" only applies to live RTSP pipelines.
+
+### GOTCHA-020 — Kalman Q Inversion Trap: Increasing Q Trusts Jittery YOLO More
+- **Type**: Gotcha / Physics Trap
+- **Context**: Plan stated "If innovation² > 0.05 m², increase Q" to reduce jitter. This is backwards.
+- **Lesson**: Increasing Q (process noise covariance) tells the Kalman filter its physical model is UNCERTAIN, which RAISES the Kalman Gain — making the filter trust raw (jittery) YOLO measurements MORE, not less. This increases visual jitter, not decreases. Correct diagnosis: high innovation → filter is under-trusting model (Q too small) OR measurement noise is too low (R too small relative to actual YOLO noise). Correct fix: use RTS smoother offline (not Q tuning at all).
+- **Severity**: CRITICAL (backwards fix would worsen signal quality)
+- **Source**: Founder override, 2026-04-23
+
+### PATTERN-053 — RTS Smoother: Mathematically Optimal Offline Kalman Smoothing
+- **Type**: Pattern / Algorithm
+- **Context**: Research campaign proposed Kalman CA upgrade (5-8h, risky). The correct upgrade for our offline precompute architecture is the Rauch-Tung-Striebel (RTS) smoother.
+- **Rule**: For offline Kalman smoothing in `precompute.py`, use `filterpy.kalman.KalmanFilter.rts_smoother()`. This runs a backward pass over stored forward Kalman states, providing mathematically optimal, zero-lag smoothed trajectories. Implementation is 3 lines of code.
+- **How to apply**:
+  ```python
+  # After forward pass loop:
+  means, covs = zip(*[(kf._kf.x.copy(), kf._kf.P.copy()) for ...])
+  smoothed_means, smoothed_covs, _, _ = kf._kf.rts_smoother(
+      np.array(means), np.array(covs)
+  )
+  ```
+- **Expected improvement**: 20-35% velocity noise reduction at ~3 lines vs. 5-8h CA model rewrite
+- **Severity**: HIGH (unlocks offline advantage; phase 2 implementation target)
+- **Source**: Founder override, 2026-04-23
+
+### GOTCHA-033 — Multi-line Paste Silently Embeds Newlines Inside Single-Quoted Env Vars
 - **Type**: Gotcha (shell / terminal)
 - **Context**: Apr 23, 2026 — Phase 4 Crucible Run. The user pasted a long `export ANTHROPIC_API_KEY='...'` command where the terminal display wrapped the key across two visual lines, AND the paste preserved a literal newline + two spaces of indent inside the quotes. Shell single-quoted strings span physical newlines lawfully — the embedded `\n  ` became part of the env var. Expected Anthropic key length 108 chars; actual `${#ANTHROPIC_API_KEY}` = 111 chars. The Anthropic SDK attempted HTTPS requests with a malformed Authorization header, which failed at the HTTP transport layer with `APIConnectionError: Connection error.` — NOT `AuthenticationError`, because the header never made it onto the wire. ALL 26 agent calls (10 Coach + 10 Designer + 6 Narrator) failed identically, producing `[coach_error: APIConnectionError: Connection error.]` commentaries. The underlying network + DNS + TLS + HTTPS to `api.anthropic.com` was perfectly healthy.
 - **Lesson**: NEVER paste a multi-line export command that quotes a long token across physical newlines. Two defenses, pick both:
@@ -926,7 +964,8 @@ Cross-session recall. Every entry is:
   3. Inspect the key with `echo -n "$ANTHROPIC_API_KEY" | od -c | head` — reveals embedded newlines, spaces, or non-printable bytes.
   4. Only after steps 1-3 pass, blame rate-limits / regional outages.
 - **Severity**: MEDIUM (cost a full Crucible run (~8 min compute) before diagnosis; catchable in <10s with a `${#KEY}` length check)
-- **Related**: See GOTCHA-020 for the `printf "%s\n\n"` variant — different mechanism (piped-stdin trailing newline fed into `vercel env add`, not clipboard quoting), same corruption outcome (Anthropic-401 loop). Treat both as members of the same "hidden-byte env-var" class.
+- **Note**: Originally numbered GOTCHA-018 in commit a0093e7; renumbered to GOTCHA-033 during merge to avoid collision with prior GOTCHA-018 (SG polyorder).
+- **Related**: See GOTCHA-035 (originally GOTCHA-020 on main, renumbered) for the `printf "%s\n\n"` variant — different mechanism (piped-stdin trailing newline fed into `vercel env add`, not clipboard quoting), same corruption outcome (Anthropic-401 loop). Treat both as members of the same "hidden-byte env-var" class.
 
 ### USER-CORRECTION-031 — Direct User Directive Overrides Forwarded Team-Lead Text
 - **Type**: User-Correction
@@ -951,7 +990,7 @@ Cross-session recall. Every entry is:
 - **Generalizes to**: ANY Vercel Server Action that wants to ingest a known-client-side dataset. Don't reach for fs; accept the data as an argument. This pattern is also the canonical answer to "how do I pass state from a Client Component to a Server Action for AI processing" in Next.js App Router.
 - **Severity**: CRITICAL (production deployment blocker — would 500 on Vercel, passing locally)
 
-### PATTERN-053 — Edge-Triggered Match Coupling on Continuous Bounce Signal
+### PATTERN-060 — Edge-Triggered Match Coupling on Continuous Bounce Signal
 - **Type**: Systems / state-machine discipline
 - **Context**: Andrew flagged in visual QA: "the pre-serve ritual stays on well into the rally." Root-cause investigation found that `RollingBounceDetector.evaluate()` is a PURE spectral probe of a 90-frame (3-second @ 30fps) rolling buffer — once a bounce signature lives in the buffer, `evaluate()` returns True **every frame for the ~3 seconds it takes the signature to age out**. The original `MatchStateMachine.update()` called `self._a.force_state("PRE_SERVE_RITUAL", t_ms); self._b.force_state("PRE_SERVE_RITUAL", t_ms)` on every tick where `a_bounce or b_bounce` was True — so kinematic ACTIVE_RALLY transitions got immediately snapped back to PRE_SERVE_RITUAL for the full ~3-second window. Player was pinned in the ritual state across an actual rally.
 - **Rule**: When a signal is a CONTINUOUS spectral/statistical probe (rolling-buffer variance, autocorrelation, Lomb-Scargle, etc.), but the CONSUMER wants a discrete EVENT (force a state change once per occurrence), do edge-detection at the CONSUMER, not the PROBE. The probe stays pure and idempotent (which enables invariants like `test_detector_evaluate_is_idempotent` in the test suite). The consumer tracks `_last_signal_state` and fires only on the rising edge (False → True).
@@ -974,8 +1013,9 @@ Cross-session recall. Every entry is:
   ```
 - **Generalizes to**: any signal-to-event bridging where the signal source is inherently continuous. Serve-bounce detection, anomaly detection (z-score > threshold for N consecutive ticks), heartbeat-timeout triggers, etc.
 - **Severity**: CRITICAL (root cause of a flagship visual-QA bug, pinpointed during Phase 4)
+- **Note**: Originally numbered PATTERN-053 in commit 1558805; renumbered to PATTERN-060 during merge to avoid collision with PATTERN-053 (RTS Smoother) already in this repo.
 
-### PATTERN-054 — Client-Driven Payload for Vercel Server Actions (Vercel-bulletproof AI reads)
+### PATTERN-061 — Client-Driven Payload for Vercel Server Actions (Vercel-bulletproof AI reads)
 - **Type**: Frontend architecture / Vercel deployment
 - **Context**: USER-CORRECTION-032 surfaced during Phase 4 Scouting Report wiring. We wanted Tab 3 to call a Next.js Server Action that reasons over ~100KB of telemetry. The FS-read approach (`fs.readFile(path.join(process.cwd(), ...))` against a dynamic matchId) works locally in `next dev` but breaks on Vercel because NFT can't statically trace the file into the Serverless Function bundle.
 - **Rule**: For any Server Action that needs to analyze data already resident in the Client Component tree, pass the data AS AN ARGUMENT to the Server Action instead of re-reading it on the server. Destructure out high-volume fields (keypoints, per-frame arrays) on the client first; keep only LLM-relevant keys in the payload.
@@ -1011,12 +1051,312 @@ Cross-session recall. Every entry is:
 - **Anti-pattern to avoid**: `fs.promises.readFile(path.join(process.cwd(), 'public', ..., dynamicName))` in a Server Action. Works locally, 500s on Vercel. If you MUST read from disk in a Server Action, the path must be a literal string constant or derived from build-time imports (not runtime params) so NFT can trace it.
 - **Source**: User-Correction from Andrew during Phase 4 plan review, 2026-04-23.
 - **Severity**: CRITICAL (prevents Vercel deploy regression)
+- **Note**: Originally numbered PATTERN-054 in commit 1558805; renumbered to PATTERN-061 during merge to avoid collision with PATTERN-054 (RTS Smoother Integration) already in this repo.
+
+### GOTCHA-021 — Ghost Opponent Contradiction: split_step_latency Cannot Reference Player B
+- **Type**: Gotcha / Scope Contradiction
+- **Context**: signalCopy.ts and system_prompt.py both described split_step_latency_ms as "delay from OPPONENT's racket contact to Player A's split-step." DECISION-008 (single-player scope) + GOTCHA-016 (Player B undetectable) means this reference is logically impossible.
+- **Lesson**: split_step_latency_ms fires on Player A's OWN state machine transitions (USER-CORRECTION-019: structural state-proxy pattern). The serve-bounce trigger is inferred from Player A's relative kinematics during PRE_SERVE_RITUAL, not from Player B keypoints. All fan-facing copy MUST anchor this signal on Player A's isolated mechanics only.
+- **FIXED**: signalCopy.ts now reads "Player A's movement burst timing relative to serve-bounce detection." system_prompt.py signal 7 no longer references opponent detection.
+- **Severity**: CRITICAL (technical judges would immediately spot logical hole)
+- **Source**: Founder override, 2026-04-23
+
+### USER-CORRECTION-025 — Code-Docs Desync on scientific mandates is a CRITICAL credibility bug
+- **Type**: Founder Correction / Process Invariant
+- **Context**: 2026-04-23 Phase 4 audit. We fixed `signalCopy.ts` and `system_prompt.py` in Phase 1 Lite under Founder Override #1 (GOTCHA-021: Ghost Opponent) to anchor `split_step_latency_ms` entirely on Player A's isolated mechanics. But the underlying Python math in `backend/cv/signals/split_step_latency.py` STILL referenced opponent_state transitions. Result: my Phase 3 report claimed "split_step_latency_ms = 0 because Player B is undetectable (GOTCHA-016)" when the real cause was that the math never got updated to match the fan-facing copy.
+- **Rule**: When a founder override reframes a signal's SEMANTIC DEFINITION, the code-update cascade is:
+  1. UI copy (`signalCopy.ts`, fan-facing labels, tooltips)
+  2. Agent prompts (`system_prompt.py`, BIOMECH_PRIMER, any Scouting Committee agent prompt that references the signal)
+  3. **Underlying extractor math** (`backend/cv/signals/<signal>.py`) ← THIS WAS MISSED
+  4. Test expectations (`tests/test_cv/test_signal_<signal>.py`)
+  Every override that renames or redefines a signal MUST touch all four layers in the same commit (or tests must drive the change).
+- **Diagnostic pattern**: if a signal is "starving" (n=0 emissions) post-override, FIRST check whether the extractor math matches the new definition. Do NOT blame upstream data availability (e.g., "Player B undetectable") until you've verified the code still encodes the OLD definition.
+- **Severity**: CRITICAL (the judges would spot this — a signal described one way and computed another is a credibility bomb)
+- **Source**: Founder audit, 2026-04-23
+
+### PATTERN-059 — Shared Blackboard Handoffs for Multi-Agent Chains (NOT Markov-chain substitution)
+- **Type**: Pattern / Multi-Agent Information Architecture
+- **Context**: Phase 3 implementation of `scouting_committee.py` used strict Markov-chain handoffs: agent N+1's user message contained ONLY agent N's output. Trap: if Analytics Specialist under-reports (e.g., decides a signal "isn't anomalous" and omits it), Technical Coach has zero visibility into the baseline and HALLUCINATES a physical breakdown unconstrained by the raw data.
+- **Rule**: Every downstream agent's user message must be ADDITIVE, not SUBSTITUTIVE:
+  - **Baseline Layer**: stays CONSTANT across all handoffs (MatchMeta summary — signal counts, names, duration, player identity). Gives every agent the same ground-truth frame of reference.
+  - **Domain Prompt Layer**: stays CONSTANT in the system prompt (BIOMECH_PRIMER for Technical Coach, tactical-synthesis instructions for Tactical Strategist).
+  - **Focus Layer**: APPENDED per handoff — the upstream agent's output is the specific subject of synthesis, not the sole context.
+- **Implementation sketch**:
+  ```python
+  def _compose_user_prompt(baseline: str, focus: str, instructions: str) -> str:
+      return f"{baseline}\n\n---\nFOCUS OF SYNTHESIS:\n{focus}\n\n---\n{instructions}"
+  ```
+- **Anti-pattern**: "Agent N+1 reads only Agent N's output." That's Context Starvation. Keep the ground-truth frame in every turn.
+- **Severity**: HIGH (blocks hallucinated biomech claims; a judge comparing a Technical Coach assertion against the raw DuckDB would otherwise catch fabrication)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-027 — Trace Payload Explosion (Megabyte tool_results in agent_trace.json)
+- **Type**: Gotcha / Data Engineering
+- **Context**: Scouting Committee's Analytics Specialist calls `get_signal_window`, which can return a window containing hundreds of samples. If 5 such calls fire, `agent_trace.json` balloons from ~50KB to 100MB+. Next.js hydration on the client chokes trying to `JSON.parse()` that payload — the exact GOTCHA-026 hydration death we built the Orchestration Console to AVOID.
+- **Rule**: Add a TRUNCATION INTERCEPTOR inside the trace recorder (NOT in the LLM loop). Any `TraceToolResult.output_json` > 2000 chars gets truncated + marker " ... [Array truncated for UI playback]" appended. The LLM still sees the full response during execution — only the disk-written trace is truncated.
+- **Constant**: `TRACE_MAX_OUTPUT_JSON_CHARS = 2000` in `scouting_committee.py`. 2000 chars fits comfortably in one Orchestration Console card without wrapping into an unreadable wall of text.
+- **Severity**: HIGH (silent payload blow-up that only manifests on production-scale traces; unit tests with short tool outputs would never catch it)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-028 — Uncanny Valley Text Pacing (Arbitrary ms delays look like a DB dump)
+- **Type**: Gotcha / UX Discipline
+- **Context**: The Orchestration Console originally used `400-1200ms scaled to content length` for text-event pacing. A 400-word final report streaming in 1.2s = ~300 words/sec, which reads as "pre-computed database dump, not live reasoning." Triggers the Uncanny Valley — judges perceive it as mock-ish even though the captured reasoning is real.
+- **Rule**: Text events must stream at a TOKEN VELOCITY (baud rate) that approximates real LLM output — 20-30 characters per second. A 500-char block should take 15-25 seconds. This mirrors the observed pace of streaming Claude output that users have internalized as "real LLM behavior." Judges stop seeing "UI animation" and start seeing "agent thinking."
+- **Escape valve**: provide a Fast-Forward transport control so the user/judge can skip ahead — default pace must feel real, but choice is preserved. Never lock the audience in.
+- **Severity**: HIGH (the Orchestration Console IS the Opus 4.7 judging criterion surface; bad pacing underweights our strongest demo beat)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-029 — Vercel Python-Build Crash from Root-Level pyproject.toml / requirements-local.txt
+- **Type**: Gotcha / Deployment Topology
+- **Context**: This repo has both Python backend (`backend/`, `pyproject.toml`, `requirements-local.txt`) and Next.js frontend (`dashboard/`). Default Vercel build detection scans the ROOT for language signals. If it sees Python files at root, it attempts to spin up a Python runtime and `pip install torch ultralytics opencv-python duckdb` — which exceeds the 250MB serverless bundle limit and hard-crashes the build.
+- **Rule**: Vercel must NEVER touch the Python backend. Enforce with:
+  1. **Root Directory = `dashboard/`** in Vercel project settings (dashboard UI) OR
+  2. `vercel.json` at project root with explicit `buildCommand` + `outputDirectory` pointing into `dashboard/` OR
+  3. An `ignoreCommand` that exits 0 when non-dashboard paths change so Vercel skips the build entirely.
+- **What ships to Vercel**: `dashboard/` (Next.js bundle) + `dashboard/public/match_data/*.json` (static pre-computed assets). Nothing else.
+- **Severity**: HIGH (silent build crash with opaque Vercel logs; wastes deployment debugging time under a submission deadline)
+- **Source**: Founder audit, 2026-04-23
+
+### PROJECT-2026-04-23 — Do-not-deploy constraint: other branch is live on Vercel
+- **Type**: Project / Operational Constraint
+- **Context**: Founder is working on a parallel branch that's already deployed to https://panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app/. Merge conflicts + unintended redeploys would disrupt their work.
+- **Rule**: Within the `hackathon-research` branch, we:
+  - PREPARE Vercel config files (vercel.json, .gitattributes) as source for the founder to merge/adapt
+  - DO NOT run `vercel deploy` / `vercel --prod` / `vercel link` in this session
+  - DO NOT push to GitHub (avoid triggering any auto-deploy webhook on this branch)
+  - Commit locally only after founder explicitly requests it
+- **Severity**: CRITICAL (deploying from this branch could clobber the founder's live demo site)
+- **Source**: Founder directive, 2026-04-23
+
+### PATTERN-062 — Isolated-Worktree + Ordered-Cherry-Pick + Orthogonal-Review Merge Methodology
+- **Type**: Pattern / Merge Engineering
+- **Context**: 2026-04-23 merged 6 commits from `origin/hackathon-demo-v1` into `hackathon-research` without regressions. 10 files touched, +2463/-251 lines, 440 pytest + 96 vitest + Next.js prod build all green post-merge. Canonical recipe for any multi-commit cross-branch merge where some commits are architecturally obsolete and must be skipped.
+- **Rule**: For complex merges where a plain `git merge <branch>` would pull in commits you don't want (architecturally obsolete, deploy-critical data blobs, etc.), DO NOT use `git merge` or `git rebase`. Use this four-layer approach:
+  1. **Read-only conflict preview**: `git merge-tree --write-tree HEAD <candidate_sha>` for each candidate cherry-pick. Zero working-tree impact. Tells you which commits will apply clean and which will conflict BEFORE you commit to a strategy.
+  2. **Isolated worktree execution**: dispatch an `Agent` with `isolation: "worktree"`. Auto-cleans if the agent makes no changes; returns path+branch if successful. The main workdir is untouched no matter what happens in the worktree.
+  3. **Ordered cherry-pick with `-x` + `rerere`**: `git config rerere.enabled true && git config rerere.autoupdate true` up front. Then `git cherry-pick -x <sha>` per commit in dependency order (backend first, UI main second, UI polish third, docs last — docs conflict most, stable content on top). Run full test suite between each cherry-pick; abort on red.
+  4. **Post-merge orthogonal review panel** (parallel): dispatch 4 specialized reviewers — general `code-reviewer` + language-specific (`python-reviewer` + `typescript-reviewer`) + `security-reviewer`. Each has a distinct failure-mode lens; HIGH findings get fixed IN THE WORKTREE before integration. Only fast-forward back to the main workdir after reviewers green-light.
+- **When to use**: multi-commit cross-branch merge with (a) an explicit skip list for obsolete commits, (b) renumbering-cascades (e.g., competing PATTERN-053 meanings), (c) demo-performance-critical UI code, (d) uncommitted working-tree work in the main workdir you don't want to disturb.
+- **When NOT to use**: single-commit merges, same-author linear continuation, zero-conflict fast-forwards — use plain `git merge --ff-only` for those.
+- **Canonical ID-clash handling**: if the incoming branch used the same PATTERN/GOTCHA number for a different concept, renumber the INCOMING side to the next available slot and add a "originally numbered PATTERN-N" note. DO NOT renumber your existing entries — they're already referenced from prior commits. Then run a `sed -i` / `rg --files-with-matches` pass to update any incoming docs that reference the old number.
+- **Required follow-through**: record the merge as a named PATTERN with the specific reviewer tools used, so future sessions don't re-derive the methodology. (This entry is that record.)
+- **Severity**: HIGH (unlocks safe multi-commit merges without destabilizing the main workdir)
+- **Source**: 2026-04-23 `origin/hackathon-demo-v1` merge. Plan at `/Users/andrew/.claude/plans/resilient-hatching-sundae.md`.
+
+### GOTCHA-031 — OBS Thermal / DOM-Hydration Frame Drop Trap during demo recording
+- **Type**: Gotcha / Physical Hardware
+- **Context**: 1080p60 OBS recording of the Next.js dashboard on Mac Mini M4 Pro. Simultaneous load: 15-25MB match_data.json hydration + 60fps canvas rasterization over broadcast video + video decode + video H.264 encode (for OBS output). All four compete for the same unified memory + GPU.
+- **The trap**: frame drops during canvas paint or DOM hydration are invisible in dev but SHATTER the "2K Sports" illusion on the recorded video. Judges watching the demo don't know they're looking at dropped frames; they just register "this looks janky" and docked scores.
+- **Rule (demo-recording protocol)**:
+  1. Close VS Code (Electron + language-server CPU load)
+  2. Shut down Python virtualenv / any running precompute
+  3. Close every other Chrome tab (each tab keeps its JS context live)
+  4. Run Next.js as `cd dashboard && bun run start` (production build), NOT `bun run dev` (HMR overhead)
+  5. OBS: Apple VT Hardware Encoder (not x264 software encode — CPU contention)
+  6. Monitor Activity Monitor during a dry-run; CPU should stay <60% peak
+- **When this fires**: only during live recording. Invisible in normal dev/test workflows.
+- **Severity**: HIGH (record-one-shot failure mode right before deadline)
+- **Source**: Founder pre-flight audit, 2026-04-23
+
+### GOTCHA-032 — Browser Cache Serves Stale match_data.json Across Golden Runs
+- **Type**: Gotcha / Debug Loop Trap
+- **Context**: Chrome aggressively disk-caches static assets in `dashboard/public/`, including our 15-25MB `match_data.json` and `agent_trace.json`. After re-running `./run_golden_data.sh` to produce fresh telemetry (e.g., tweaking a prompt), a normal reload in the dashboard may serve the STALE previous-run JSON from the browser's disk cache.
+- **The trap**: you debug against old data while believing you're looking at the new run. Maddening right before a deadline because the signal values don't match your expectations from the new prompt, so you tune the prompt further, regenerate, still see old data — endless loop.
+- **Rule (demo-prep visual QA)** — use at least one of:
+  1. **Chrome DevTools → Network tab → "Disable cache" checkbox** (only effective while DevTools is OPEN)
+  2. Append a cache-buster to the fetch: `fetch('/match_data/x.json?v=' + Date.now())`
+  3. Hard refresh via Cmd+Shift+R (works but easy to forget)
+- **Belt-and-suspenders**: both (1) during iteration AND (2) committed into code if we ever regenerate during a live demo.
+- **Severity**: HIGH (silent staleness; wastes iteration cycles in the highest-stakes hour)
+- **Source**: Founder pre-flight audit, 2026-04-23
+
+### USER-CORRECTION-026 — "Perfect LLM" Delusion — 5% quirk is authentic, do NOT over-tune
+- **Type**: Founder Correction / Demo Philosophy
+- **Context**: The Multi-Agent Swarm is genuinely non-deterministic. On the Golden Run, the Technical Coach may interpret an anomaly slightly off-script, the Tactical Strategist may emit a quirky markdown artifact, or the broadcast-coach voice may lapse into textbook cadence for a phrase or two.
+- **Rule**: If the Golden Run output is **95% good + 5% quirky, SHIP IT.** Do NOT rewrite prompts post-hoc to polish the 5%. Opus 4.7 judges know what real LLM output looks like; hardcoded-mock polish is detectable from a mile away. Authentic quirks are EVIDENCE of real agent reasoning, not a flaw.
+- **When this fires**: after running `run_golden_data.sh`, before demo recording. Resist the urge to re-tune if the output "isn't perfect." Polish-to-perfection is how you lose the Opus 4.7 criterion (25%) — because the demo starts looking canned.
+- **Exception — when to re-tune**: only if the output is PHYSICALLY WRONG (says "Player B" when the scope is Player A; cites a signal we don't track; contradicts the fan-facing biomech definition). Stylistic quirks STAY.
+- **Severity**: HIGH (distinguishes "authentic agent" from "polished script" in the judge's perception)
+- **Source**: Founder pre-flight audit, 2026-04-23
+
+### PROJECT-2026-04-28 — B2B Seed-Round Roadmap (post-hackathon horizon)
+- **Type**: Project / Post-Submission Roadmap
+- **Context**: DECISION-008 (Single-Player Demo Scope) is a demo-time simplification that becomes TECHNICAL DEBT the moment we pitch B2B. ATP broadcasters + elite betting syndicates + tour coaching staff need Player B native, occlusion handling, real-time streaming, 3-hour-match support. The current architecture can't ship that as-is — but the foundation is in place to evolve there.
+- **The Monday-morning roadmap** (in dependency order):
+  1. **DuckDB-WASM + HTTP Range Requests** — ship the `.duckdb` binary as a static asset; use DuckDB's WASM build to run SQL queries IN-BROWSER. Range requests fetch only the viewport's rows instead of the monolithic 15MB JSON. Unlocks 3-hour matches without browser OOM, and dramatically reduces first-paint TTI. Kills GOTCHA-026 (hydration death) permanently.
+  2. **MotionAGFormer / BioPose 3D (monocular 3D lifting)** — swap the 2D YOLO11m-Pose backbone for a monocular 3D pose estimator. Gets ABSOLUTE joint angles (knee flexion, hip rotation, shoulder external rotation) instead of our current relative-screen-space heuristics. Upgrades crouch-depth-degradation and serve-toss-variance from proxy signals to clinical metrics. Also enables proper load-chain biomechanics (torque transfer quantification).
+  3. **IMM (Interacting Multiple Model) Filter** — evolve the offline Strict 3-Pass DAG (PATTERN-055) into a SLIDING-WINDOW IMM filter for sub-200ms causal RTSP streaming. Preserves RTS-style optimality within a rolling window while meeting real-time latency budgets. Multiple motion models (constant-velocity, constant-acceleration, turning) compete via posterior probability; the filter picks per-frame. This is how we ship live broadcast-integration without losing the physics quality of offline precompute.
+  4. **Real-time Scouting Committee streaming** — Phase-3 `agent_trace.json` becomes a streamed protocol (SSE or WebSocket) with incremental agent-step commits. Trace Playback UI evolves into a LIVE trace viewer. Banner flips from "ARCHITECTURAL PREVIEW" → real-time status.
+- **Rule**: when we submit on Sunday, these aren't vague ideas — they're the Seed Round deck outline. Do not let the hackathon code calcify as the product architecture; these four upgrades are what justifies the Seed raise.
+- **Severity**: ROADMAP (not immediate action; Monday-morning planning trigger)
+- **Source**: Founder pre-flight audit, 2026-04-23
+
+### GOTCHA-030 — JSON Syntax Trap from Truncation Marker ("shrapnel")
+- **Type**: Gotcha / UI Crash
+- **Context**: Phase 4 shipped GOTCHA-027 (trace payload truncation) by hard-slicing `TraceToolResult.output_json` at 2000 chars and appending `" ... [Array truncated for UI playback]"`. That sentinel makes the resulting string INVALID JSON — the first characters look like a serialized object, but the tail terminates mid-structure with free-form English.
+- **The trap**: If ANY frontend code calls `JSON.parse(event.output_json)` — e.g., to syntax-highlight the tool result, extract a field, or render a JSON tree — the parse throws `SyntaxError`, trips React's error boundary, and WHITE-SCREENS Tab 3 during the live demo. A future contributor adding "pretty print JSON" would hit this.
+- **Rule**: NEVER call raw `JSON.parse()` on `TraceToolResult.output_json`. Use the sanctioned `safeParseOutputJson(raw)` helper in `dashboard/src/lib/agentTracePlayback.ts` which returns `{ parsed: unknown \| null, isTruncated: boolean, raw: string }`. On failure (truncated or malformed or binary), `parsed` is `null` and the caller falls back to raw-text rendering. `isTruncatedToolOutput(raw)` is the companion predicate used to render a "Truncated" badge in the UI.
+- **Enforcement**: 5 new vitest cases in `agentTracePlayback.test.ts` pin the contract — truncated payloads return null (not throw), malformed JSON returns null, empty strings don't crash, binary garbage doesn't crash.
+- **Severity**: HIGH (silent UI crash that only manifests on real production-scale traces; would have been invisible in unit tests with short fixtures)
+- **Source**: Founder audit, 2026-04-23 Phase 4
+
+### PATTERN-058 — Empirical RTS Amplitude Compression on real UTR clip (Phase 3 tuning sprint)
+- **Type**: Empirical Finding / Calibration Baseline
+- **Context**: Founder audit PATTERN-057 predicted RTS would compress velocity peaks. 2026-04-23 ran the new 3-Pass DAG precompute on real UTR clip `utr_match_01_segment_a.mp4` (60s, 1800 frames, 1920×1080). Compared signal distributions against the sibling-repo DuckDB (forward-only, pre-RTS).
+- **Measured compression** on a real broadcast clip:
+
+  | Signal | Pre-RTS max | Post-RTS max | Compression |
+  |---|---|---|---|
+  | `lateral_work_rate` | 3.983 m/s | 2.119 m/s | **-47%** |
+  | `lateral_work_rate` mean | 1.261 | 0.431 | -66% |
+  | `lateral_work_rate` median | 0.369 | 0.378 | ~0% (robust to noise) |
+  | `lateral_work_rate` n | 12 | 13 | +1 (FSM still firing) |
+
+- **Key findings**:
+  1. **RTS compression on real data is LARGER than PATTERN-053's conservative 20-35% estimate** — ~47% peak compression because the noise was causing genuine spurious peaks (not just small-amplitude jitter). The founder's "2.4 → 1.6" intuition was directionally correct and slightly conservative.
+  2. **Median velocity is robust**: noise was adding spurious HIGH velocities, not biasing the center. Median barely moves (0.369 → 0.378).
+  3. **FSM is NOT starved under post-RTS at current thresholds**: 13 ACTIVE_RALLY signals emitted (vs 12 pre-RTS). `ACTIVE_RALLY_SPEED_THRESHOLD_MPS = 0.2` is conservative enough that even compressed peaks cross it readily.
+  4. **`split_step_latency_ms` emits 0 signals** under BOTH pre-RTS and post-RTS. This is NOT a threshold issue — it's upstream Player-B detectability (GOTCHA-016 + DECISION-008 single-player scope). Not fixable via PATTERN-057.
+- **Rule**: current thresholds in `backend/cv/thresholds.py::KINEMATIC` are VERIFIED NOT-STARVED against the canonical UTR clip under the 3-Pass DAG. `post_rts_calibrated` can flip to True ONLY after histogramming on additional real clips to confirm the thresholds generalize. For single-clip demo, current values are safe.
+- **Severity**: HIGH (quantitative evidence closing the founder's tuning-debt audit)
+- **Source**: Empirical 2026-04-23 precompute run on `utr_match_01_segment_a.mp4`
+
+### USER-CORRECTION-024 — DON'T over-index on deployment survival at the expense of showcasing the vision
+- **Type**: Founder Correction / Strategic Framing
+- **Context**: 2026-04-23 Phase 3 audit. I (Claude) proposed serving a static scouting report to avoid Vercel's 10-15s serverless timeout, reasoning that a 45-60s Managed-Agents call would hang and crash the demo. Founder accepted the deployment constraint but rejected the scope narrowing: the hackathon's "Opus 4.7 Use" judging criterion + the judges' stated preference for "projects at the edge of what's probably not fully possible" means we MUST show the real multi-agent reasoning loop. Judges don't reward deploy-safe CRUD wrappers; they reward vision.
+- **Rule**: When the constraint is "X minutes of compute" and the prize is "showcase the 5-10 year future", the correct architectural move is NOT "downgrade the product to fit the constraint" — it is "decouple the compute from the display." Run the expensive reasoning OFFLINE during precompute, CAPTURE a structured trace of every event (thinking, tool_call, tool_result, handoff), and REPLAY the trace client-side with timed pacing. The user sees the UX of 2030; the deploy target sees a static JSON asset.
+- **How to apply**: Any time you're about to recommend "serve a static text file" because a real agent call exceeds a platform timeout, stop and ask: "Can I run the agent call offline, capture its trace, and replay it?" If yes, that's almost always the right answer for a demo-oriented build. Badge the UI with an honest "ARCHITECTURAL PREVIEW — ACCELERATED FOR DEMO" disclosure so nobody accuses us of mocking.
+- **Severity**: CRITICAL (applies to every future demo-oriented Opus 4.7 project; the meta-lesson is "optimize for the judging criterion, not the deployment envelope")
+- **Source**: Founder pushback, 2026-04-23
+
+### PATTERN-056 — Multi-Agent Trace Playback (the canonical bridge for Managed-Agents demos)
+- **Type**: Pattern / Architecture + Demo Technique
+- **Context**: Deep Managed-Agents reasoning loops take 20-60+s; Vercel's Hobby-tier serverless timeout is 10-15s. Any live invocation crashes the demo. But Anthropic judges want to see real multi-agent systems, not CRUD wrappers.
+- **Rule**: Execute the real agent loop offline during the precompute phase. Serialize every event — thinking blocks, tool calls, tool results, agent handoffs, intermediate payloads — into a typed `AgentTrace` object written to disk as `agent_trace.json`. In the frontend, render a playback console that reveals each event with deterministic delays (200-800ms per event, 1-3s between handoffs) so the user SEES the reasoning sequence unfold. Badge: "ARCHITECTURAL PREVIEW: SWARM ACCELERATED FOR DEMO".
+- **Three orthogonal agent roles for Panopticon's Scouting Committee** (structure per founder):
+  1. **Analytics Specialist** — DuckDB tool access, finds statistical anomalies ("lateral work rate dropped 18%")
+  2. **Technical Biomechanics Coach** — takes Quant's data, synthesizes the physical breakdown using biomech literature
+  3. **Tactical Strategist** — takes Technical's output, synthesizes match strategy ("exploit the compromised split-step")
+  Each handoff is real: agent N+1's input is agent N's OUTPUT (not the raw match_data).
+- **Schema requirement**: `AgentTrace` must be Pydantic v2 with a discriminated-union event type (Literal `kind` field). This is what makes the UI replay parseable — a raw `list[dict]` is not.
+- **Severity**: HIGH (unlocks "Opus 4.7 Use" criterion (25%) without breaking deploy)
+- **Source**: Founder strategic direction, 2026-04-23
+
+### PATTERN-057 — Threshold Tuning Debt: re-tune downstream every time upstream signal processing changes
+- **Type**: Pattern / Calibration Discipline
+- **Context**: Phase 2B shipped RTS smoother, which correctly strips ±3-5px YOLO jitter. Side effect: velocity impulse peaks that used to register as 2.4 m/s noise-spikes now correctly register at 1.6 m/s smoothed amplitudes. Any FSM / signal extractor with hardcoded thresholds tuned against the noisy regime will STARVE — transitions drop, signals go silent.
+- **Rule**: Whenever you upgrade upstream signal processing (Kalman → RTS, SG polyorder change, filter bandwidth change, pose model swap), you have incurred Threshold Tuning Debt. Every downstream consumer that gates on an absolute kinematic threshold (m/s, degrees, meters, ms) MUST be audited and re-tuned. Do this empirically: run the new pipeline on real data, histogram the amplitudes, set thresholds at new percentiles. Do NOT guess.
+- **Prevention architecture**: Keep kinematic thresholds in a single `backend/cv/thresholds.py` constants module, not scattered across extractors. When tuning debt is detected, change one file.
+- **Severity**: CRITICAL (silent starvation of signals is invisible in unit tests; only caught by end-to-end telemetry inspection)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-026 — Next.js Server-Component JSON Hydration Death (15MB+ payloads)
+- **Type**: Gotcha / React Performance
+- **Context**: `precompute.py` emits match_data.json with 1800 frames × 30fps × 2 players × keypoints + states + smoothed arrays + 7 signals → 15-25MB JSON. Plus agent_trace.json with full multi-agent reasoning trace.
+- **The Trap**: If any part of match_data.json is passed as a prop to a Next.js Server Component (via `getStaticProps`, `loader`, or `async` Server Component that awaits the JSON), Next.js serializes the ENTIRE object into the initial HTML document under `<script id="__NEXT_DATA__">`. React hydration parses that blob on the main thread. A 15MB+ parse blocks the UI for 500-2000ms while the demo's 60fps video is trying to start. Result: violent stutter during the first 2 seconds — exactly when judges are forming their first impression.
+- **Rule**: match_data.json and agent_trace.json MUST be loaded as STATIC CLIENT-SIDE ASSETS via `fetch("/match_data/*.json")` in `useEffect`. They live in `dashboard/public/match_data/` (served by Next.js's static file server, bypassing the RSC serializer entirely). Never pass them through a Server Component prop, never `import` them synchronously.
+- **Guard**: If you see a `.ts` / `.tsx` file `import`ing a JSON asset larger than ~50KB, that's a hydration-death candidate — convert to fetch+useEffect.
+- **Severity**: HIGH (silently destroys the 60fps animation the demo is designed to showcase)
+- **Source**: Founder audit, 2026-04-23
+
+### USER-CORRECTION-023 — REJECT streaming-hybrid Kalman architectures; Strict 3-Pass DAG only
+- **Type**: Founder Correction / Architectural Invariant
+- **Context**: 2026-04-23 Phase 2B audit. I (Claude) proposed "Option C — signal-only RTS wiring" (state machine keeps forward-only velocities so its transition thresholds stay calibrated; signal extractors get smoothed velocities). Founder formally rejected.
+- **Rule**: NEVER run the FSM on noisy forward-pass velocities while emitting signals from RTS-smoothed velocities. The FSM's transition TIMING is itself a feature — RTS shifts the local-maxima of velocity impulses (it uses future data to center true peaks), so a forward-pass FSM will slice time-windows at the wrong timestamps, and every downstream feature reads against the wrong window. Temporal Decoupling is a DAG-integrity bug, not a tuning nuisance.
+- **Correct architecture**: Strict 3-Pass DAG (PATTERN-055). If FSM thresholds calibrated on forward-only noise stop firing against smoother RTS peaks, RE-TUNE the thresholds in Phase 4 — do NOT compromise the DAG to preserve a config value.
+- **Severity**: CRITICAL (rejecting this pattern prevents an entire class of "preserve existing tuning" drift)
+- **Source**: Founder audit, 2026-04-23
+
+### PATTERN-055 — Strict 3-Pass Offline DAG for CV → RTS → Semantic
+- **Type**: Pattern / Architecture
+- **Context**: Offline precompute.py is not a streaming system. Inverting the causal-to-batch DAG correctly is the difference between mathematically valid signals and temporal-decoupling garbage.
+- **Rule**:
+  - **Pass 1 — Forward Sweep**: decode frames → YOLO pose → player assignment → CourtMapper → `kalman.update()` per player. **FORBIDDEN in Pass 1**: RollingBounceDetector, MatchStateMachine, FeatureCompiler, signal extractors, z-scoring, any consumer of velocity as a feature.
+  - **Pass 2 — Backward Sweep**: call `kalman.rts_smooth()` per player. Produces the zero-lag, mathematically optimal trajectory (N, 4) array.
+  - **Pass 3 — Semantic Sweep**: iterate chronologically over the RTS-smoothed arrays. Feed smoothed (x, y, vx, vy) into RollingBounceDetector → MatchStateMachine → signal extractors → FeatureCompiler, in the canonical pipeline order.
+- **Why this matters**: RTS shifts velocity peaks by using future info to locate TRUE impulse centers. Any FSM or detector that runs in Pass 1 on forward-only data fires at noise-induced peaks, not real peaks. Mixing pass-1 timestamps with pass-2 values is temporal decoupling.
+- **How to apply**: When you see a streaming loop that calls `kalman.update()` AND a state-machine AND signal extractors in the same for-loop, that is architecturally wrong for an offline pipeline. Split the loop.
+- **Severity**: CRITICAL (DAG-integrity invariant for all offline CV pipelines)
+- **Source**: Founder override, 2026-04-23 Phase 2B mandate
+
+### GOTCHA-023 — filterpy RTS NaN Explosion from Prolonged Occlusion Covariance Blowup
+- **Type**: Gotcha / Numerical Stability
+- **Context**: When a player is occluded for 15+ consecutive frames, `kalman.update(None)` calls `predict()` only. Each predict adds `Q` to the covariance `P` but never tightens it via an update gain. After ~30 predicts, elements of `P` can exceed 1e6; after ~60 they can exceed 1e10. `rts_smoother` inverts a matrix built from these exploded covariances — `numpy` throws `LinAlgError: Singular matrix` OR silently propagates NaNs through the whole backward pass, crashing the precompute batch job for that clip.
+- **Rule**: Always wrap `self._kf.rts_smoother(xs, ps)` in `try/except np.linalg.LinAlgError`. On failure OR on `np.isfinite(smoothed).all() == False`, log a warning with diagnostic (frame count, condition number of worst P), and fall back to the forward-pass means (flattened `xs`). Forward means are always finite — they're just posterior updates that can't explode.
+- **Severity**: HIGH (unhandled → crashes an entire clip's precompute; silent NaN → corrupts every signal downstream)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-024 — Z-Score Lookahead Bias in Offline Pass-3 Architecture
+- **Type**: Gotcha / Quant Discipline
+- **Context**: Pass 3 iterates a FULL array of smoothed signals. It is trivially easy — and wrong — to compute `μ` and `σ` for z-scoring using the entire clip. A fatigue event at t=55s drags down the global mean, artificially inflating the z-score of a perfectly normal movement at t=5s. The player's 1st serve should NOT be z-scored against their 50th serve's distribution.
+- **Rule**: Every z-score, z-relative threshold, or baseline-normalization computation MUST use one of:
+  1. **Causal calibration window**: lock `μ`, `σ` to the first 10-15 seconds of the clip and hold them fixed for the rest of the match (matches how a human coach watches warm-up).
+  2. **Strictly past-facing rolling window**: compute `μ_t`, `σ_t` using only samples with `timestamp < t`, never ≥ t.
+- **FORBIDDEN**: `df.mean()`, `df.std()`, `np.mean(signal)`, `np.std(signal)` — ANY statistic computed over the full signal array for use in a z-score.
+- **Severity**: CRITICAL (lookahead bias invalidates every fatigue-claim we emit to Opus or to the HUD)
+- **Source**: Founder audit, 2026-04-23
+
+### GOTCHA-025 — Video-Validation Protocol Blindspots (VFR Drift + Kinematic Static Frame)
+- **Type**: Gotcha / Validator Discipline
+- **Context**: 2026-04-23 video-frame-validator agent used `ffmpeg -ss 00:00:50 -vframes 1` to extract frames for vision cross-reference. Two latent bugs:
+  1. **VFR Drift**: `-ss timestamp` on variable-frame-rate MP4s drifts from the DuckDB integer `frame_idx`. Claude Vision validates the wrong frame and hallucinates mismatches against signal values.
+  2. **Kinematic Blindspot**: A single static frame cannot prove velocity. Vision has no way to verify `lateral_work_rate` or any m/s value — it only sees pose, not motion.
+- **Rule**:
+  - Always extract by absolute frame index: `ffmpeg -vf "select=eq(n\,N)" -vframes 1 out.png`. Never mix timestamps and frame indices.
+  - For kinematic validation, either (a) extract a 3-5 frame sprite strip (ffmpeg `select` with a range), or (b) use OpenCV to draw velocity-vector arrows on the frame before passing to Vision. Static frames can only validate POSE/POSITION, never VELOCITY.
+- **Severity**: HIGH (silently false validations mislead downstream signal tuning)
+- **Source**: Founder audit, 2026-04-23
+
+### PATTERN-054 — RTS Smoother Integration on PhysicalKalman2D (Phase 2 shipped 2026-04-23)
+- **Type**: Pattern / Implementation Recipe
+- **Context**: PATTERN-053 predicted 20-35% velocity noise reduction from adding RTS backward pass. Actual measured improvement on synthetic CV path was 69.6% RMSE + 87.3% variance reduction — PATTERN-053 was conservative.
+- **Rule**: Store forward-pass `(x, P)` snapshots at their native filterpy shape `(N, 4, 1)` + `(N, 4, 4)`, NOT pre-flattened — avoids per-update reshape in the hot path. Call `self._kf.rts_smoother(Xs, Ps)` with `Fs`/`Qs` defaulting to `None` (our F/Q are constant). Flatten only at the public return. ALWAYS `x.copy()` / `P.copy()` before appending — `rts_smoother` writes into its input arrays and would otherwise corrupt the live posterior.
+- **How to apply**:
+  ```python
+  # In update():
+  self._x_history.append(self._kf.x.copy())
+  self._p_history.append(self._kf.P.copy())
+  # New method:
+  def rts_smooth(self) -> np.ndarray:
+      xs = np.stack(self._x_history)  # (N, 4, 1)
+      ps = np.stack(self._p_history)  # (N, 4, 4)
+      smoothed_xs, _p, _k, _pp = self._kf.rts_smoother(xs, ps)
+      return smoothed_xs.reshape(smoothed_xs.shape[0], -1)  # (N, 4)
+  ```
+- **Test pattern**: Drive a known constant-velocity path with Gaussian measurement noise through forward-only + RTS, assert `rts_rmse < fwd_rmse` AND `rts_var < fwd_var` against ground truth. Mid-trajectory occlusion is the stress test — RTS uses FUTURE measurements to infer motion during the occlusion window, forward-only cannot.
+- **Wiring caveat**: Adding the capability to PhysicalKalman2D is architecturally free. Wiring it INTO `precompute.py`'s streaming loop is NOT — state-machine thresholds are tuned against forward-only noise. Three wiring strategies (smooth-then-replay / display-only / signal-only) are documented in FORANDREW.md 2026-04-23 entry; make that decision as a separate Phase 2b task.
+- **Severity**: HIGH (unlocks measurable offline advantage; validated against tests)
+- **Source**: Phase 2 implementation, 2026-04-23
+
+### GOTCHA-022 — Sensor Noise Floor: YOLO Wrist Flutter ≈ ±3-5px vs 8cm Clinical Threshold ≈ 11px
+- **Type**: Gotcha / Measurement Validity
+- **Context**: Plan proposed having Opus cite "Toss Precision degraded by 8.4cm" as biological fact. Physical pixel math invalidates this.
+- **Math**: At 1080p, a 1.8m player ≈ 253px tall → 0.71 cm/px. 8cm threshold = 11.2px. YOLO11m-Pose wrist-keypoint flutter ≈ ±3-5px = ±2.1-3.5cm. We are within 1.5-2× of the sensor noise floor.
+- **Lesson**: Absolute centimeter claims for serve toss variance are scientifically indefensible at our sensor resolution. Opus MUST use z-score abstractions: "Toss Precision degrading (z=+2.5) — this variance level aligns with clinical literature predicting serve-error elevation." Never state "toss varied by 8.4cm" as empirical fact.
+- **FIXED**: Added SENSOR NOISE FLOOR caveat to BIOMECH_PRIMER in system_prompt.py.
+- **Severity**: HIGH (credibility with technical judges)
+- **Source**: Founder override + physical pixel math, 2026-04-23
 
 ---
 
 ### Phase 5 — Demo Polish + Vercel Production Deploy (2026-04-23 afternoon to evening, PR #4 merged)
 
-### GOTCHA-019 — Turbopack Strips Non-Async Exports From use-server Files
+> **MERGE-RENUMBERING MAP** — the following Phase 5 entries came from `origin/main` under IDs that clash with entries already in this repo. Per PATTERN-062 ID-clash policy, main's IDs were renumbered to next-available slots. Internal cross-references WITHIN the Phase 5 entry bodies below still use main's ORIGINAL numbers to keep the prose self-consistent; readers should consult this map:
+>
+> | Main's original ID | Renumbered (this repo) | Subject |
+> |---|---|---|
+> | GOTCHA-018 | GOTCHA-033 | Multi-line paste newline in env var |
+> | GOTCHA-019 | GOTCHA-034 | Turbopack strips non-async exports |
+> | GOTCHA-020 | GOTCHA-035 | printf newlines into `vercel env add` |
+> | GOTCHA-021 | GOTCHA-036 | Anomaly injection inside active HUD layout |
+> | PATTERN-055 | PATTERN-063 | TelemetryLog primitive |
+> | PATTERN-056 | PATTERN-064 | Non-interactive `vercel env add` |
+> | PATTERN-057 | PATTERN-065 | Stable React keys for monotonic lists |
+> | PATTERN-058 | PATTERN-066 | `vercel curl --deployment` asset verification |
+> | DECISION-010 | DECISION-011 | Vercel deployment topology |
+> | WORKFLOW-005 | WORKFLOW-005 | `@claude` PR-review bot (no clash) |
+
+### GOTCHA-034 — Turbopack Strips Non-Async Exports From use-server Files (originally GOTCHA-019 on main)
 - **Type**: Gotcha (Next.js 16 / Turbopack)
 - **Context**: 2026-04-23, Phase 5 Vercel deploy. `dashboard/src/app/actions.ts` begins with `'use server';` and previously exported both `export const maxDuration = 60` (route-segment config) and `export async function generateScoutingReport(...)` (Server Action). Local `next dev` (Turbopack) built the module correctly. Production build via Turbopack completely stripped `actions.ts` from the client bundle — the `generateScoutingReport` import in `ScoutingReportTab.tsx` resolved to nothing, and the build log emitted `The module has no exports at all`. Root cause: Turbopack's `'use server'` analyzer only keeps async function exports; non-async exports (plain `const`, `let`, etc.) are treated as "not Server Action surface" and the whole module was dropped. This is a Turbopack-specific behavior — Webpack tolerates the mixed-export shape because its `'use server'` boundary-analyzer is more permissive.
 - **Symptom ladder**: (a) local `next dev` — works (Turbopack dev mode). (b) `vercel` preview deploy — build succeeds but Tab 3 throws `TypeError: generateScoutingReport is not a function` in the browser. (c) `next build` locally with Turbopack forced — same error.
@@ -1026,18 +1366,18 @@ Cross-session recall. Every entry is:
 - **Severity**: CRITICAL (silent production break — local works, Vercel 500s)
 - **Files**: `dashboard/src/app/actions.ts`, `dashboard/vercel.json` (new).
 
-### GOTCHA-020 — printf Into vercel-env-add Embeds Trailing Newlines Into Stored Env Value
+### GOTCHA-035 — printf Into vercel-env-add Embeds Trailing Newlines Into Stored Env Value (originally GOTCHA-020 on main)
 - **Type**: Gotcha (Vercel CLI / shell)
 - **Context**: 2026-04-23, Phase 5 production deploy. After GOTCHA-018's clipboard-paste newline variant burned a Crucible run, I was extra-careful rotating the Anthropic API key into Vercel. My command was `printf "%s\n\n" "<redacted-key-body>" | vercel env add ANTHROPIC_API_KEY production --sensitive`. The `\n\n` at the end was reflexive — "make sure stdin ends with a newline so the CLI gets EOF cleanly." Vercel's CLI then displayed `WARNING! Value contains newlines.` and proceeded to store the value WITH the trailing newlines intact. Result: the stored API key was 110 bytes (108 valid + `\n\n`), and every Anthropic SDK call from the Serverless Function returned 401 auth error, because the Authorization header builder passed the newlines through into the HTTP header, which the Anthropic edge rejected as malformed.
 - **Symptom**: identical to GOTCHA-018 from the outside — Anthropic calls fail uniformly. BUT the diagnostic ladder differs: this one lives inside the Vercel env store, not on the local shell. `vercel env pull` cannot reveal it (Sensitive vars do not download). Only way to see the corruption is to deploy and read the Function's runtime error.
 - **Distinction from GOTCHA-018**: GOTCHA-018 was clipboard-paste quoting on the local shell, corrupting `$ANTHROPIC_API_KEY` BEFORE upload. GOTCHA-020 is stdin corruption DURING upload via `printf "%s\n\n"` — the shell env var was clean, but the value that reached Vercel's store was not. Different mechanism, same outcome.
 - **Lesson**: When piping into `vercel env add`, use `printf "%s"` (no trailing newline) — NOT `printf "%s\n"` or `echo` (which append one implicit newline) or `printf "%s\n\n"` (which appends two). If Vercel's CLI prints `WARNING! Value contains newlines`, STOP, abort the upload (Ctrl-C before confirming), remove the var, and re-upload with the clean form.
-- **Preferred incantation (from `/vercel:vercel-cli` reference)**: `vercel env add NAME preview "" --value "..." --yes --sensitive` — `--value` bypasses stdin entirely and stores the exact string you pass, with no newline ambiguity. See PATTERN-056.
+- **Preferred incantation (from `/vercel:vercel-cli` reference)**: `vercel env add NAME preview "" --value "..." --yes --sensitive` — `--value` bypasses stdin entirely and stores the exact string you pass, with no newline ambiguity. See PATTERN-064 (originally PATTERN-056 on main; renumbered during 2026-04-24 merge).
 - **Related**: Cross-linked to GOTCHA-018 (shell-quoting newline, same symptom, upstream mechanism). Both belong to the same class: any byte you cannot see in the visible terminal view can end up in your env var.
 - **Severity**: CRITICAL (production break; caught only by deploying and reading runtime logs)
 - **Files**: Vercel project `dmg-decisions/panopticon-live` env store; no repo-level code change.
 
-### GOTCHA-021 — Anomaly Injection Must Target Signals Inside the ACTIVE hud_layouts Entry at That Timestamp
+### GOTCHA-036 — Anomaly Injection Must Target Signals Inside the ACTIVE hud_layouts Entry at That Timestamp (originally GOTCHA-021 on main)
 - **Type**: Gotcha (demo data authoring)
 - **Context**: 2026-04-23, Phase 5 demo anomaly seeding. Golden `utr_01_segment_a.json` had no `baseline_z_score` hits >2.0 during the demo window; the `AnomalyBadge` pulsing-red UI therefore never fired on video. My first injection (v1) set `baseline_z_score: 2.5` on the `lateral_work_rate` signal sample at `timestamp_ms=36166`. Commit shipped; judges would still see a blank UI. Root cause on re-inspection: the active HUD layout at `t=36166` is `hud_34233_8b1eaa` (valid range 34233 to 64233 ms), whose `widgets` list specifies `serve_toss_variance_cm`, `ritual_entropy_delta`, and `crouch_depth_degradation_deg` — `lateral_work_rate` is not among them. The frontend's `SignalRail` only renders bars for signals present in the active layout's widget list (by design — that's how DECISION-009's HUD-Designer curation works). So a z-score flag on a signal the user cannot see is invisible.
 - **Lesson**: Before mutating any `SignalSample` to showcase anomaly UI, ALWAYS look up the ACTIVE `hud_layouts` entry at the target timestamp and confirm the signal appears in that layout's `widgets` list. Pseudocode:
@@ -1055,7 +1395,7 @@ Cross-session recall. Every entry is:
 - **Severity**: HIGH (demo credibility — invisible anomaly injection is indistinguishable from a dead feature)
 - **Files**: `dashboard/public/match_data/utr_01_segment_a.json` (signals[] + anomalies[] arrays).
 
-### PATTERN-055 — Reusable TelemetryLog Primitive (factor-out of SignalFeed.tsx)
+### PATTERN-063 — Reusable TelemetryLog Primitive (factor-out of SignalFeed.tsx) (originally PATTERN-055 on main)
 - **Type**: Frontend architecture / DRY refactor
 - **Context**: 2026-04-23. Tab 1's HUD view had large empty whitespace regions on either side of the video + skeleton center. Tab 2 (Raw Telemetry) had the only live scrolling feed of signals/transitions/insights/anomalies, locked into a full-viewport shell. Goal: slot a telemetry feed into Tab 1's right aside and bottom strip WITHOUT duplicating the 250-line `SignalFeed.tsx` implementation.
 - **Rule**: Extract every reusable primitive from `SignalFeed.tsx` into `dashboard/src/lib/telemetry.ts`. Specifically: `FeedRow` union type (`'state' | 'signal' | 'insight' | 'anomaly'`), `buildTimeline(data: MatchData): FeedRow[]` (merges signals + transitions + insights + anomalies into one time-sorted array, filters `player !== 'A'` per DECISION-008), `upperBound(rows, t)` (binary search for `[0, upperBound)` slice, `(lo + hi) >>> 1` unsigned-shift to prevent `lo+hi` overflow on large arrays), `toneForSignal(s)` (`|z| >= 2` → `colors.anomaly`, `|z| >= 1` → `colors.fatigued`, else `colors.energized`), `fmtClock(ms)` (`mm:ss.cc` with `Math.max(0, ...)` clamp), `transitionText(tr)`, `oneLineOpener(c)` (truncates commentary to 110 chars with ellipsis), `anomalyText(a)`, `signalUnit(signalName)`. Then author a new `dashboard/src/components/Telemetry/TelemetryLog.tsx` component that takes props: `rowKinds: FeedRowKind[]` (filter), `heightClass: string`, `className?: string`, `showHeader?: boolean`, `density?: 'compact' | 'comfortable'`. The component mounts the shared primitive with its own auto-scroll (followRef + effect on `visibleRows.length`).
@@ -1069,7 +1409,7 @@ Cross-session recall. Every entry is:
 - **Severity**: HIGH-ROI (one refactor unlocked two Tab-1 slots + future consumers; no added bundle weight vs. inlining the logic per-consumer)
 - **Files**: `dashboard/src/lib/telemetry.ts` (new), `dashboard/src/components/Telemetry/TelemetryLog.tsx` (new), `dashboard/src/components/Telemetry/SignalFeed.tsx` (collapsed), `dashboard/src/components/Hud/HudView.tsx` (two new slots).
 
-### PATTERN-056 — Non-Interactive vercel-env-add with All-Preview-Branches Scope
+### PATTERN-064 — Non-Interactive vercel-env-add with All-Preview-Branches Scope (originally PATTERN-056 on main)
 - **Type**: Deploy workflow / Vercel CLI discipline
 - **Context**: 2026-04-23, Phase 5 production env-var rotation. Needed to add `ANTHROPIC_API_KEY` to BOTH production and preview targets, Sensitive-flagged, without interactive prompts (so a hook/script can re-provision cleanly). First three attempts failed for different reasons:
   1. `vercel env add ANTHROPIC_API_KEY preview --sensitive` (interactive) → CLI hung waiting for stdin value.
@@ -1087,7 +1427,7 @@ Cross-session recall. Every entry is:
 - **Severity**: HIGH (production env-var rotation is demo-day blocker; one reliable incantation is worth more than three almost-right ones)
 - **Files**: Vercel project env store; captured in TOOLS_IMPACT.md Phase 5 ROI block.
 
-### PATTERN-057 — Stable React Keys for Monotonic Append-Only Arrays
+### PATTERN-065 — Stable React Keys for Monotonic Append-Only Arrays (originally PATTERN-057 on main)
 - **Type**: React correctness / future-proofing
 - **Context**: 2026-04-23, Phase 5 PR-review feedback from the `@claude` GitHub-Action bot. Initial `TelemetryLog.tsx` rendered rows with `<FeedLine key={i} ... />`. The Claude reviewer flagged: "`visibleRows` is monotonic slice of a sorted array, so React reconciliation won't produce wrong DOM output TODAY — but any future reordering or pruning will cause subtle bugs. A stable key like `` `${row.kind}-${row.t}` `` costs nothing and future-proofs it."
 - **Rule**: For arrays that are "currently monotonic append-only" but are exposed via a component API that doesn't enforce that invariant, ALWAYS use a composite stable key derived from the row's intrinsic identity, not the array index. The row's natural identity is usually `(timestamp, kind, discriminator)` where discriminator is whatever disambiguates same-`(t, kind)` collisions.
@@ -1111,7 +1451,7 @@ Cross-session recall. Every entry is:
 - **Severity**: MEDIUM (correctness — no current bug, but silent landmine under future reordering)
 - **Files**: `dashboard/src/components/Telemetry/TelemetryLog.tsx:113-120`.
 
-### DECISION-010 — Vercel Deployment Topology (dashboard/ root, vercel.json functions config, Sensitive env vars Production+Preview only)
+### DECISION-011 — Vercel Deployment Topology (dashboard/ root, vercel.json functions config, Sensitive env vars Production+Preview only) (originally DECISION-010 on main)
 - **Type**: Decision / infrastructure
 - **Context**: 2026-04-23, Phase 5 production deploy. Locked the end-state topology after three failed attempts taught us what fails.
 - **Topology**:
@@ -1126,7 +1466,7 @@ Cross-session recall. Every entry is:
 - **Severity**: HIGH (deploy topology is demo-day load-bearing; departures from this template will re-introduce the failure modes captured in GOTCHA-019/020/021)
 - **Files**: `dashboard/vercel.json`, `dashboard/public/match_data/utr_01_segment_a.json`, `dashboard/public/clips/utr_match_01_segment_a.mp4`, Vercel project settings.
 
-### PATTERN-058 — Vercel Deployment Asset Verification via `vercel curl --deployment`
+### PATTERN-066 — Vercel Deployment Asset Verification via `vercel curl --deployment` (originally PATTERN-058 on main)
 - **Type**: Deploy workflow / verification
 - **Context**: 2026-04-23, Phase 5 post-deploy smoke-test. After force-adding `public/match_data/*.json` + `public/clips/*.mp4` to a specific deployment URL, I needed to confirm the assets were actually being served before declaring the deploy green. Normal `curl -I <url>/match_data/...` works but requires the deployment URL be public; for preview deploys with protection rules, the deployment-scoped `vercel curl` auto-authenticates.
 - **Rule**: After any deploy involving static assets, run `vercel curl --deployment <url> /<path> -- -I` for each critical asset. Pass flags after the `--` separator to forward them to the underlying `curl`. For JSON payloads: check `Content-Type: application/json` + `Content-Length` reasonable. For MP4: check `Content-Type: video/mp4` + `Accept-Ranges: bytes` (needed for `<video>` scrubbing).

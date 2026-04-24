@@ -3,156 +3,89 @@
 /**
  * Next.js Server Actions for PANOPTICON LIVE.
  *
- * `generateScoutingReport` wires Tab 3 to Claude Opus 4.7 via the official
- * `@anthropic-ai/sdk`. It follows the Client-Driven Payload pattern
- * (PATTERN-054): the client passes the telemetry it already has loaded,
- * stripped of high-volume keys (keypoints / hud_layouts / narrator_beats).
+ * `generateScoutingReport` is STUBBED for Phase 3.5 (walking-skeleton): it
+ * returns a hand-authored markdown report grounded in the Phase-2 golden
+ * data (utr_01_segment_a). The Phase-4 task will replace the stub with a
+ * live @anthropic-ai/sdk Managed Agent call — see the
+ * `vercel-ts-server-actions` skill for the wiring pattern.
  *
- * Why Client-Driven Payload and not `fs.readFile(...)` (USER-CORRECTION-032):
- *   Vercel's Node File Trace (NFT) cannot statically analyze dynamic paths,
- *   so `fs.readFile(path.join(process.cwd(), 'public', 'match_data',
- *   `${matchId}.json`))` won't bundle the JSON into the Serverless Function.
- *   Works in `next dev`, 500s on Vercel. Passing the payload as an argument
- *   sidesteps NFT entirely and keeps the action Vercel-bulletproof.
- *
- * DECISION-009 (biometrics-first) is encoded in the system prompt: every
- * tactical claim must cite a signal name + numeric value.
- *
- * USER-CORRECTION-027: Opus 4.7 uses `thinking: { type: "adaptive" }`. The
- * older `{ type: "enabled", budget_tokens: N }` shape is rejected HTTP 400.
+ * Contract (stable across the stub→live transition):
+ *   Input:  matchId (string) — identifies which clip's data to analyze
+ *   Output: markdown (string) — narrated scouting report in plain markdown
+ *           (no frontmatter, no HTML, no code fences)
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-
-import type {
-  AnomalyEvent,
-  CoachInsight,
-  MatchMeta,
-  SignalSample,
-  StateTransition,
-} from '@/lib/types';
-
-const MODEL = 'claude-opus-4-7';
+const STUB_DELAY_MS = 900;
 
 /**
- * Exact set of fields the Opus analyst needs. Keypoints are per-frame noise;
- * hud_layouts are LLM-generated design metadata irrelevant to sports-science
- * reasoning; narrator_beats are broadcast-tick prose that would bias the
- * scouting voice. The remaining keys give the analyst meta + the five
- * quantitative streams (signals, transitions, anomalies, coach_insights).
+ * Deterministic sleep so the stub feels like an Opus streaming call
+ * (loading spinner gets a chance to render).
  */
-export type ScoutingPayload = {
-  meta: MatchMeta;
-  signals: ReadonlyArray<SignalSample>;
-  transitions: ReadonlyArray<StateTransition>;
-  anomalies: ReadonlyArray<AnomalyEvent>;
-  coach_insights: ReadonlyArray<CoachInsight>;
-};
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-const SCOUTING_SYSTEM_PROMPT = `You are an elite sports biomechanics analyst for PANOPTICON LIVE — a world-class single-player deep-dive system targeting Player A in pro tennis broadcast footage.
+/**
+ * Phase 3.5 stub — returns a hand-authored scouting report.
+ * Grounded in the utr_01_segment_a golden data. The numbers are real
+ * (pulled from the precomputed signals). Tone matches what we want
+ * the live Opus Managed Agent to emit in Phase 4.
+ *
+ * This report is the "Director's Cut" draft Andrew approved as the
+ * target voice: biometrics-first, tactical consequences as evidence
+ * of physiology, fan-legible without being watered down.
+ */
+export async function generateScoutingReport(matchId: string): Promise<string> {
+  await sleep(STUB_DELAY_MS);
 
-## SINGLE-PLAYER FOCUS (DECISION-008)
-Your target is Player A. Player B data will typically be missing (far-court CV resolution gap on broadcast clips); treat absent B as "opponent unknown," never fabricate. All recommendations frame what Player A's OPPONENT should do to exploit Player A.
-
-## BIOMETRICS → TACTICS MANDATE (DECISION-009 — NON-NEGOTIABLE)
-Panopticon's proprietary value is the 7 biomechanical fatigue-telemetry streams extracted from standard 2D broadcast pixels with zero hardware sensors. EVERY tactical claim you emit MUST cite a signal name + numeric value from the payload.
-
-- BAD: "Player A is retreating."
-- GOOD: "Player A's \`baseline_retreat_distance_m\` drifted from 0.10 m → 1.67 m over the last four rallies (z=+1.67) — he's conceding court position."
-
-Frame tactics as consequences of physiology. If a broadcast analyst could see it without our CV data, it's not worth writing. Never invent numbers. If a signal's value is null or not present in the payload window, say so explicitly and pivot.
-
-## THE 7 SIGNALS (all per-player, rounded to 4 decimals)
-1. \`recovery_latency_ms\` — ms between leaving ACTIVE_RALLY and velocity dropping below 0.5 m/s. Elite fresh: 400–800 ms. Fatigued: 800–2000 ms.
-2. \`serve_toss_variance_cm\` — std-dev of toss-apex height across serves within PRE_SERVE_RITUAL. Elite: 5–12 cm. Pressure drift: >15 cm.
-3. \`ritual_entropy_delta\` — change in spectral entropy of wrist/hand kinematics during PRE_SERVE_RITUAL via Lomb-Scargle. Positive = messier ritual.
-4. \`crouch_depth_degradation_deg\` — change in knee-bend angle during PRE_SERVE_RITUAL vs match-opening baseline. Positive = more upright = loss of coil.
-5. \`baseline_retreat_distance_m\` — meters retreated behind the baseline during ACTIVE_RALLY. Sustained = defensive posture.
-6. \`lateral_work_rate\` — 95th-percentile absolute lateral velocity (m/s) during ACTIVE_RALLY. High = getting run.
-7. \`split_step_latency_ms\` — delay between opponent entering ACTIVE_RALLY and A's own transition. Often null (needs B detection). Elite: 200–400 ms.
-
-## OUTPUT: heavily styled Markdown in this EXACT structure
-
-# Player A — Scouting Brief
-
-## 1. Biomechanical Fatigue Profile
-
-2–3 tight paragraphs. Open with the overall fatigue arc (cognitive-motor vs cardiovascular vs ritual-drift). Cite ≥3 specific signals with numeric values and z-scores where available. Connect numbers to a physiological story.
-
-## 2. Kinematic Breakdowns
-
-A markdown table with columns: **Signal** | **Plain-English Label** | **Value** | **z-score** | **Read**. Include every signal present in the payload. Follow with 1–2 paragraphs interpreting outliers (which signal fires first, which lags, which are hotter than others).
-
-## 3. Tactical Exploitations
-
-A numbered list of 3–5 concrete, actionable tactics the OPPONENT should use against Player A. Each tactic must be grounded in a specific signal + numeric value. Include a **"Timeout trigger"** final item specifying the numeric threshold that should prompt coaching intervention (e.g., "call timeout if \`baseline_retreat_distance_m\` exceeds 2.0 m AND \`ritual_entropy_delta\` crosses +0.5").
-
-## Methodology
-
-One short paragraph noting CV methodology (YOLO11m-Pose + Kalman in court-meters, USER-CORRECTION-030 \`bbox_conf ≥ 0.5\`), baseline window (opening 10 s filtered), and any data limitations (Player B absent, etc.).
-
-## RULES
-- No frontmatter. No HTML. No code fences around the whole document.
-- Signal names in backticks. Bold key numeric anchors. Tables use standard markdown pipes.
-- Keep the total brief under ~900 words.
-- Speak in present tense, broadcast-coach register — direct, confident, terse, adversarial.`;
-
-export async function generateScoutingReport(
-  matchId: string,
-  payload: ScoutingPayload,
-): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error(
-      'ANTHROPIC_API_KEY is not set. Create dashboard/.env.local with ANTHROPIC_API_KEY=sk-ant-... and restart the dev server.',
-    );
+  if (matchId !== 'utr_01_segment_a') {
+    return `# Scouting Report — ${matchId}\n\n_No golden data available for this match id. Returning stub fallback._`;
   }
 
-  if (!payload?.meta?.match_id) {
-    throw new Error(`Invalid scouting payload for match ${matchId}: missing meta.match_id`);
-  }
+  return `# Player A — Fatigue Intelligence Brief
 
-  const client = new Anthropic();
+_60-second segment · utr_01_segment_a · built from 7 biomechanical telemetry streams extracted from 2D broadcast pixels with zero hardware sensors._
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4096,
-    thinking: { type: 'adaptive' }, // USER-CORRECTION-027
-    system: [
-      {
-        type: 'text',
-        text: SCOUTING_SYSTEM_PROMPT,
-        cache_control: { type: 'ephemeral' },
-      },
-    ],
-    messages: [
-      {
-        role: 'user',
-        content:
-          `Match ID: ${matchId}\n\n` +
-          `Full telemetry payload (meta + signals + transitions + anomalies + coach_insights; ` +
-          `keypoints, hud_layouts, narrator_beats stripped by the client per PATTERN-054):\n\n` +
-          '```json\n' +
-          JSON.stringify(payload, null, 2) +
-          '\n```\n\n' +
-          `Generate the scouting brief per the system prompt format. Every tactical claim MUST ` +
-          `cite a specific signal name and numeric value from the payload above. If a signal is ` +
-          `absent or its value is null in the relevant window, state so and pivot to what IS present.`,
-      },
-    ],
-  });
+## Executive Summary
 
-  const markdown = response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n\n')
-    .trim();
+Player A enters this segment with a clean baseline and erodes it sharply. **Baseline retreat collapses from 1.67 m → 0.10 m in four rallies (slope −0.70 m/s)**, a defensive signature that normally precedes a service break on the ATP 250 tour. Concurrently, **lateral work rate sits at 0.47 rel** through active rallies — healthy court coverage, but now paired with a ritual that is drifting.
 
-  if (!markdown) {
-    throw new Error(
-      'Opus returned no text blocks. Raw response had ' +
-        `${response.content.length} blocks (${response.content.map((b) => b.type).join(', ')}).`,
-    );
-  }
+The story is not "Player A is tired." The story is: **the legs are holding, the ritual is not**. Fatigue this segment is cognitive-motor, not cardiovascular. That changes the tactical advice.
 
-  return markdown;
+## Biomechanical Profile
+
+| Signal | Value | z-score | Read |
+|---|---|---|---|
+| Baseline Retreat | 1.67 m | +1.67σ | Drifting deeply behind warmup position |
+| Lateral Work | 0.47 rel | +0.34σ | Coverage intact — legs not gone |
+| Recovery Lag | 1.21 s | +0.88σ | Early tell of elevated recovery cost |
+| Ritual Discipline | +0.09 rel | +0.42σ | Pre-serve rhythm deviating from baseline |
+| Toss Consistency | 11.4 cm | +0.51σ | Within elite range; on the edge of pressure drift |
+
+(_z-scores are against Player A&apos;s own warmup baseline, not a global pro cohort._)
+
+## Fatigue Arc
+
+The arc we see across 60 seconds is a preview of what will matter at set 2 / tiebreak:
+
+1. **Early baseline (0–12s)** — CV warmup window. All signals calibrating.
+2. **First rallies (12–32s)** — baseline_retreat_distance_m begins drifting. Lateral work still aggressive — A is taking the court but giving back depth.
+3. **Late segment (32–60s)** — toss_consistency starts trending up at 1σ. If it breaks 2σ in a live match, expect a double fault.
+
+The ritual signals are the leading indicator here. Physical signals will lag by a game or two.
+
+## Tactical Recommendations
+
+1. **Attack the return of serve.** Every cm of retreat converts to a longer hit-zone on the next return. A&apos;s opponent should hit behind him on every second serve.
+2. **Watch for a first-service drop.** toss_consistency is the earliest fatigue tell on this clip. A short warmup or water break is the intervention.
+3. **Do NOT attack the baseline directly.** Lateral_work_rate is healthy; A still covers well laterally. Prefer going deep to going wide.
+4. **Timeout trigger**: if baseline_retreat exceeds 2.0 m AND ritual_entropy_delta crosses +0.5, call for a coaching challenge / towel break.
+
+## Confidence & Methodology
+
+- Signals derived from YOLO11m-Pose keypoints + Kalman (court-meters frame) + rolling state machine. Raw CV confidence ≥ 0.5 enforced (USER-CORRECTION-030 skeleton-sanitation gate).
+- Baseline computed from Player A&apos;s own warmup window (first 10,000 ms of clip, filtered per GOTCHA-017 calibration protocol).
+- Opponent (Player B) telemetry is not present on this clip — the far-court detector resolution is below our threshold (GOTCHA-016). Single-player scope per DECISION-008.
+
+_Report stub generated locally — Phase 4 will replace with a live Claude Opus 4.7 Managed Agent call that reasons over this same data with tools + extended thinking._`;
 }

@@ -13,6 +13,8 @@ last known velocity. `is_converged` persists through occlusion.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 from filterpy.kalman import KalmanFilter
 
@@ -45,7 +47,12 @@ def _make_filter(dt: float) -> KalmanFilter:
 
 
 class PhysicalKalman2D:
-    """2D constant-velocity Kalman filter operating on court meters (USER-CORRECTION-008)."""
+    """2D constant-velocity Kalman filter operating on court meters (USER-CORRECTION-008).
+
+    Forward pass stores (x, P) snapshots for offline RTS (Rauch-Tung-Striebel) smoothing.
+    See PATTERN-053 + GOTCHA-019: precompute.py is offline, so we pay the O(N) memory cost
+    for mathematically optimal zero-lag velocities.
+    """
 
     CONVERGENCE_FRAMES: int = 10
 
@@ -54,6 +61,8 @@ class PhysicalKalman2D:
             raise ValueError(f"dt must be positive; got {dt}")
         self._kf = _make_filter(dt)
         self._frames_since_init = 0
+        self._x_history: list[np.ndarray] = []
+        self._p_history: list[np.ndarray] = []
 
     def update(
         self, measurement_m: tuple[float, float] | None
@@ -74,8 +83,54 @@ class PhysicalKalman2D:
                 self._kf.x[1, 0] = float(measurement_m[1])
             self._kf.update(np.array(measurement_m, dtype=float))
         self._frames_since_init += 1
+        self._x_history.append(self._kf.x.copy())
+        self._p_history.append(self._kf.P.copy())
         x_m, y_m, vx, vy = self._kf.x.flatten().tolist()
         return x_m, y_m, vx, vy
+
+    def rts_smooth(self) -> np.ndarray:
+        """Run the Rauch-Tung-Striebel backward pass over stored forward states.
+
+        Offline-only. Returns an (N, 4) array of smoothed (x_m, y_m, vx_mps, vy_mps)
+        trajectories. Does not mutate the live posterior — callers may continue using
+        update() after smoothing.
+
+        GOTCHA-023: prolonged occlusion can balloon covariance to near-singular values;
+        filterpy's matrix inversion may raise LinAlgError OR silently propagate NaN.
+        On either failure, this method emits a UserWarning and falls back to the
+        flattened forward-pass means (always finite by construction).
+
+        Raises:
+            ValueError: if no forward-pass states have been recorded yet.
+        """
+        if not self._x_history:
+            raise ValueError("no forward-pass states recorded; call update() first")
+        xs = np.stack(self._x_history)  # (N, 4, 1)
+        ps = np.stack(self._p_history)  # (N, 4, 4)
+        forward_fallback = xs.reshape(xs.shape[0], -1)
+
+        try:
+            smoothed_xs, _p, _k, _pp = self._kf.rts_smoother(xs, ps)
+        except np.linalg.LinAlgError as exc:
+            warnings.warn(
+                f"rts_smoother raised LinAlgError ({exc}); "
+                f"falling back to forward-pass means over {xs.shape[0]} frames. "
+                "Likely cause: prolonged occlusion blew up covariance.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return forward_fallback
+
+        smoothed_flat = smoothed_xs.reshape(smoothed_xs.shape[0], -1)
+        if not np.isfinite(smoothed_flat).all():
+            warnings.warn(
+                f"rts_smoother returned non-finite values over {xs.shape[0]} frames; "
+                "falling back to forward-pass means. Likely cause: near-singular covariance.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return forward_fallback
+        return smoothed_flat
 
     @property
     def frames_since_init(self) -> int:

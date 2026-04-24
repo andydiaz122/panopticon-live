@@ -2,6 +2,8 @@
 
 Tracks which tools / skills / agents / MCPs we used, why, and whether they paid off. The "Skills NOT Used" section is the durable defense against silently ignoring the skill ecosystem.
 
+> **Note on ID references (2026-04-24 merge):** this file was authored on `origin/main`'s numbering scheme. After the `hackathon-research` merge, several PATTERN / GOTCHA / DECISION IDs were renumbered to avoid collision with pre-existing branch-native entries. When cross-referencing an ID below, consult the `MERGE-RENUMBERING MAP` in `MEMORY.md` to resolve to canonical post-merge IDs. Approximate mapping: GOTCHA-019→034, GOTCHA-020→035, GOTCHA-021→036, PATTERN-055→063, PATTERN-056→064, PATTERN-057→065, PATTERN-058→066, DECISION-010→011.
+
 ---
 
 ## HIGH-IMPACT TOOLS FOR THIS PROJECT (planned)

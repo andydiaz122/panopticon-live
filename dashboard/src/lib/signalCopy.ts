@@ -28,52 +28,52 @@ export interface SignalCopyEntry {
 
 export const SIGNAL_COPY: Record<SignalName, SignalCopyEntry> = {
   baseline_retreat_distance_m: {
-    label: 'Baseline Retreat',
+    label: 'Court Position',
     unit: 'm',
     fanDescription:
-      "How far Player A has drifted behind his warmup baseline. Bigger = giving ground to the opponent's heat.",
+      "Player A's court position behind the baseline — tracks positioning adaptations as match demands accumulate.",
     higherIs: 'drift',
   },
   recovery_latency_ms: {
     label: 'Recovery Lag',
     unit: 'ms',
     fanDescription:
-      'Time Player A takes to return to a ready stance after each shot. Bigger = getting tired.',
+      'Time Player A takes to return to ready stance after shots. Elite fresh: <800ms; fatigued: 800ms+.',
     higherIs: 'fatigue',
   },
   serve_toss_variance_cm: {
-    label: 'Toss Consistency',
+    label: 'Toss Precision',
     unit: 'cm',
     fanDescription:
-      "Vertical jitter of Player A's ball toss at apex. Bigger = ritual breaking down under pressure.",
+      'Vertical scatter of Player A\'s ball toss at apex. Variance above 8cm correlates with serve accuracy breakdown.',
     higherIs: 'drift',
   },
   ritual_entropy_delta: {
     label: 'Ritual Discipline',
     unit: 'rel',
     fanDescription:
-      "How much Player A's pre-serve routine deviates from his warmup baseline. Bigger = pattern degrading.",
+      "Spectral consistency of Player A's pre-serve movements — rising signals routine breaking down under load.",
     higherIs: 'drift',
   },
   crouch_depth_degradation_deg: {
     label: 'Crouch Depth',
     unit: '°',
     fanDescription:
-      "Loss of bend in Player A's split-step crouch. Bigger = legs fading.",
+      "Loss of knee flexion in Player A's ready position — the primary marker of lower-limb fatigue.",
     higherIs: 'fatigue',
   },
   lateral_work_rate: {
-    label: 'Lateral Work',
+    label: 'Court Coverage',
     unit: 'rel',
     fanDescription:
-      'How much side-to-side ground Player A is covering per second. Bigger = aggressive court coverage.',
+      "Player A's peak lateral velocity per rally — tracks court coverage capacity and agility under load.",
     higherIs: 'energy',
   },
   split_step_latency_ms: {
-    label: 'Split-Step Timing',
+    label: 'Reaction Timing',
     unit: 'ms',
     fanDescription:
-      "Delay between opponent's racket contact and Player A's split-step. Bigger = reading slower.",
+      "Player A's movement burst timing relative to serve-bounce detection — delays signal neuromuscular slowing.",
     higherIs: 'fatigue',
   },
 };

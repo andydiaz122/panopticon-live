@@ -1236,6 +1236,186 @@ Cross-session recall. Every entry is:
 
 ---
 
+## DAY 3 CONTINUED — Phase 6 Demo Production Iteration Sprint (Apr 24 PM)
+
+Four-iteration dialectical-mapping steelman of the Phase 6 demo-production plan, run Friday evening 2026-04-24. Each iteration = one message with 2 parallel Agent calls (orthogonal Alpha/Beta pairs — Alpha = risk/skeptic lens, Beta = creative/builder lens). All 8 agent passes were Perplexity-grounded (≥ 3 cited claims each) against 2025–2026 sources. Stopping condition was diminishing returns: Iter 4 was the highest-signal iteration (submission logistics + amplification); iterations 5–10 were available but marginal-insight-per-iteration had dropped below the 3-finding threshold. ~30 distinct non-obvious findings produced; ~90 min wall-clock.
+
+Source of truth for the iteration history: `/Users/andrew/.claude/plans/pull-from-remote-main-humble-forest.md` §10 (iteration findings) + §11 (master plan).
+
+### GOTCHA-024 — macOS Sequoia OBS 60 fps 20–30 min capture freeze
+- **Type**: Gotcha / demo-recording reliability
+- **Context**: 2026-04-24 Iter-1 Alpha (risk lens) while stress-testing the Saturday recording plan. Perplexity-grounded: GitHub OBS issues #10636 and #2760 + OBS forum thread 192890 confirm OBS Studio on macOS Sequoia 15 freezes after 20–30 min of 60 fps capture. Issue #2760 also documents that the VideoToolbox H.264 encoder IGNORES OBS's FPS settings and records at ~50 fps when 60 fps is requested — independent failure mode on top of the freeze.
+- **Symptom**: OBS UI appears responsive but encoded frames stop landing in the output MP4; recording "completes" with a truncated / partial file. User discovers post-take.
+- **Root cause**: Sequoia ScreenCaptureKit + VideoToolbox interaction regression; not yet patched in OBS 30.x line as of the 2025–2026 thread window.
+- **Fix** — defensive recording topology:
+  - SPLIT the 3-min demo into two 90-s takes (each well under the 20–30 min freeze window — massive margin).
+  - Run QuickTime Screen Recording in PARALLEL as a zero-cost insurance track (built-in, no OBS dependency).
+  - Prefer ScreenCaptureKit **Window Capture** (scoped to the dashboard window) over full Screen Capture — smaller frame region, less to go wrong.
+- **Phase 6 application**: Saturday 18:00 + 20:00 split takes, with QuickTime recording in a second Space. Assembly in DaVinci on Sunday.
+- **Severity**: HIGH — catastrophic if a freeze lands mid-narration on the final take with the deadline clock running.
+
+### GOTCHA-025 — Remotion Rosetta 2 silent 2× render slowdown
+- **Type**: Gotcha / tooling architecture
+- **Context**: 2026-04-24 Iter-1 Beta (creative lens) during the Remotion toolchain pre-warm design. If Node was originally installed under Homebrew's x86_64 prefix (`/usr/local/bin` on Apple Silicon), the `arch -x86_64 node` shim persists invisibly; every `npx remotion render` call then runs through Rosetta 2 emulation at ~2× the native-ARM runtime.
+- **Symptom**: Remotion renders that should take 40 s take 80 s; no error, no warning. On a deadline-stressed Sunday render schedule, that 2× silently consumes the buffer.
+- **Fix**:
+  - Before any Remotion render, verify: `node -p 'process.arch'` returns `"arm64"` (not `"x64"`).
+  - Pre-fetch the Chrome Headless Shell (~280 MB) with `npx remotion versions` so the first render doesn't stall on download under deadline pressure.
+- **Phase 6 application**: Friday-night 22:30 pre-warm block, captured in the master plan file §10 Iter-1 findings.
+- **Severity**: MEDIUM-HIGH — recoverable but corrosive; a 2× slowdown under deadline is the kind of failure mode that turns a 2-h render budget into a 4-h crisis.
+
+### GOTCHA-026 — Opus 4.7 thinking blocks discarded by default SDK consumer pattern
+- **Type**: Gotcha / Opus-4.7 integration
+- **Context**: 2026-04-24 Iter-2 Alpha (code-fidelity lens). Inspected `dashboard/src/app/actions.ts:145` — the consumer filters `response.content` to text-only via `.filter(b => b.type === 'text')`, silently dropping every `thinking` block even though `thinking: { type: 'adaptive' }` is enabled on the request. The server sends the thinking stream; our frontend throws it away.
+- **Root cause**: Default SDK-consumer idiom is "concatenate text blocks into a single string." For models that emit thinking blocks (4.7 with adaptive thinking enabled), that idiom loses the single most judging-relevant artifact.
+- **Fix**: persist the full content-block array. Response shape becomes `{ text, thinking, content_blocks }` instead of flat `{ text }`. Frontend gets first-class access to both the reasoning stream AND the output claims.
+- **Phase 6 application**: this fix is the single highest-leverage change for the **25 % Opus 4.7 Use** judging criterion — it enables the `<ThinkingVault>` component (PATTERN-063), which is the hero visual of the Opus-specific score. Without this fix, no Thinking Vault is possible.
+- **Severity**: HIGH.
+
+### GOTCHA-027 — YouTube Content ID auto-mute + ~13 % global geo-block on pro tennis broadcast footage
+- **Type**: Gotcha / submission-logistics
+- **Context**: 2026-04-24 Iter-4 Alpha (submission-integrity lens). Perplexity-grounded against 2025–2026 YouTube Creator docs + Content ID operator reports. Pro tennis broadcast footage (Tennis Channel, ESPN, Sky, Eurosport) is aggressively Content-ID-matched INDEPENDENT of fair-use claim — Content ID is algorithmic, not legal, and the algorithmic match fires before any human review.
+- **Symptoms (independent, any/all can hit)**:
+  - Audio auto-muted on the published video (broadcast announcer track triggers the music/audio match even though we narrate over it).
+  - Geo-block applied across ~13 % of global regions on sports broadcast matches (varies by rights-holder).
+  - New-channel upload cap of 15 min if phone-number verification is not on file.
+  - HD processing lock — video plays at 360 p for 20–60 min after upload; judges who open the link in that window see a blurry demo.
+- **Fix** — upload-early protocol:
+  - Upload UNLISTED first. Wait 10–15 min for Content ID scan to complete.
+  - Check YouTube Studio → Content → Restrictions pane BEFORE flipping to Public.
+  - Test the unlisted URL in **incognito + phone** (not just the logged-in Studio preview) to verify HD has unlocked.
+  - Verify phone number on the channel before any upload to bypass the 15-min cap.
+- **Phase 6 application**: Sunday upload moves from 15:00 → 12:00 (adds 3 h of buffer for Content ID + HD-lock + restriction-pane checks). Saturday 16:00 dry-run upload with a throwaway clip to validate the full path before the real submission.
+- **Severity**: HIGH — a muted or geo-blocked demo video on judging day is effectively a forfeit.
+
+### GOTCHA-028 — Vercel April 2026 security incident remediation may auto-rotate Production secrets
+- **Type**: Gotcha / deployment-trust
+- **Context**: 2026-04-24 Iter-4 Beta (ops-reliability lens). Perplexity-grounded: Vercel security-incident logs with real entries on Apr 20 + Apr 23 2026. Vercel's standard incident-remediation playbook includes per-project secret rotation for any project on an affected host. ANTHROPIC_API_KEY in particular has been observed to remain valid in **Preview** environments while becoming invalid in **Production** after rotation — the divergence is silent.
+- **Symptom**: Preview URL renders and exercises Server Actions correctly; Production URL loads but any route that hits the Anthropic SDK returns 500 / 401 auth errors. Page render alone is not enough to catch this.
+- **Fix**:
+  - Run `vercel env ls` to enumerate active env vars per environment before relying on the Production URL.
+  - Smoke-test a Server Action on the PROD URL (not just page render) — the Coach-panel Server Action is the canary.
+  - If rotated, re-add with `printf %s "$KEY" | vercel env add ANTHROPIC_API_KEY production --sensitive` (per PATTERN-056 discipline).
+- **Phase 6 application**: Saturday 08:30 checklist — smoke-test Production Server Actions as part of the morning sanity-check before any recording work begins.
+- **Severity**: HIGH.
+
+### PATTERN-061 — Dual-90-s OBS takes + QuickTime parallel backup
+- **Type**: Pattern / demo-recording reliability
+- **Context**: 2026-04-24 Iter-1. Mitigation pattern for GOTCHA-024 (macOS Sequoia OBS freeze).
+- **Topology**:
+  - Split any demo recording >90 s on macOS Sequoia into **two 90-s takes** with a hard cut in between, staying well under the 20–30 min freeze window (massive margin, not just under).
+  - Run **QuickTime Screen Recording in parallel** (`Cmd+Shift+5` → Record Selected Portion) as zero-cost insurance. QuickTime uses a different code path than OBS (ScreenCaptureKit direct vs OBS's plugin chain), so a freeze in one does not imply a freeze in the other.
+  - Assembly in DaVinci Resolve Free — 4 cuts total (2 takes × 2 tracks) is trivial timeline work.
+- **Why it works**: "Prevent one failure mode" is fragile; "observe two independent failure modes" is resilient. Cost = ~5 min of extra setup Saturday + ~30 MB extra disk per parallel QT take.
+- **When to use**: any OBS-based demo recording on macOS Sequoia until Apple / OBS patch the regression.
+- **Severity**: HIGH-ROI (minimal cost, catastrophic downside if skipped).
+
+### PATTERN-062 — Meta-build reveal via Remotion gitgraph-timelapse
+- **Type**: Pattern / demo-narrative + meta-build storytelling
+- **Context**: 2026-04-24 Iter-3 Beta (narrative-differentiation lens). Three independent 2025 signals converge:
+  - Greg Ceccarelli (Aug 2025): shipped a polished commit-history timelapse with Remotion + Claude Code in ~2 h; post went viral on X.
+  - Anthropic's own #BuiltWithClaude "Screen Demo Skill" pattern: the how-we-built-it segment consistently drives engagement on technical demos.
+  - Anthropic's 16-min live-build marketing video (the Opus 4.7 launch): proves that showing the BUILD PROCESS is currently rewarded, not pitied.
+- **Pattern**: render a 20–30 s timelapse of the repo's git history with Remotion SVG + overlay counters — LOC added, token budget consumed, `.claude/skills/` installed, test pass rate. Cinematic music bed. Place mid-demo as Scene-Break 2 (audience reset after Scene 2, before Scene 3).
+- **Why it's differentiating for this demo**: for hackathons where the BUILD PROCESS is itself a differentiator (solo dev + Opus 4.7 collaboration), skipping the meta-story is anti-pattern. The judge audience is specifically evaluating Opus-4.7 use; showing the velocity of the Opus-paired build is on-criterion, not self-indulgent.
+- **Phase 6 application**: Saturday 14:00 Remotion build slot includes `BuildTimelapse.tsx` alongside `OpeningTitle.tsx` / `SceneBreak.tsx` / `ClosingCard.tsx`.
+- **Severity**: HIGH-ROI if Saturday timeline holds.
+
+### PATTERN-063 — Thinking Vault: surface model-internal reasoning as first-class UI object
+- **Type**: Pattern / Opus-4.7 integration + demo climax
+- **Context**: 2026-04-24 Iter-2 Beta (Opus-feature-ROI lens). The 25 % Opus 4.7 Use judging criterion rewards USE of the distinguishing features (adaptive thinking, vision, tool use). Basic integration = "show collapsible thinking text." Climax-level integration = surface the thinking stream as a STRUCTURED first-class UI object paired 1:1 with the output.
+- **Pattern**:
+  - 3-column layout: **[Considered] / [Rejected] / [Concluded]** — parses the thinking stream into three rhetorical buckets aligned to domain-analyst norms ("here's what I entertained, here's what I ruled out, here's the conclusion").
+  - rAF-typewriter renders the stream onto a canvas (not into React state) — zero React re-renders per token, preserves the per-frame canvas-loop discipline mandated by the React architecture rules.
+  - **Climax frame**: split-screen with the annotated broadcast pixel (left pane showing YOLO keypoints + Opus vision annotations) and the thinking-stream column (right pane) connected by a single numeric value that is visible IN BOTH PANES simultaneously (e.g., "toss_variance = 4.1 cm" shown on the pixel overlay AND referenced by Opus in its thinking).
+- **Why it's more than basic integration**:
+  - Requires PERSISTING the full thinking stream (not filtering to text-only — see GOTCHA-026).
+  - Requires pairing thinking tokens 1:1 with output claims (demand on the consumer, not just the API).
+  - Requires typography designed so judges READ the thinking (line height, mono font, width, kerning — not default `<pre>`).
+  - The three-column rhetoric is domain-specific (matches how sports analysts reason); a generic `<ThinkingDrawer>` does not qualify.
+- **Signature-bound**: Thinking Vault is only meaningful because our proprietary 7-signal biometric pipeline produces the numeric anchors Opus reasons OVER. Copy the component without the pipeline and it's empty chrome.
+- **Phase 6 application**: Saturday Scene 4 hero visual. Depends on GOTCHA-026 fix (without persisting thinking blocks, no Vault content).
+- **Severity**: HIGH — the component is the primary carrier of the Opus-Use demo criterion.
+
+### PATTERN-064 — Vision-pass capability showcase alongside numeric signals
+- **Type**: Pattern / Opus-4.7 vision demonstration
+- **Context**: 2026-04-24 Iter-2 Beta. Opus 4.7 documented a step-change in vision acuity: 3.75 MP image support + **98.5 % XBOW** score (vs 54.5 % on Opus 4.6) — the largest single-release vision improvement in the model family. Current demo does not use this capability at all; pure numeric signals + text reasoning.
+- **Pattern**: ONE pre-computed Opus 4.7 vision API call on a single broadcast frame. Prompt: "Annotate the player's pose and biomechanical load from this pixel data." Persist the returned annotations as static JSON. Render them as an overlay layer on the frozen broadcast frame during Scene 3.
+- **Narration hook**: *"YOLO sees keypoints. Opus sees the player."* One line, carries the entire capability claim.
+- **Cost**: ~1 h build — one SDK call Saturday morning, static JSON persisted under `dashboard/public/vision/`, overlay render extends existing canvas overlay infra. No runtime dependency, no latency risk, no API key exposure in client bundle.
+- **Why it works for this criterion**: uses a 4.7-specific capability in the exact domain (pose/pixel understanding) where the capability differentiates most. Judges evaluating "Opus 4.7 Use" score will immediately see that this demo USES 4.7's vision, not just its text generation.
+- **Phase 6 application**: Saturday morning precompute, Scene 3 placement.
+- **Severity**: HIGH — cheap capability check on-criterion.
+
+### PATTERN-065 — Detective-Cut narrative arc for demo videos
+- **Type**: Pattern / demo-video narrative structure
+- **Context**: 2026-04-24 Iter-3 Alpha (narrative-arc lens). Three independent 2025 research sources converge:
+  - ChaplinAI demo-video study: *"33 % viewer drop-off within the first 30 s if the intro isn't engaging."*
+  - Advids demo-video framework: *"Aha Moment in the first 10 s prevents 75 % demo failure rate."*
+  - Guidejar demo-script guidance: *"Build your demo script BACKWARD from the single aha frame."*
+- **Pattern**: Judge discovers alongside the product, not guided through a tour.
+  - Open COLD on the anomaly / proof (e.g., vision-pass overlay or Thinking Vault climax frame) at frame 1 — before any title, before any logo, before any voice.
+  - Defer the title card to the CLOSING (reverse of standard demo structure which opens on logo + product name).
+  - Narration style: first voice is AT the anomaly moment, not BEFORE it — "This is a 4.1-cm toss variance, eight shots deep. That's the injury signal."
+- **Why it works for this audience**: Anthropic + Cerebral Valley engineering judges consume MANY demos in a judging window. The reward shape is "surprise me in the first 15 s" not "walk me through your product." Opening on the aha frame exploits the exact drop-off curve the research identifies.
+- **When to use**: engineering-judge audiences + ≤ 3-min runtime + product has a dramatic discoverable moment. Do NOT use for enterprise sales demos (buyer expects product-name-first framing) or educational walkthroughs (learner expects scaffolding).
+- **Phase 6 application**: Storyboard v4 "Detective Cut" reorder — Scene 3 vision-pass anomaly becomes the COLD OPEN, prior Scenes 1+2 become mid-demo context, title card moves to closing.
+- **Severity**: HIGH — restructures the entire Saturday edit but does not add new build work.
+
+### PATTERN-066 — Post-submit amplification playbook for hackathon submissions
+- **Type**: Pattern / submission amplification (post-deadline upside)
+- **Context**: 2026-04-24 Iter-4 Beta (amplification + Anthropic-ecosystem-presence lens). Perplexity-grounded research on past Anthropic / Cerebral Valley hackathon winners found **zero public evidence** of coordinated X/Discord amplification campaigns — the channel is UNCONTESTED among submission-time behaviors.
+- **Playbook** (all post-submit, zero submission-time risk):
+  - **Sun 20:15** (immediately after 20:00 submit) — X thread, 6 tweets, tagging relevant handles (@AnthropicAI, @CerebralValley, @claudeai) + the platform hashtag. Thread structure: hook frame → problem → approach → demo clip → build stats → links.
+  - **Sun 21:00** — Participant-directory self-listing on the hackathon platform if self-serve.
+  - **Mon 08:00** — Community Discord post (Anthropic Discord #showcase channel) + DM to a named human at Anthropic DevRel BEFORE the live-judging cut on Monday.
+  - **Mon 10:00** — Platform builder-profile updated with submission link + demo URL + one-line tagline.
+- **Cost**: ~15 min Sunday evening + ~20 min Monday morning. No code, no additional recording, no deadline pressure.
+- **Why it matters**: live-judging visibility + ecosystem amplification are evaluation-adjacent signals for any judges who do secondary research on submissions. Free upside with uncontested channel space.
+- **Phase 6 application**: master plan §11 includes explicit Sun 20:15 / Sun 21:00 / Mon 08:00 / Mon 10:00 slots.
+- **Severity**: MEDIUM-HIGH (free upside at 35 min total cost; uncontested channel).
+
+### DECISION-012 — Drop animated Managed Agents Scene 5B fan-out; compress to ≤ 15 s still/fade
+- **Type**: Decision (demo storyboard cut)
+- **Context**: 2026-04-24 Iter-2 Skeptic (Alpha) + Iter-3 narrative-arc lens independently converged on the same cut. The prior plan (DECISION-011) preserved Managed Agents as a 15-s ANIMATED future-vision segment (Scene 5B fan-out graph). Steelman analysis showed the full animated version is **net-negative** for judging:
+  - Advertises a feature we didn't ship — judges processing "Opus-feature use" see animation implying agents, then realize SDK not wired → reads as "we heard about it and didn't use it."
+  - 15 s of dense animation cost attention in the final stretch where the Detective-Cut title card needs to land.
+  - Both Iter-2 Skeptic and Iter-3 narrative-arc analysis flagged this independently — convergent failure mode.
+- **Decision**: KEEP the vision NARRATIVELY (3-sentence close referencing per-player pre-trained agents, durable match memory, specialist skills) + REPLACE the animation with a ≤ 15 s compressed still / fade. No fan-out graph. No sequential animated connections.
+- **Supersedes**: DECISION-011 bullet "Scene 5B = 15 s future-vision segment" — still 15 s of screen time, different mechanics (still + narration, not animation).
+- **Phase 6 application**: Saturday Remotion build list drops `ManagedAgentsGraph.tsx` animation; add a `ManagedAgentsStill.tsx` or reuse an `OpeningTitle.tsx`-style card.
+- **Severity**: MEDIUM-HIGH — net score-improving cut that reduces risk of feature-claim misread.
+
+### DECISION-013 — Risk-stratified add-on sprint protocol
+- **Type**: Decision / workflow rule
+- **Context**: 2026-04-24 during Iter-4 synthesis. User rule, stated verbatim:
+  > *"If and only if you can implement things that are low risk and high value, anything that is high risk, let's save until the end and allocate its own undivided resources to it."*
+- **Rule**: Tier-split every demo add-on by `risk × value`. Only **LOW-risk + HIGH-value** items land in the core sprint. HIGHER-risk polish gets its own dedicated slot at the END of the build window, with undivided attention.
+- **Core sprint (Saturday daytime)**: LOW-risk + HIGH-value only. Examples: tickertape bar (A1), vision-pass overlay precompute (PATTERN-064), Remotion chrome rewrites for Detective Cut.
+- **Stretch slot (end-of-Saturday or Sunday AM, dedicated resources)**: higher-risk items with full undivided attention. Examples: A2b full canvas-geometry annotation overlay (~4 h, high-risk — new canvas layer over existing skeleton canvas); Thinking Vault split-screen climax frame if pipeline not already plumbed.
+- **Phase 6 application** — A2 explicit split:
+  - **A2a** (Saturday core, 30-min, LOW-risk): `HTMLVideoElement.playbackRate` slow-mo from 1.0× → 0.25× at anomaly timestamps. No new canvas geometry, no annotations. Minimal code surface.
+  - **A2b** (stretch slot, 4-h, HIGH-risk): full canvas-geometry annotation overlay — angle wedges, velocity arrows, floating coordinate labels (the full PATTERN-060 surface). Dedicated time block, no interleaving with other work.
+- **Why it works**: prevents the classic demo-building failure mode where a high-risk polish task consumes the attention required by a lower-risk higher-value task, ending with NEITHER shipping. Stratification forces the locked ordering.
+- **Severity**: HIGH (workflow rule — governs all remaining Saturday/Sunday scheduling).
+
+### WORKFLOW-007 — Dialectical-mapping steelman protocol with orthogonal Alpha/Beta agent pairs + Perplexity grounding + convergence-based stopping
+- **Type**: Workflow / orchestration + research rigor
+- **Context**: 2026-04-24. Applied to Phase 6 demo-production plan (4 iterations completed Friday evening before Saturday build sprint). Generalizes to any high-stakes plan where the decision space is broad and the cost of missing a critical failure mode is high.
+- **Protocol**:
+  1. **One message per iteration.** Fire exactly TWO parallel Agent calls per iteration (`Alpha` + `Beta`). More agents per iteration breaks the orthogonality signal; fewer removes the orthogonality entirely.
+  2. **Orthogonal lens framing** — Alpha = risk / skeptic / adversarial lens; Beta = creative / builder / amplifier lens. The orthogonality of the PROMPTS, not the agent-type, does the work. Two `general-purpose` agents with orthogonal prompts >> two different agent types with overlapping prompts.
+  3. **Perplexity grounding required** — each agent must cite ≥ 3 external sources (Perplexity MCP `perplexity_ask` / `perplexity_search`) against 2025–2026 material. Non-Perplexity-grounded iterations collapse to "model priors" noise.
+  4. **Plan-file tracking** — append each iteration as a numbered section in the plan file (`§10 Iter-N Findings`). Iterations accumulate; nothing deleted.
+  5. **Stopping condition** — either (a) 10 iterations reached, OR (b) diminishing-returns declared. Declare diminishing returns when NET-NEW (non-overlapping with prior iterations) findings-per-iteration drops below 3. This is a HARD threshold; do not run extra iterations "just in case."
+- **Phase 6 application outcome**: 4 iterations produced ~30 distinct non-obvious findings. Iter 1 (risk + tooling) = 8 findings. Iter 2 (Opus-ROI + code-fidelity) = 9 findings. Iter 3 (narrative + meta-build) = 7 findings. Iter 4 (submission logistics + amplification) = 6 findings including the single-highest-signal finding of the sprint (PATTERN-066 amplification playbook). Iterations 5–10 were available but would have produced <3 net-new per iteration; stopped at 4 to preserve Saturday build time.
+- **Meta-learning** — iteration 4 (late iteration) produced higher-signal findings than iterations 2 or 3. Early iterations catch obvious surface risks; late iterations catch structural / channel-level / ecosystem findings. Stopping at 2 iterations would have missed PATTERN-066 and GOTCHA-028 entirely.
+- **Reference**: `.claude/skills/dialectical-mapping-steelmanning`.
+- **Generalizes to**: demo production, strategic plans with multi-domain risk, research synthesis before any freeze deadline, architectural decisions crossing ≥ 3 orthogonal concern domains.
+- **Severity**: HIGH-ROI (30+ findings in ~90 min wall-clock; highest-ROI skill invocation of Phase 6 planning).
+
+---
+
 ## DAY 4 LEARNINGS (Apr 25, 2026)
 
 (To be populated)

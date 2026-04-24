@@ -876,3 +876,56 @@ Sunday Apr 26 — final cut in DaVinci Resolve Free, render, YouTube upload, sub
 - **PATTERN-060** — Sportradar aesthetic: slow-mo + geometric primitives overlaid on live video.
 - **DECISION-011** — Phase 6 demo production decisions locked 2026-04-24.
 - **WORKFLOW-006** — Structured phase-planning protocol (3 parallel research agents + batched decisions).
+
+### Friday PM — 4-iteration dialectical steelman + Detective Cut pivot
+
+#### Research process
+
+Friday evening (2026-04-24, ~90 min wall-clock) ran a 4-iteration dialectical-mapping steelman of the Phase 6 demo-production plan locked at kickoff. Structure: one message per iteration, two parallel Agent calls per message (orthogonal Alpha/Beta pairs — Alpha = risk/skeptic lens, Beta = creative/builder lens). All 8 agent passes Perplexity-grounded against 2025–2026 sources (GitHub issues, OBS forum threads, Anthropic release notes, YouTube Creator docs, Vercel incident reports, Remotion changelog, ChaplinAI / Advids / Guidejar demo-video research). Stopping condition was convergence — Iter 4 was the highest-signal iteration (submission logistics + amplification), but net-new findings per iteration dropped below the 3-per-iteration threshold, so iterations 5–10 (available) were not run. Total output: ~30 distinct non-obvious findings. Protocol captured as WORKFLOW-007.
+
+#### Iteration-by-iteration summary
+
+- **Iter 1 — risk + tooling (Alpha + Beta, 8 findings).** Critical finding: GOTCHA-024 (macOS Sequoia OBS 60 fps 20–30 min capture freeze — GitHub #10636 + #2760 + forum 192890, independently confirmed; VideoToolbox H.264 ignores OBS FPS settings). Paired with GOTCHA-025 (Remotion Rosetta 2 silent 2× slowdown if Node was installed under Homebrew-x86_64). Mitigations: PATTERN-061 (dual-90-s OBS takes + QuickTime parallel backup); Friday-night 22:30 pre-warm block to verify `node -p process.arch === "arm64"` and `npx remotion versions` Chrome Headless Shell fetch.
+- **Iter 2 — Opus-ROI + code-fidelity (Alpha + Beta, 9 findings).** Critical finding: GOTCHA-026 (`dashboard/src/app/actions.ts:145` filters `response.content` to text-only, silently discarding every `thinking` block despite `thinking: { type: 'adaptive' }` being enabled). This is the single highest-leverage fix for the 25 % Opus 4.7 Use judging criterion — it unlocks PATTERN-063 (Thinking Vault as first-class UI object: 3-column [Considered]/[Rejected]/[Concluded] rAF-typewriter onto canvas, split-screen climax frame with numeric value visible in both panes). Paired with PATTERN-064 (one pre-computed Opus 4.7 vision call on a broadcast frame — exploits 4.7's 3.75 MP / 98.5 % XBOW vision acuity vs 54.5 % on 4.6). Iter-2 Skeptic also independently flagged that the Managed Agents animated Scene 5B advertises an un-built feature and reads as "we heard about it and didn't use it" — fed directly into DECISION-012.
+- **Iter 3 — narrative + meta-build (Alpha + Beta, 7 findings).** Critical finding: PATTERN-065 Detective-Cut narrative arc — 2025 demo-video research convergence from ChaplinAI (33 % drop-off in first 30 s), Advids (Aha Moment in first 10 s prevents 75 % demo failure rate), Guidejar ("build your demo script BACKWARD from the single aha frame"). Restructures the edit: open COLD on the aha frame (vision-pass overlay or Thinking Vault climax), defer title card to closing. Iter-3 narrative-arc lens independently confirmed the Scene 5B cut from Iter 2. Paired with PATTERN-062 (meta-build Remotion gitgraph-timelapse — Greg Ceccarelli Aug 2025 + #BuiltWithClaude + Anthropic's own 16-min live-build marketing video — shows the build process is currently rewarded, not pitied).
+- **Iter 4 — submission logistics + amplification (Alpha + Beta, 6 findings, HIGHEST-SIGNAL).** Critical findings: GOTCHA-027 (YouTube Content ID auto-mute + ~13 % geo-block on pro tennis broadcast footage, INDEPENDENT of fair-use claim; HD processing lock can leave video at 360 p for 20–60 min post-upload; new-channel upload caps at 15 min if phone unverified → upload protocol moves to Sun 12:00 not 15:00 + Sat 16:00 dry-run), GOTCHA-028 (Vercel April 2026 security incident breach remediation may auto-rotate Production ANTHROPIC_API_KEY while Preview stays valid — smoke-test Server Actions on Prod, not just page render), and PATTERN-066 (post-submit amplification playbook: Sun 20:15 X thread + Sun 21:00 participant directory + Mon 08:00 Discord + DevRel DM + Mon 10:00 platform profile — research found no public evidence of past winners running coordinated campaigns; channel is UNCONTESTED). Stopping condition hit at Iter 4 because net-new findings in hypothetical Iter 5–10 projected below 3 per iteration.
+
+#### Locked decisions (this session)
+
+1. **Detective-Cut reorder (PATTERN-065)** — cold open on anomaly / aha frame; defer title to closing.
+2. **Thinking Vault as first-class UI (PATTERN-063)** — depends on GOTCHA-026 fix persisting full content-block array; split-screen climax frame with shared numeric value.
+3. **Vision-pass capability showcase (PATTERN-064)** — one pre-computed Opus 4.7 vision call Saturday morning; narration hook *"YOLO sees keypoints. Opus sees the player."*
+4. **Managed Agents Scene 5B downgrade (DECISION-012, supersedes DECISION-011 bullet)** — drop animated fan-out; compress to ≤ 15 s still + fade + 3-sentence narrative close.
+5. **A2 tier-split (DECISION-013)** — A2a (Saturday core, 30 min, LOW-risk playback-rate slow-mo) + A2b (stretch slot, 4 h, HIGH-risk canvas annotation geometry, dedicated resources only).
+6. **Submission logistics re-time** — Sun upload 12:00 (not 15:00); Sat 16:00 throwaway-clip dry-run; Sat 08:30 Prod Server Action smoke-test.
+7. **Post-submit amplification (PATTERN-066)** — Sun 20:15 X thread + Mon 08:00 Discord + DevRel DM + Mon 10:00 profile. Post-deadline upside; zero submission-time risk.
+
+Undergirding all seven: **DECISION-013 risk-stratified add-on sprint rule** — verbatim from user *"If and only if you can implement things that are low risk and high value, anything that is high risk, let's save until the end and allocate its own undivided resources to it."* This is now the master scheduling constraint; only LOW-risk + HIGH-value items land in the core sprint, higher-risk polish gets dedicated undivided-attention slots.
+
+#### Master plan reference
+
+Full iteration trail + §11 master plan: `/Users/andrew/.claude/plans/pull-from-remote-main-humble-forest.md`.
+
+#### Deliverables updated
+
+- `/Users/andrew/Documents/Coding/hackathon-demo-v1/demo-presentation/PLAN.md` — storyboard v4 Detective Cut + risk-stratified add-on priorities + Sat/Sun timeline (upload moved to Sun 12:00 + Sat 16:00 YouTube dry-run + Sat 08:30 Prod smoke-test).
+- `/Users/andrew/Documents/Coding/hackathon-demo-v1/demo-presentation/CLAUDE.md` — narrative discipline refinement (Detective-Cut tone rules, Thinking-Vault placement, vision-pass narration hook).
+- `/Users/andrew/Documents/Coding/hackathon-demo-v1/MEMORY.md` — GOTCHA-024/025/026/027/028 + PATTERN-061/062/063/064/065/066 + DECISION-012/013 + WORKFLOW-007 (all under new `## DAY 3 CONTINUED` section).
+- `/Users/andrew/Documents/Coding/hackathon-demo-v1/TOOLS_IMPACT.md` — extended Phase 6 block with dialectical-mapping-steelmanning ROI + Perplexity grounding meta-learning.
+
+### Non-obvious learnings captured (this session, all in MEMORY.md under Day 3 Continued)
+
+- **GOTCHA-024** — macOS Sequoia OBS 60 fps 20–30 min capture freeze.
+- **GOTCHA-025** — Remotion Rosetta 2 silent 2× render slowdown.
+- **GOTCHA-026** — Opus 4.7 thinking blocks discarded by default SDK consumer pattern.
+- **GOTCHA-027** — YouTube Content ID auto-mute + ~13 % global geo-block on pro tennis broadcast footage.
+- **GOTCHA-028** — Vercel April 2026 security incident remediation may auto-rotate Production secrets.
+- **PATTERN-061** — Dual-90-s OBS takes + QuickTime parallel backup.
+- **PATTERN-062** — Meta-build reveal via Remotion gitgraph-timelapse.
+- **PATTERN-063** — Thinking Vault: surface model-internal reasoning as first-class UI object.
+- **PATTERN-064** — Vision-pass capability showcase alongside numeric signals.
+- **PATTERN-065** — Detective-Cut narrative arc for demo videos.
+- **PATTERN-066** — Post-submit amplification playbook for hackathon submissions.
+- **DECISION-012** — Drop animated Managed Agents Scene 5B fan-out (supersedes DECISION-011 animated-version bullet).
+- **DECISION-013** — Risk-stratified add-on sprint protocol (user rule).
+- **WORKFLOW-007** — Dialectical-mapping steelman protocol with orthogonal Alpha/Beta agent pairs + Perplexity grounding + convergence-based stopping.

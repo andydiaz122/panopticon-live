@@ -65,6 +65,14 @@ Our alignment:
 | Q7 | Tab 2 firehose row filter | **All row kinds** — state + signal + insight + anomaly. Maximal density sells the moment. |
 | Q8 | "Built with Claude Code" treatment | **Both (C)** — Scene 5A overlay ("Built with Claude Code · 5 days · MIT") + Scene 2 3-second flash of `.claude/skills/` file tree showing the 12+ skill packs. Shows the meta-engineering; judges respect skill-pack orchestration. |
 
+### Iteration 1-4 dialectical outcomes (2026-04-24 PM)
+| # | Question | Andrew's answer |
+|---|---|---|
+| Q9 | Narrative arc pivot | **Full Detective Cut + kill Scene 5B** — adopt Builder's arc (judge discovers alongside Opus), shrink Managed Agents to ≤ 15 s still/compressed clip. Iterations 2 + 3 both converged independently. See §5 v4 storyboard. |
+| Q10 | Opus 4.7 showcase upgrades | **All three** — unfilter `actions.ts:145` thinking-block filter (5 min) + build `<ThinkingVault>` 3-column component for Scene 4 split-screen climax (~1.5 h) + add precomputed Opus 4.7 vision call on one broadcast frame (~1 h). Addresses the Iter-2 "B-minus" verdict. |
+| Q11 | A2 sportradar annotation | **Tier split: A2a low-risk in Saturday core, A2b high-risk as dedicated stretch only**. Andrew's rule: only low-risk/high-value items land in Saturday's core sprint; higher-risk polish gets undivided resources at end. A2a = `HTMLVideoElement.playbackRate` animated to 0.25× at anomaly timestamps (30 min build, zero canvas math). A2b = geometric angle-wedge + velocity-arrow overlay (4 h canvas work, stretch only if everything else green AND ≥ 3 h remaining). |
+| Q12 | Operational playbook | **Both adopted** — Saturday dry-runs (14:00 YouTube + 17:00 CV form load) + post-submit amplification (Sun 20:15 X thread + Sun 21:00 47builders.fyi self-listing + Mon 08:00 Discord #BuiltWithClaude + DevRel DM). See §14. |
+
 ### Narrative discipline (derived from Q3 + Q4)
 
 - **Let the product speak.** The HUD, the SignalBars, the anomaly pulses, the Opus markdown report — these ARE the demo. Narration is a scaffold, not the substance.
@@ -74,98 +82,92 @@ Our alignment:
 
 ---
 
-## 5. The 5-scene storyboard (v3 — minimal-narration, technical-clinical tone)
+## 5. The 5-beat storyboard (v4 — Detective Cut, locked 2026-04-24 PM after 4-iteration dialectical review)
 
-> **Narration rule**: every line states a fact, a number, or a mechanism. No "watch this", no "here's where it gets interesting", no drama. Measured, calm, deliberate cadence. If a line doesn't carry technical information, cut it.
+> **Narration rule** (unchanged from v3): every line states a fact, a number, or a mechanism. No "watch this." No drama. Measured, calm, deliberate. Target footprint ~10 lines in 3 minutes.
+>
+> **Arc principle** (new in v4): the judge DISCOVERS alongside Opus. Open cold on the anomaly, not a title. Opus finds something the commentators miss; we're in the room with it. Climax at 1:58 fuses anomaly geometry + Opus thinking + cached indicator into ONE frame — the only moment where judges see Opus 4.7 *think, reject, re-reason* in real time.
 
-### Scene 1 (0:00 – 0:20) — The Claim
+### B1 — The Miss (0:00 – 0:18)
 
 | t | Visual | Audio |
 |---|---|---|
-| 0:00 | Tennis clip playing muted. Right-rail SignalBar already pulsing red on first frame. Skeleton overlay tracing the player. | Silence (5 s) |
-| 0:05 | Narration starts, calm and technical. | *"Pro tennis broadcast. Standard 2D feed."* |
-| 0:10 | Camera pushes in on the SignalBar pulse. | *"Seven biomechanical fatigue signals, extracted live from skeleton keypoints."* |
-| 0:15 | Remotion title card: `PANOPTICON LIVE` in 2K-Sports typography (Rajdhani/Eurostile), cyan glow on near-black. 3-second hold. | — |
+| 0:00 | Tennis clip playing muted. SignalBar pulsing red from frame 1. Skeleton overlay tracing the player. No logo. No title. | Silence (8 s) |
+| 0:05 | Feed pauses at t=45.3 s in clip. Crosshair zooms to player's knee. On-screen text appears: `CROUCH DEPTH · Δ −11.69° · σ 2.5`. | (still silent) |
+| 0:10 | Vision-pass overlay (precomputed Opus 4.7 vision call on this exact frame) shows the annotated pose. | *"Nobody on the broadcast called this. Our system flagged it at frame 1,359."* |
 
-**Must-have frame**: anomaly pulse visible within 5 s, title card visible at 0:15.
-**Differentiation**: no "Introducing". No corporate framing. Two sentences of narration in 15 seconds.
+**Must-have frame**: crosshair + on-screen numeric overlay visible ≥ 3 s.
+**Differentiation**: no "Introducing". No title card here (deferred to closing). Cold-open with PROOF, not setup.
 
 ---
 
-### Scene 2 (0:20 – 1:00) — The Stack (7 signals + Opus 4.7 extended thinking)
+### B2 — The Sensor (0:18 – 0:50)
 
 | t | Visual | Audio |
 |---|---|---|
-| 0:20 | Full dashboard view. Camera pans across the 3 right-rail SignalBars. | *"YOLO11m-Pose on Apple Silicon. Kalman smoother for occlusion. Seven signal extractors running on the keypoints."* |
-| 0:32 | **3-second `.claude/skills/` file-tree flash** overlaid bottom-left of frame: monospace tree showing `cv-pipeline-engineering`, `2k-sports-hud-aesthetic`, `biomech-signal-architect`, `hackathon-demo-director`, `topological-identity-stability`, `opus-47-creative-medium`, `vercel-ts-server-actions`, `match-state-coupling`, `physical-kalman-tracking`, `duckdb-pydantic-contracts`, `react-30fps-canvas-architecture`, `temporal-kinematic-primitives`. Subtle cyan tint. | *"Built with Claude Code. Twelve project-scoped skill packs — CV, biomech, HUD, state-machine, Vercel deployment — each an orthogonal domain."* |
-| 0:38 | File-tree flash fades. Camera moves to CoachPanel with "⚡ cached" indicator visible. | *"Opus 4.7 reasons over the telemetry. Adaptive thinking enabled. System prompt cached — the indicator shows cache-read tokens."* |
-| 0:52 | Click `Show thinking ▾` button. Opus's extended-thinking block fills CoachPanel. Hold 5 s. | *"Extended thinking, preserved. Every coaching line grounded in a signal value."* |
-| 0:58 | Close thinking block. | — |
+| 0:18 | Playback resumes. Full HUD snaps in: SignalBar rail, skeleton overlay, tickertape, Coach Panel. Smooth entrance. | *"YOLO11m-Pose on Apple Silicon. Kalman on court meters. Seven biomechanical signals — toss variance, ritual entropy, crouch depth, recovery latency, lateral work, baseline retreat, split-step."* |
+| 0:35 | 3-second `.claude/skills/` file-tree flash overlaid bottom-left (12 project skill packs — `cv-pipeline-engineering`, `2k-sports-hud-aesthetic`, `biomech-signal-architect`, `hackathon-demo-director`, `topological-identity-stability`, `opus-47-creative-medium`, `vercel-ts-server-actions`, `match-state-coupling`, `physical-kalman-tracking`, `duckdb-pydantic-contracts`, `react-30fps-canvas-architecture`, `temporal-kinematic-primitives`). | *"Built with Claude Code. Twelve skill packs. All extracted from 2D broadcast pixels."* |
 
 **Must-have frames**:
+- HUD snap-in smoother than a hard cut
 - `.claude/skills/` file tree readable ≥ 2 s (Q8 deliverable)
-- Expanded thinking block readable ≥ 3 s
-- Cache-read indicator visible
 
 ---
 
-### Scene 3 (1:00 – 1:45) — The Anomaly (minimal narration, visual drama)
-
-**Baseline build**: SignalBar pulse + Tab-2 firehose cut. No dramatic narration. Ship without A2 annotation overlay unless time permits (see §6).
+### B3 — The Second Miss (0:50 – 1:30)
 
 | t | Visual | Audio |
 |---|---|---|
-| 1:00 | Video playing. t ≈ 45 s in the clip: Crouch Depth SignalBar goes red. Tickertape bar at bottom highlights the firing signal. | *"Crouch depth: minus 11.69 degrees. Sigma two-point-five."* (clinical, flat) |
-| 1:10 | Second anomaly at t ≈ 59 s in clip (Crouch Depth red pulse again). TelemetryLog bottom strip writes the ANOMALY row. | *"Recurring pattern."* |
-| 1:18 | Switch to Tab 2 (Raw Telemetry). Dense monospace firehose scrolling, red ANOMALY rows visible. Hold 10 s. | *"Proprietary data stream. Every sample, every state transition, every Opus insight, timestamped."* |
-| 1:30 | *(if A2 polish shipped)* Switch back to Tab 1, slow-mo playback to 0.25x for 5 s with geometric annotation overlay (hip-knee-ankle wedge + floating `crouch_angle: -11.69°` label sportradar-style). Otherwise: hold on Tab 2. | *(A2 present)* *"Geometry behind the measurement."* *(A2 absent)* — silence. |
+| 0:50 | Video continues. At t ≈ 59.1 s in clip: Crouch Depth SignalBar flashes red again. TelemetryLog bottom strip writes the ANOMALY row. | *"Recurring. Crouch depth minus 11.69 degrees. Again. Same signature, 13.8 seconds apart. Fatigue, not randomness."* |
+| 1:05 | **A2a slow-mo** (mandatory): video `playbackRate` animates from 1.0× → 0.25× for 5 s. Skeleton overlay stays visible. | (silent beat) |
+| 1:10 | Switch to Tab 2 (Raw Telemetry). Dense monospace firehose scrolling — all row kinds: STATE amber, SIGNAL cyan, INSIGHT purple, ANOMALY red. Hold 15 s. | *"Proprietary data stream. Every sample, every state transition, every Opus insight, timestamped."* |
+| 1:25 | *(A2b stretch only)* brief geometric angle-wedge overlay if A2b shipped. Otherwise hold on firehose. | — |
 
 **Must-have frame**: ≥ 1 red ANOMALY row visible on Tab 2 firehose.
-**Polish frame (if A2 ships)**: sportradar-style angle wedge + label on the player for ≥ 3 s.
+**Polish frame (A2b stretch)**: sportradar-style angle wedge + label for ≥ 3 s.
 
 ---
 
-### Scene 4 (1:45 – 2:25) — The Opus Scouting Report
+### B4 — Opus Reads the Body (1:30 – 2:30) — THE CLIMAX
+
+**This is the single lean-forward moment. 60 seconds of runtime. Split-screen is the money shot.**
 
 | t | Visual | Audio |
 |---|---|---|
-| 1:45 | Click Tab 3 "Opus Scouting". Click "Generate Report". Button text → "Opus thinking…" | *"Server Action. Opus 4.7. The full telemetry passed as a structured payload — signals, anomalies, state transitions."* |
-| 1:50 | Fast-forward the Opus generation 4× (~20 s real-time → ~5 s screen time). | — |
-| 1:55 | Markdown streams in. Scroll slowly through the "Biomechanical Fatigue Profile" and "Kinematic Breakdowns" sections. Highlight a table cell showing a signal name + numeric value. | *"Every tactical claim grounded in a signal name and a numeric value. No hand-waving."* |
-| 2:15 | End on the "Tactical Exploitations" bullet list. Hold for 3 s. | *"A coaching brief that takes a scout three hours. Opus generates it in thirty seconds."* |
+| 1:30 | Switch to Tab 3 "Opus Scouting". Click "Generate Report". Button → "Opus thinking…" | *"Opus 4.7. Adaptive thinking. System prompt cached."* |
+| 1:35 | **Split-screen opens**: left pane = Scene-3 slow-mo frozen on the anomaly frame with `crouch_angle: -11.69°` floating label (leveraging A2a frozen state); right pane = new `<ThinkingVault>` component streaming extended thinking in 3-column `[Considered] / [Rejected] / [Concluded]` layout. | — |
+| 1:45 | Thinking stream speed-up 4× — judges watch tokens accumulate in real time. `⚡ cached` indicator lit with token counter. | *"Extended thinking preserved. Every coaching line grounded in a signal value."* |
+| **1:58** | **THE FRAME**: Rejected Thought chip flashes: `✗ "Serve-mechanics narrative" rejected — crouch degrade preceded toss variance by 8.2 s`. Simultaneously: the right-pane thinking mid-stream cites `-11.69°` — which is literally visible on the left-pane frozen player. Pixels left, tokens right, one number connects them. Cache indicator still lit. | *"Opus rejected its first hypothesis because the timing didn't fit the data."* |
+| 2:10 | Split-screen closes. Markdown scouting report streams in on full screen. Scroll through Biomechanical Fatigue Profile + Kinematic Breakdowns table. | *"Every tactical claim grounded in a signal name and a numeric value."* |
+| 2:25 | Pause on Tactical Exploitations list. | *"A coaching brief that takes a scout three hours."* |
 
-**Must-have frame**: visible `signal_name` + numeric value inline in the markdown.
+**Must-have frame**: the 1:58 three-element frame (left pixel annotation, right thinking mid-stream citing that exact number, cache indicator lit, Rejected Thought chip visible). This IS the demo.
 
 ---
 
-### Scene 5 (2:25 – 2:58) — Architecture + Managed Agents future vision + Close
-
-#### Scene 5A (2:25 – 2:40) — Architecture + "Built with Claude Code"
+### B5 — The Instrument, At Scale (2:30 – 2:58)
 
 | t | Visual | Audio |
 |---|---|---|
-| 2:25 | Static architecture slide (Remotion or Canva). Flow: `YOLO11m-Pose → Kalman → 7-signal extractor → DuckDB → Next.js Server Action → Opus 4.7 → 2K HUD`. Overlay: "Built with Claude Code · 5 days · MIT license". | *"Stack is all open-source. Built in five days with Claude Code — skill packs for CV, biomech, HUD, deployment, demo production."* |
-
-#### Scene 5B (2:40 – 2:55) — Managed Agents future vision
-
-| t | Visual | Audio |
-|---|---|---|
-| 2:40 | Remotion animated fan-out graph: central Opus 4.7 node, 8 branches for top players (Alcaraz, Sinner, Djokovic, Medvedev, Gauff, Swiatek, Sabalenka, Rybakina), each tagged with a specialist skill (`biomech-forensics`, `serve-analyst`, `return-analyst`, `injury-risk-officer`). Nodes fade in sequentially over 8 s. | *"Today: one player, one clip. Next: a Claude Managed Agent pre-trained on every pro on tour. Each carrying that player's biomechanical fingerprint. Persistent across a five-hour match. Coach queries the player's scouting brain."* |
-
-#### Scene 5C (2:55 – 2:58) — Close
-
-| t | Visual | Audio |
-|---|---|---|
-| 2:55 | Closing card (Remotion): `PANOPTICON LIVE | panopticon-live.vercel.app | github.com/andydiaz122/panopticon-live | Built with Opus 4.7 · April 2026`. Hold 3 s. | Silent. |
+| 2:30 | Architecture slide (Remotion or Canva). Flow: `YOLO11m-Pose → Kalman → 7 signals → DuckDB → Server Action → Opus 4.7 → 2K HUD`. Overlay: "Built with Claude Code · 5 days · MIT license". | *"Stack is all open-source. Built in five days."* |
+| 2:42 | **Managed Agents fan-out — compressed to ≤ 15 s still/simple fade** per Q9 decision. Central Opus 4.7 node, 8 branches for top players (Alcaraz, Sinner, Djokovic, Medvedev, Gauff, Swiatek, Sabalenka, Rybakina). NO 8-second sequential animation — just fade in as a single frame + hold. | *"Next: one Managed Agent per pro, persistent across a five-hour match."* |
+| 2:54 | Closing card: `PANOPTICON LIVE | panopticon-live.vercel.app | github.com/andydiaz122/panopticon-live`. Title card `PANOPTICON LIVE` folded in here (not Scene 1). | Silent. |
 | 2:58 | Hard cut to black. | — |
 
-**Must-have frame**: Managed Agents fan-out graph + repo URL visible ≥ 2 s.
-**Opus 4.7 narrative anchor**: Scene 5B targets the $5K "Best Use of Managed Agents" prize via first-principles vision, not false claim of current implementation.
+**Must-have frame**: repo URL + title card visible ≥ 2 s.
 
 ---
 
 ### Total target: 2:58 (2-second margin under 3:00 hard cap)
-### Narration footprint: ~12 lines total, down from v2's ~25 lines
+### Narration footprint: 10 lines total
+
+### v3 → v4 diff summary
+- **B1 opens COLD on proof** (vision-pass annotated frame at t=45.3), not on a title card or scene-setter. Title deferred to closing.
+- **Climax engineered at 1:58** (B4) — split-screen, Rejected Thought chip, cached thinking stream, same number visible left + right.
+- **Scene 5B Managed Agents compressed** from 15-second animated fan-out → ≤ 15-second still/fade (per Q9 decision; advertising un-built feature is net-negative per Iter-3 skeptic).
+- **Thinking Vault NEW** (Q10) — 3-column `[Considered] / [Rejected] / [Concluded]` component in B4 split-screen.
+- **Vision pass NEW** (Q10) — precomputed Opus 4.7 vision call on t=45.3 frame, rendered as B1 overlay.
+- **A2a slow-mo PROMOTED** (Q11) — mandatory `playbackRate` animation in B3; A2b annotation stretch-only.
 
 ---
 
@@ -175,14 +177,21 @@ Our alignment:
 
 | # | Add-on | Priority | Budget | Fallback if over |
 |---|---|---|---|---|
-| A1 | Live tickertape bar at Tab 1 bottom | **High** | 1 h | Skip — storyboard works without |
-| A4 | Managed Agents future-vision fan-out graph (Remotion animated, Scene 5B) | **High** | 1.5 h | Static Canva diagram (fade-in via Ken Burns pan) |
-| A5 | Architecture diagram (Scene 5A) | **High** | 1 h | Hand-drawn Canva slide |
-| A6 | Remotion title card + scene breaks + closing card (Scene 1 + Scene 5C) | **High** | 2 h | ffmpeg `drawtext` + Canva PNG exports |
-| A2 | Sportradar slow-mo + geometric annotation (angle wedge + velocity arrow + floating labels) | **Low — end-of-Saturday polish ONLY** | 4 h | Ship demo WITHOUT it; demo works at full technical bar without this. Incremental "safe" additions welcome — full playback-rate slow-mo at anomalies (30 min) without annotations is the minimal worthwhile slice if we have a spare hour. |
-| ~~A3~~ | ~~Opus Dreams interstitial~~ | **CUT** | — | Dropped per Andrew 2026-04-24 — too theatrical for engineering-judge audience |
+| A1 | Live tickertape bar at Tab 1 bottom (phase-weighted per Q5) | **High** | 1 h | Skip — storyboard works without |
+| A5 | Architecture diagram (B5) — Canva | **High** | 1 h | Hand-drawn Canva slide |
+| A6 | Remotion chrome — closing card + scene-break transitions (B5C) | **High** | 1.5 h | ffmpeg `drawtext` + Canva PNG exports |
+| **A7** | **Vision pass capability showcase (B1 overlay)** — one precomputed Opus 4.7 vision call on t=45.3 s broadcast frame, rendered as B1 crosshair/annotation overlay | **High** (Q10) | 1 h | Skip — ship with skeleton-only crosshair |
+| **A8** | **`<ThinkingVault>` component + unfilter `actions.ts:145`** — 3-column `[Considered] / [Rejected] / [Concluded]` UI for B4 split-screen climax | **High** (Q10) | 2 h | Fallback: simpler 2-pane thinking-block reveal (1 h) without 3-column structure |
+| **A2a** | **Video `playbackRate` slow-mo at anomaly timestamps (B3)** — low-risk, HTMLVideoElement API, no canvas math | **High** (Q11 low-risk slice) | 30 min | Skip — B3 works with SignalBar pulse alone |
+| A4 | Managed Agents future-vision fan-out (B5, compressed to ≤15 s still/fade per Q9) | **Medium** | 30 min (was 1.5 h — animated version cut) | Static Canva PNG fade-in |
+| **A9** | **Submission dry-runs (Sat 14:00 YouTube + 17:00 CV form)** | **High** (Q12 non-negotiable) | 1 h total | None — required |
+| A2b | Sportradar geometric annotation (angle wedge + velocity arrow + labels) | **Stretch only — dedicated slot** (Q11 high-risk per Andrew's rule) | 4 h | Ship without. Only build if everything else green AND ≥ 3 h remaining AND we allocate undivided attention |
+| ~~A3~~ | ~~Opus Dreams interstitial~~ | **CUT** | — | Dropped — too theatrical for engineering judges |
 
-**Realistic Saturday build plan**: A1 + A4 + A5 + A6 = ~5.5 h core. Remaining Saturday time → narration script + rehearsal takes. A2 becomes Sunday-morning polish if and only if the rough cut is already solid and we have ≥ 2 h spare.
+**Realistic Saturday build plan** (locked after Iter 1-4 decisions):
+- **Core (must ship)**: A1 + A5 + A6 + A7 + A8 + A2a + A4 + A9 = ~7.5 h
+- **Stretch (only if everything else green)**: A2b = 4 h with dedicated resources
+- **Sunday morning buffer**: 2-3 h for rough-cut fixes + A2b if core landed ahead of schedule
 
 ---
 
@@ -279,44 +288,71 @@ This segment paints the vision without overclaiming. Reasoned from first princip
 
 ### Saturday 2026-04-25
 
-| Time | Block | Deliverable |
-|---|---|---|
-| 08:00 | Coffee + re-read PLAN.md | Plan mental-model refreshed |
-| 08:30 | Create `demo-v1` branch. Install Remotion (and MCP). Verify Vercel prod deploy green. | Dev env ready |
-| 09:00 | **A1 build** — tickertape bar on Tab 1 | `dashboard/src/components/Tickertape.tsx` created |
-| 10:00 | **A5 build** — architecture diagram in Canva (simple boxes + arrows) + "Built with Claude Code · 5 days · MIT" overlay | `assets/diagrams/architecture.png` exported |
-| 11:00 | **A6 build** — Remotion opening title card + closing URL card | `remotion/OpeningTitle.tsx`, `remotion/ClosingCard.tsx` rendering |
-| 13:00 | Lunch + review morning work | Checkpoint |
-| 13:30 | **A4 build** — Remotion animated Managed Agents fan-out graph | `remotion/ManagedAgentsGraph.tsx` rendering |
-| 15:00 | Draft narration script — §5 scene audio columns → full prose, minimal, technical | `scripts/narration.md` v1 |
-| 16:00 | **First OBS rehearsal take (full 3 min, no audio)** — verify pacing | `renders/raw/take_1.mp4` |
-| 17:00 | Review take_1, refine narration pacing + timing marks | Feedback notes |
-| 17:30 | **Second OBS take with voice-over via MacBook mic** | `renders/raw/take_2.mp4` |
-| 19:00 | Dinner + review take_2 with outside-eye | Feedback |
-| 20:00 | **IF TIME REMAINS (≥ 2 h)**: begin A2 minimal slow-mo polish (playbackRate only at anomaly moments, no annotation layer). Otherwise skip. | `A2_minimal.mp4` optional |
-| 21:00 | Update MEMORY.md / FORANDREW.md / TOOLS_IMPACT.md with Saturday learnings | Living docs current |
-
-### Sunday 2026-04-26
+### Friday 2026-04-24 (TONIGHT — pre-flight)
 
 | Time | Block | Deliverable |
 |---|---|---|
-| 08:00 | Coffee + review Saturday takes. Choose best take as master. | Master take locked |
+| 22:00 | **Remotion pre-warm**: `bunx create-video@latest` + render Hello World → pre-downloads Chrome Headless Shell (~280 MB) and surfaces Rosetta2 traps BEFORE Saturday's deadline pressure (per Iter-1 Agent A) | Hello World MP4 rendered |
+| 22:30 | **Arm64 audit**: `node -p process.arch` MUST return `"arm64"` (Rosetta2 2× slowdown trap). `npx remotion versions` to pre-fetch Chromium. | Env verified |
+| 22:45 | **Git-log extraction for Scene 2B gitgraph**: `git log --since="2026-04-21" --pretty=format:'%H|%ai|%s' > demo-presentation/assets/git_timeline.txt` | File saved |
+| 23:00 | Sleep. | — |
+
+### Saturday 2026-04-25 (build sprint — Detective Cut)
+
+| Time | Block | Deliverable |
+|---|---|---|
+| 08:00 | Coffee + re-read §5 (Detective Cut) + §6 priority table | Plan mental model refreshed |
+| 08:30 | `git checkout -b demo-v1`. Verify Vercel prod deploy green. `vercel env ls` → ANTHROPIC_API_KEY present in Production (Iter-4 check). Smoke-test `generateScoutingReport` in prod (not just page render). | Dev env + prod verified |
+| 09:00 | **A1 tickertape** (phase-weighted signal order per Q5) | `dashboard/src/components/Tickertape.tsx` |
+| 10:00 | **A5 architecture diagram** (Canva) — "Built with Claude Code · 5 days · MIT" overlay | `assets/diagrams/architecture.png` |
+| 10:30 | **A7 Vision pass (B1 overlay)** — one precomputed Opus 4.7 vision call on t=45.3 s broadcast frame, store annotation JSON | `public/match_data/vision_pass.json` |
+| 11:30 | **A8 Thinking Vault (unfilter `actions.ts:145` + build `<ThinkingVault>` component)** — persist `{thinking, text, content_blocks}` response shape; 3-column UI | `dashboard/src/app/actions.ts` + `dashboard/src/components/ThinkingVault.tsx` |
+| **13:30** | **Lunch (30 min)** | — |
+| 14:00 | **A6 Remotion chrome** — closing URL card + scene-break transitions. Use `@remotion/mcp` for API lookup. | `remotion/ClosingCard.tsx` rendering |
+| 15:00 | **A2a slow-mo** (30 min, low-risk) — `<video>`.`playbackRate` animates to 0.25× at anomaly timestamps | Video-element ref wired |
+| 15:30 | **A4 Managed Agents fan-out** (≤ 15 s still/fade, compressed per Q9) — Canva PNG preferred, Remotion optional | `assets/diagrams/managed_agents_fanout.png` |
+| **16:00** | **A9a DRY RUN — YouTube**: upload throwaway 30-s tennis clip, check Studio → Content → Restrictions pane for Content ID flags (Iter-4 critical; tennis footage triggers auto-mute + 13 % geo-block). If muted/blocked, plan alternate audio. | Channel verified, Content ID clean |
+| **16:30** | **A9b DRY RUN — CV submission form**: load `cerebralvalley.ai/e/built-with-4-7-hackathon` submission form in browser, screenshot EVERY field. DO NOT submit. | Field list captured |
+| 17:00 | Narration script draft — §5 B1-B5 audio columns → full prose, 10 lines total, technical-clinical | `scripts/narration.md` v1 |
+| 18:00 | **OBS take 1 — silent, 2 × 90-s segments** (Iter-1 dual-take mitigation for Sequoia 20-30 min freeze). QuickTime parallel as zero-cost backup. | `renders/raw/take_1a.mp4`, `take_1b.mp4` |
+| 19:00 | Dinner + review | Feedback |
+| 20:00 | **OBS take 2 with audio — 2 × 90-s segments** via MacBook mic | `renders/raw/take_2a.mp4`, `take_2b.mp4` |
+| 21:30 | End-of-Saturday log roll — update MEMORY.md / FORANDREW.md / TOOLS_IMPACT.md via `documentation-librarian` agent | Living docs current |
+| 22:00 | **A2b decision gate**: IF all core items green AND ≥ 3 h Sunday buffer likely → allocate UNDIVIDED resources to A2b geometric annotation overlay. ELSE: skip. | A2b decision locked |
+
+### Sunday 2026-04-26 (submission day)
+
+| Time | Block | Deliverable |
+|---|---|---|
+| 08:00 | Review Saturday takes; select master | Master take locked |
 | 09:00 | **Third take (final intent)** if Saturday's takes don't meet bar | `renders/raw/take_3.mp4` (optional) |
-| 10:00 | DaVinci rough-cut assembly: master take + Remotion chrome + audio | `renders/panopticon_live_rough.mp4` |
-| 12:00 | Lunch + review rough cut with Andrew's outside-eye | Feedback |
-| 13:00 | **A4 decision gate** — is the Managed Agents future-vision graph ready? If not, use static Canva image instead | A4 status locked |
-| 13:30 | Final cut refinement: color grade, audio mix, fades | `renders/panopticon_live_final.mp4` |
-| 14:30 | H.264 export, final render QA (play full video 3 times) | Render verified |
-| 15:00 | **YouTube upload** (public, per Decision #7) | YouTube URL copied |
-| 15:30 | Write `scripts/submission_summary.md` (100-200 words) | Summary drafted |
-| 16:00 | Update GitHub README with live URL + architecture diagram + description | README current |
-| 16:30 | Final `vercel deploy --prod --yes` + HTTP 200 verification | Prod URL confirmed |
-| 17:00 | **SOFT SUBMIT** via CV platform | Submission received |
-| 17:30 | Commit + push final state | git log clean |
-| 18:00 | Draft social posts (X/LinkedIn) — do NOT post until submission confirmed | Social drafts ready |
-| 19:00 | Submission confirmation screenshot → `FORANDREW.md` + commit | Artifact captured |
-| 19:30 | **LOCKOUT** — no further submission changes | Submission final |
-| 20:00 | Deadline — we're 2.5 hours ahead | ✅ |
+| 10:00 | DaVinci rough-cut assembly: master take + Remotion chrome + A4 fade + narration audio | `renders/panopticon_live_rough.mp4` |
+| **12:00** | **Upload video UNLISTED to YouTube** (3 h ahead of plan per Iter-4 — processing + Content ID check). | YouTube upload ID |
+| 12:15 | Check YouTube Studio → Content → Restrictions. If flagged: re-export alternate audio, re-upload. | Flags reviewed |
+| 12:30 | Final cut refinement: color grade, audio mix, fades | Near-final |
+| 13:30 | H.264 export at 1920×1080 @ 60 fps, CRF 18, AAC 320 kbps. QA: play full video 3 times. | `renders/panopticon_live_final.mp4` |
+| **14:30** | **Flip YouTube Unlisted → Public**. Verify playback in incognito + phone (tests geo-block). | Public URL live |
+| 15:00 | Write `scripts/submission_summary.md` — **lead with data moat** per Iter-4 (7 signals nobody else measures) | Summary drafted |
+| 15:30 | GitHub repo SEO: description "Biometric tennis HUD powered by Claude Opus 4.7", topics tags (`claude-opus`, `computer-vision`, `tennis`, `anthropic-hackathon`), pinned README hero GIF | Repo updated |
+| **16:00** | **HARD DEPLOY FREEZE**. No more Vercel deploys after this. | Freeze begins |
+| 16:30 | Final `vercel deploy --prod --yes` + `vercel curl` HTTP 200 + smoke-test ALL Server Actions in prod | Prod verified |
+| **17:00** | **SOFT SUBMIT via CV platform**. Immediately screenshot confirmation email. | Submission received |
+| 17:30 | **Second submission attempt from different browser/incognito** to confirm edit-ability / lockout | Submission state confirmed |
+| 18:00 | Dinner | — |
+| 19:00 | Confirmation screenshot → `FORANDREW.md` + commit | Artifact logged |
+| **19:55** | **LOCKOUT** — do NOT touch submission after this | Final |
+| **20:00** | **DEADLINE** | ✅ |
+| 20:15 | **Amplification #1**: X thread-launch (6 tweets, tags `@AnthropicAI @alexalbert__ @CerebralValley @erikschluntz #BuiltWithClaude`) | Thread live |
+| 21:00 | **Amplification #2**: 47builders.fyi self-listing with banner + YouTube embed + data-moat blurb | Listing live |
+
+### Monday 2026-04-27 (pre-judging)
+
+| Time | Block |
+|---|---|
+| 08:00 | **Amplification #3**: Discord `#BuiltWithClaude` post + GIF loop + DevRel DM (Alex Albert OR Erik Schluntz) |
+| 10:00 | Cerebral Valley builder profile updated with project + repo |
+| Tue 12:00 EST | Top-6 finalists announced (`#announcements`) |
+| Tue 12:45 EST | Top-3 + side-prize winners revealed |
 
 ---
 
@@ -340,9 +376,16 @@ This segment paints the vision without overclaiming. Reasoned from first princip
   Built by Andrew Diaz with Claude Code.
   ```
 - [ ] GitHub repo PUBLIC, LICENSE file is MIT, README updated with live URL + architecture diagram + 1-paragraph description
-- [ ] Written summary 100-200 words — draft + reviewed
+- [ ] **GitHub SEO** (Iter-4): description leads with "Biometric tennis HUD powered by Claude Opus 4.7"; topics tags `claude-opus`, `computer-vision`, `tennis`, `anthropic-hackathon`; pinned README hero GIF
+- [ ] Written summary 100-200 words — draft + reviewed; **LEAD with data moat** per Iter-4 ("Panopticon Live extracts seven biomechanical fatigue signals — recovery latency, serve-toss variance, ritual entropy, crouch degradation, baseline retreat, lateral work rate, split-step latency — from standard 2D broadcast pixels that nobody else is measuring.")
 - [ ] CV submission form fields: video URL, GitHub URL, written summary all pasted
 - [ ] Screenshot of submission confirmation captured
+- [ ] Second submission attempt from incognito browser (confirms edit-ability / lockout state)
+- [ ] **Post-submit amplification tracking**:
+  - [ ] Sun 20:15 — X thread (6 tweets, tags `@AnthropicAI @alexalbert__ @CerebralValley @erikschluntz #BuiltWithClaude`)
+  - [ ] Sun 21:00 — 47builders.fyi self-listing (banner + YouTube embed + data-moat blurb)
+  - [ ] Mon 08:00 — Discord `#BuiltWithClaude` post + DevRel DM
+  - [ ] Mon 10:00 — Cerebral Valley builder profile updated
 - [ ] `FORANDREW.md` updated with submission event
 - [ ] Final commit + push
 
@@ -352,12 +395,18 @@ This segment paints the vision without overclaiming. Reasoned from first princip
 
 | Scenario | Fallback | Trigger |
 |---|---|---|
-| Remotion won't render Sat 15:00 | ffmpeg `drawtext` + Canva exports for title/close | 2 h into Remotion without working title |
-| OBS drops frames | Playwright scripted recording via `page.video()` | > 5% frame drop in a Saturday rehearsal take |
-| MacBook mic audio too roomy / noisy | ElevenLabs narration (Sat PM fallback path — Decision #2 stretch) | Rehearsal take reveals unlistenable audio |
+| Remotion won't render Sat 14:00 | ffmpeg `drawtext` + Canva PNG exports for closing card | 1.5 h into Remotion chrome without a working render |
+| OBS drops frames / Sequoia 20-30 min freeze (Iter-1) | **Dual 90-s takes + QuickTime parallel backup** (Iter-1 mitigation). ScreenCaptureKit Window Capture, not full Screen. | > 5 % frame drop OR any freeze mid-take |
+| MacBook mic audio too roomy / noisy | ElevenLabs narration (Sat PM fallback) | Rehearsal take reveals unlistenable audio |
 | Vercel prod deploy breaks Sun AM | Submit preview URL (`panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app`) + open prod-fix PR | Build failure at deploy time |
-| Opus API 401 Sun AM | Re-verify key via curl + rotate if needed (PATTERN-056 incantation) | Any 401 in `vercel logs` |
-| A2 (sportradar annotation overlay) math is wrong | Ship Scene 3 with slow-mo only, no annotation | Sat 14:00 checkpoint fails |
+| **Vercel April 2026 security incident rotated ANTHROPIC_API_KEY in Production** (Iter-4 critical) | Re-add via PATTERN-056 incantation: `vercel env add ANTHROPIC_API_KEY production "" --value "..." --yes --sensitive` | `generateScoutingReport` returns 401 in prod (but preview works) |
+| Opus API 401 Sun AM | Re-verify key via curl + rotate if needed | Any 401 in `vercel logs` |
+| **YouTube Content ID flags tennis footage** (Iter-4 — ~13 % geo-block rate on sports) | Re-export video with silent audio OR different clip; re-upload | Studio → Content → Restrictions pane shows flags |
+| **YouTube HD processing lock leaves video at 360p** (Iter-4) | Wait the full 20-60 min; verify 1080p quality in incognito before submitting URL | Public URL plays at 360p when tested |
+| **New-channel YouTube upload cap** | Complete phone verification BEFORE Sat 14:00 dry run | Upload blocked at 15-min cap |
+| **CV submission form rejects, post-submit edit unavailable** | Discord `#questions` channel + email moderators; also submit backup via any alternate channel CV provides | Form submit fails OR confirmation email doesn't arrive within 15 min |
+| A2b geometric annotation math is wrong | Ship with A2a slow-mo only (no annotation overlay). A2b is stretch-only per Q11; has zero demo-critical dependency. | Sat 20:00 gate: A2b not working with ≥ 2 h clean-rendering time |
+| Time pressure: no final render by Sun 16:00 | Submit rough cut with brief apology in summary; iterate to v2 if final-round live-judging advances | 16:00 Sun without final render |
 | Time pressure: no final render by Sun 16:00 | Submit best rough cut with apology note in summary | 16:00 Sun |
 | CV submission platform errors | Discord #questions channel, screenshot error, email moderators | Any submit error |
 

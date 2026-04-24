@@ -564,3 +564,26 @@ Secondary meta-learning: **the user's AskUserQuestion batch is a design choice, 
 - `~/.claude/plans/phase-6-demo-production.md` (strategic trail, ~80 lines).
 - `demo-presentation/{assets/references, scripts, remotion, audio, renders}/` (directory skeleton for Saturday's build sprint).
 - No commits this session (docs consolidation is a read-only audit + synthesis pass; Andrew will audit + commit himself per task instructions).
+
+### Phase 6 continued (Apr 24 Fri PM) — Dialectical Steelman Sprint
+
+After the morning kickoff (3-parallel-research pass captured above), ran a 4-iteration dialectical-mapping steelman Friday evening (~90 min wall-clock) to stress-test the plan before Saturday's build sprint. Single-session tool ROI addendum below.
+
+| Tool / Pattern | Outcome | ROI | Notes |
+|---|---|---|---|
+| `.claude/skills/dialectical-mapping-steelmanning` (invoked via `/dialectical-mapping-steelmanning`) | 4 iterations × 2 orthogonal Agent calls = 8 agent passes; ~30 distinct non-obvious findings (GOTCHA-024 through 028, PATTERN-061 through 066, DECISION-012/013, WORKFLOW-007) | **HIGHEST-ROI skill invocation of Phase 6 planning** | Orthogonal Alpha/Beta pair structure is the operative mechanism, not the number of agents or the agent type. Captured as WORKFLOW-007. |
+| `mcp__perplexity__perplexity_search` + `mcp__perplexity__perplexity_ask` | Grounded all 8 iteration agents against 2025–2026 sources: GitHub OBS issues #10636 + #2760 + forum 192890 (GOTCHA-024); Remotion docs + Rosetta 2 runtime (GOTCHA-025); Anthropic Opus 4.7 release notes + SDK thinking-block semantics (GOTCHA-026); YouTube Creator Content ID + HD-lock + new-channel upload cap behavior (GOTCHA-027); Vercel April 2026 security incident reports + env-var rotation playbook (GOTCHA-028); ChaplinAI / Advids / Guidejar demo-video research (PATTERN-065); Greg Ceccarelli Aug 2025 + #BuiltWithClaude Screen Demo Skill + Anthropic 16-min live-build video (PATTERN-062); post-winner X/Discord amplification audit (PATTERN-066) | **HIGH** — citations distinguish "model priors" from real 2025–2026 reality; without Perplexity grounding, Iter-1 GOTCHA-024 would have been a guess instead of three independent corroborating sources | Required ≥ 3 external citations per agent pass. Non-Perplexity-grounded iterations collapse to noise. |
+| Orthogonal Alpha/Beta agent pair per iteration | Surfaced convergent-failure findings: Iter-2 Skeptic AND Iter-3 narrative-arc lens independently flagged the Managed Agents animated Scene 5B as net-negative → DECISION-012 cut. Two orthogonal lenses converging on the same finding is higher-confidence than either single lens. | **HIGH** | This is the "convergence signal" that Iter-1 single-agent runs cannot produce. |
+| Iteration convergence-based stopping rule | Declared diminishing returns at Iter 4 (net-new findings/iteration dropped below the 3 threshold; Iter 5–10 projected to fall further). Saved ~2 h of diminishing-return iterations AND preserved Saturday build time. | **HIGH** | Hard threshold, not "one more for safety." Iter 4 itself was the highest-signal iteration — stopping at 2 iterations would have missed PATTERN-066 + GOTCHA-028 entirely; stopping later than 4 would have been wasted. |
+
+#### Meta-learning — orthogonal prompt framing > agent-type difference
+
+All 8 iteration agents were `general-purpose` subagents; the orthogonality that generated net-new insight came from PROMPT framing (risk/skeptic vs creative/builder), not from agent-type selection. This re-confirms a pattern visible earlier in the project (Phase 5 PR-review bot vs. local `python-reviewer`): the judgmental lens is what matters; the agent-type is mostly plumbing. For future multi-agent review panels, design the lens set BEFORE choosing agent types — picking agent types first anchors on "what tools do I have" instead of "what failure modes do I need to cover."
+
+#### Artifacts updated (this session)
+
+- `/Users/andrew/Documents/Coding/hackathon-demo-v1/MEMORY.md` — DAY 3 CONTINUED section (5 GOTCHAs + 6 PATTERNs + 2 DECISIONs + 1 WORKFLOW).
+- `/Users/andrew/Documents/Coding/hackathon-demo-v1/FORANDREW.md` — Friday PM subsection under 2026-04-24 Phase 6 Demo Production Kickoff.
+- `/Users/andrew/Documents/Coding/hackathon-demo-v1/demo-presentation/PLAN.md` — storyboard v4 Detective Cut + risk-stratified add-ons + Sat/Sun timeline (updated in parallel to this docs pass).
+- `/Users/andrew/Documents/Coding/hackathon-demo-v1/demo-presentation/CLAUDE.md` — narrative discipline refinement (updated in parallel to this docs pass).
+- `/Users/andrew/.claude/plans/pull-from-remote-main-humble-forest.md` — iteration trail §10 + master plan §11.

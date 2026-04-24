@@ -65,9 +65,10 @@ They do NOT value:
 ### 3.3 Narration rules
 
 - **Every line carries information** — a fact, a number, a mechanism. No "watch this", no "here's where it gets interesting", no "the legs are going" unless backed by a sigma value.
-- **Minimize footprint** — target < 15 total narration lines across the 3 minutes. Silence is OK. Silence + a pulsing red bar is better than McEnroe-voice.
+- **Minimize footprint** — target ~10 total narration lines across the 3 minutes (Detective Cut v4 spec). Silence is OK. Silence + a pulsing red bar is better than McEnroe-voice.
 - **Cadence**: measured, calm, deliberate. Think Tim Cook at WWDC explaining a feature. Not a sports broadcaster emoting on a break point.
 - **Let the product speak** — the HUD, SignalBars, anomaly pulses, Opus markdown report ARE the demo. Narration is scaffolding.
+- **Detective Cut voice**: the narrator is a forensic observer, not a sales-pitch narrator. First narration line after the B1 cold-open crosshair IS the thesis: *"Nobody on the broadcast called this. Our system flagged it at frame 1,359."* Every subsequent line maintains that forensic register.
 
 ### 3.4 Visibility of Claude Code as the build environment
 

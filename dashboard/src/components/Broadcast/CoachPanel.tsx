@@ -120,7 +120,13 @@ function InsightCard({ insight }: { insight: CoachInsight }) {
       style={{
         background: colors.bg1,
         borderColor: colors.border,
-        maxHeight: thinkingOpen ? 260 : 88,
+        // maxHeight scales to the col-span-6 center column (half width). The
+        // previous 88/260 clamps were sized for the col-span-12 full-width
+        // layout — at half width the same text wraps to ~6-7 lines and was
+        // being clipped by `overflow: hidden`. Allow ~10 lines of body text
+        // collapsed (220px) and the additional thinking pre-block when open
+        // (380px = 220 + 140 thinking + 16 gap + slack).
+        maxHeight: thinkingOpen ? 380 : 220,
         overflow: 'hidden',
       }}
     >

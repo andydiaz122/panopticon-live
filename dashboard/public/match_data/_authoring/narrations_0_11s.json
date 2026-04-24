@@ -1,0 +1,62 @@
+[
+  {
+    "narration_id": "n_0000_break_point_setup",
+    "timestamp_ms": 0,
+    "match_time_range_ms": [0, 4999],
+    "narration_text": "BREAK POINT. This is the save. Our server is off-camera regrouping; his opponent holds the far baseline, waiting. The next point either holds the game or flips it.",
+    "biometric_hook": null,
+    "player_profile_ref": null,
+    "source": "hand_authored",
+    "narration_kind": "broadcast",
+    "visible_action_ref": "frames/t_0000.jpg",
+    "authoring_note": "Revised from plan A3 - frame grounding shows Player A off-camera 0-8s. No fabricated 'Player A enters court' at t=0. Generic 'our server' pronoun used because specific player identity not verified."
+  },
+  {
+    "narration_id": "n_0005_tempo_reset",
+    "timestamp_ms": 5000,
+    "match_time_range_ms": [5000, 8999],
+    "narration_text": "Our target is taking the full shot clock. On a break point, tempo matters as much as pace. This walk is the first reset of the telemetry we will track across the clip.",
+    "biometric_hook": null,
+    "player_profile_ref": null,
+    "source": "hand_authored",
+    "narration_kind": "broadcast",
+    "visible_action_ref": "frames/t_0005.jpg",
+    "authoring_note": "No decimal citation - qualitative only. No ATP rank / serve-velocity references since the actual player identity is not verified."
+  },
+  {
+    "narration_id": "n_0009_enters_frame",
+    "timestamp_ms": 9000,
+    "match_time_range_ms": [9000, 9999],
+    "narration_text": "The server steps into frame, racket in hand. The walk itself is ritual - it is how the ritual-entropy signal will know whether his pre-serve routine is holding shape under pressure.",
+    "biometric_hook": "ritual_entropy_delta",
+    "player_profile_ref": null,
+    "source": "hand_authored",
+    "narration_kind": "broadcast",
+    "visible_action_ref": "frames/t_0009.jpg",
+    "authoring_note": "Future-tense on ritual_entropy - the signal has not sampled yet for this player. Hook names the signal without citing a value. G39 compliant."
+  },
+  {
+    "narration_id": "n_0010_baseline_settle",
+    "timestamp_ms": 10000,
+    "match_time_range_ms": [10000, 10999],
+    "narration_text": "Settling to the baseline. Racket at the hip, back to us, orange strings flashing. We will have toss-variance in centimeters the instant the ball leaves his hand.",
+    "biometric_hook": "serve_toss_variance_cm",
+    "player_profile_ref": "playing_style",
+    "source": "hand_authored",
+    "narration_kind": "broadcast",
+    "visible_action_ref": "frames/t_0010.jpg",
+    "authoring_note": "Future-tense on serve_toss_variance_cm - unit is cm per G44 fix. No decimal cited. Dropped the 'five-to-six ball-bounces' claim since it is not visible in the 0-11s window."
+  },
+  {
+    "narration_id": "n_0011_serve_contact",
+    "timestamp_ms": 11000,
+    "match_time_range_ms": [11000, 11999],
+    "narration_text": "Toss is up. Left arm extended, right arm loading the racket - contact in a fraction of a second. First serve on the save attempt.",
+    "biometric_hook": null,
+    "player_profile_ref": null,
+    "source": "hand_authored",
+    "narration_kind": "broadcast",
+    "visible_action_ref": "frames/t_0011.jpg",
+    "authoring_note": "Plan A3 cited split_step_latency_ms as hook - REMOVED. split_step_latency is the RETURNER's signal; our server is serving here. Naming it would be technically wrong."
+  }
+]

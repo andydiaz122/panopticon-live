@@ -1,5 +1,15 @@
 # PANOPTICON LIVE — 3-Minute Demo Storyboard
 
+> **🚨 CANONICAL STORYBOARD: [`demo-presentation/PLAN.md`](../demo-presentation/PLAN.md) §5 — v4 Detective Cut (locked 2026-04-24 PM after 4-iteration dialectical review).**
+>
+> The v4 Detective Cut opens COLD on the anomaly (no title card), compresses Managed Agents to ≤ 15 s, and engineers the 1:58 climax frame where left-pane anomaly annotation and right-pane Opus thinking cite the same number (`crouch_angle: -11.69°`). That version supersedes the founder-voice 4-bucket structure below.
+>
+> This file is preserved as the v2 founder's reference (for tone / voiceover word choice) and as the OBS recording setup reference. For beat-by-beat shot list, narration lines, and Saturday build schedule use the v4 canonical source.
+
+---
+
+## Target runtime, deadline, voice (unchanged across versions)
+
 **Target runtime**: 2:55 (5-second safety margin under the 3:00 hard cap).
 **Submission deadline**: Sunday 2026-04-26, 8:00 PM EST. Target upload: 7:30 PM EST.
 **Founder-voiced**: first-person plural, short sentences, numbers over adjectives, zero hedging.

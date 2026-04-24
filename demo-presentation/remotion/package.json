@@ -1,0 +1,26 @@
+{
+  "name": "remotion",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render:hello": "remotion render src/index.ts hello-world ../renders/hello-world.mp4",
+    "render:b0": "remotion render src/index.ts b0-opener ../renders/b0-opener.mp4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.451",
+    "@remotion/renderer": "^4.0.451",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "remotion": "^4.0.451"
+  }
+}

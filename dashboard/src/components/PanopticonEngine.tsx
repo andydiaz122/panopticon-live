@@ -51,17 +51,38 @@ export default function PanopticonEngine() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const resizeCanvasToContainer = () => {
-      const { clientWidth, clientHeight } = container;
-      if (clientWidth > 0 && clientHeight > 0) {
-        canvas.width = clientWidth;
-        canvas.height = clientHeight;
-      }
+    // PATTERN-067 — Canvas Resize Hardening ("judge's laptop bug"):
+    // Observe the <video> element directly (canonical per
+    // react-30fps-canvas-architecture skill), not the container. On viewport
+    // breakpoint changes, fullscreen toggles, or DPR changes between monitors,
+    // the video's bounding rect is the authoritative source for where the
+    // skeleton must be drawn. Canvas BUFFER dimensions are set to
+    // clientW*DPR × clientH*DPR so retina laptops render crisp strokes; the
+    // ctx is `scale(DPR, DPR)`'d so per-frame `x * canvas.width` math stays
+    // correct in CSS pixels (not buffer pixels).
+    const resizeCanvasToVideo = () => {
+      const rect = video.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
-    resizeCanvasToContainer();
+    resizeCanvasToVideo();
 
-    const ro = new ResizeObserver(resizeCanvasToContainer);
+    // Observe BOTH the video (direct size signal) and container (breakpoint +
+    // aspect-ratio changes). Same callback is idempotent.
+    const ro = new ResizeObserver(resizeCanvasToVideo);
+    ro.observe(video);
     ro.observe(container);
+    // DPR can change when the user drags the window between a retina + non-
+    // retina monitor mid-demo. `matchMedia` fires on DPR change; fall through
+    // to a resize so the canvas buffer stays aligned.
+    const dprMql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    const onDprChange = () => resizeCanvasToVideo();
+    dprMql.addEventListener('change', onDprChange);
 
     let rafId = 0;
     const tick = () => {
@@ -81,18 +102,23 @@ export default function PanopticonEngine() {
         data.keypoints.length,
       );
       const frame = data.keypoints[frameIdx];
+      // PATTERN-067: with DPR scaling, the canvas BUFFER is clientW*DPR but
+      // ctx is `setTransform(DPR, 0, 0, DPR, 0, 0)`'d. Paint math uses CSS
+      // pixel space — pull from style dimensions, not buffer dimensions.
+      const cssW = canvas.clientWidth;
+      const cssH = canvas.clientHeight;
       if (!frame) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, cssW, cssH);
         return;
       }
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, cssW, cssH);
       // Single-player scope — Player A only (DECISION-008).
       if (frame.player_a && frame.player_a.bbox_conf >= MIN_BBOX_CONF) {
         drawPlayerSkeleton(
           ctx,
-          canvas.width,
-          canvas.height,
+          cssW,
+          cssH,
           frame.player_a,
           COLOR_PLAYER_A,
         );
@@ -103,6 +129,7 @@ export default function PanopticonEngine() {
     return () => {
       cancelAnimationFrame(rafId);
       ro.disconnect();
+      dprMql.removeEventListener('change', onDprChange);
     };
     // videoRef + matchDataRef are stable across renders from the provider.
     // eslint-disable-next-line react-hooks/exhaustive-deps

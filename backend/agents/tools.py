@@ -37,7 +37,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from backend.db.schema import (
     MatchPhase,
+    PlayerProfile,
     PlayerSide,
+    QualitativeNarration,
     SignalName,
     SignalSample,
     StateTransition,
@@ -104,6 +106,29 @@ class GetMatchPhaseInput(_FrozenModel):
     t_ms: int = Field(ge=0)
 
 
+class QueryVideoContextInput(_FrozenModel):
+    """Inputs to query_video_context_mcp: hand-authored broadcaster narration over a time window.
+
+    Stubbed-MCP tool (G9 — provenance="stubbed_mcp" in trace). Reads from
+    authored narrations loaded during precompute's A6 ingestion. Returns
+    narration lines whose `timestamp_ms` falls within `time_range_ms`.
+    """
+
+    time_range_ms: tuple[int, int] = Field(
+        description=(
+            "Inclusive (start_ms, end_ms) window in match-time milliseconds. "
+            "Narrations whose timestamp_ms falls in this window are returned."
+        ),
+    )
+    video_uri: str = Field(
+        default="local:utr_match_01_segment_a.mp4",
+        description=(
+            "Video identifier. Stubbed for this hackathon — any value accepted; "
+            "production would route this to a real Video MCP server."
+        ),
+    )
+
+
 # ──────────────────────────── Tool context (read-only data store) ────────────────────────────
 
 
@@ -113,6 +138,13 @@ class ToolContext:
 
     Constructed once per coach/designer invocation; passed through to each tool executor.
     Frozen to prevent accidental mutation by tool code.
+
+    A9 additions (`narrations`, `player_profile`): hand-authored broadcaster
+    content. The `query_video_context_mcp` tool reads `narrations` to return
+    time-windowed narration lines. `player_profile` is referenced by the
+    Scouting Committee's user prompts so the swarm cites ATP stats verbatim.
+    Both default to empty/None — when no `_authoring/` directory exists, the
+    tool still functions and returns an empty list.
     """
 
     match_id: str
@@ -120,6 +152,11 @@ class ToolContext:
     transitions: list[StateTransition] = field(default_factory=list)
     match_phase: MatchPhase = "UNKNOWN"
     """Phase 2 simplification: no phase tracker yet; defaults to UNKNOWN. Phase 3 may wire a score-reader."""
+    narrations: tuple[QualitativeNarration, ...] = ()
+    """A9: hand-authored broadcaster narrations. Tuple (not list) per G35 —
+    frozen=True doesn't stop list.append()."""
+    player_profile: PlayerProfile | None = None
+    """A9: authored Hurkacz ATP profile card. Referenced by all 3 agents."""
 
 
 # ──────────────────────────── Helpers ────────────────────────────
@@ -292,6 +329,53 @@ def execute_get_match_phase(ctx: ToolContext, raw_input: dict[str, Any]) -> dict
     }
 
 
+def execute_query_video_context_mcp(ctx: ToolContext, raw_input: dict[str, Any]) -> dict[str, Any]:
+    """Stubbed-MCP tool — return hand-authored broadcaster narrations for a time window.
+
+    Implementation reads from `ctx.narrations` (loaded during precompute A6
+    ingestion from `_authoring/narrations_*.json`). Provenance tag on the
+    corresponding TraceToolCall is set to `"stubbed_mcp"` so the UI renders
+    a `STUB · Video Context API` chip (G9).
+
+    Contract (documented on the TOOL_SCHEMAS entry): the LLM receives a
+    real tool response. In production V2, this executor swaps to a real
+    MCP dispatch; the LLM-visible schema + return shape stays identical.
+    """
+    inp = QueryVideoContextInput.model_validate(raw_input)
+    lo_ms, hi_ms = inp.time_range_ms
+    if lo_ms > hi_ms:
+        return {
+            "error": "invalid_range",
+            "detail": f"time_range_ms start ({lo_ms}) must be <= end ({hi_ms})",
+        }
+
+    hits: list[dict[str, Any]] = []
+    for n in ctx.narrations:
+        if lo_ms <= n.timestamp_ms <= hi_ms:
+            hits.append(
+                {
+                    "narration_id": n.narration_id,
+                    "timestamp_ms": n.timestamp_ms,
+                    "match_time_range_ms": list(n.match_time_range_ms),
+                    "narration_text": n.narration_text,
+                    "biometric_hook": n.biometric_hook,
+                    "player_profile_ref": n.player_profile_ref,
+                    "narration_kind": n.narration_kind,
+                },
+            )
+
+    return {
+        "video_uri": inp.video_uri,
+        "time_range_ms": [lo_ms, hi_ms],
+        "narration_count": len(hits),
+        "narrations": hits,
+        "_provenance_note": (
+            "Stubbed — read from local _authoring/ JSON. In V2 this would "
+            "route to a real Video MCP server."
+        ),
+    }
+
+
 # ──────────────────────────── Anthropic-format tool schemas ────────────────────────────
 
 
@@ -341,6 +425,28 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     ),
 ]
 
+# A9: Analytics-Specialist-scoped extra tool schema (G19 — per-agent scoping
+# preserves Technical/Tactical cache-warm state; only Analytics pays the
+# one-time cache miss on tools-block mutation per G34).
+VIDEO_CONTEXT_MCP_SCHEMA: dict[str, Any] = _make_schema(
+    "query_video_context_mcp",
+    (
+        "Fetch hand-authored BROADCASTER NARRATIONS for a specific match-time window. "
+        "Returns narration lines describing the visible broadcast action (player "
+        "walking to baseline, toss initiation, etc.) with optional `biometric_hook` "
+        "naming the signal each narration primes. Use this as the FIRST call in "
+        "your analysis to ground quantitative signal findings in the qualitative "
+        "broadcast narrative. The tool is backed by a local stub in this run; its "
+        "response is a real tool result that enters the conversation as the next "
+        "user turn."
+    ),
+    QueryVideoContextInput,
+)
+
+ANALYTICS_SCOPED_TOOLS: list[dict[str, Any]] = TOOL_SCHEMAS + [VIDEO_CONTEXT_MCP_SCHEMA]
+"""Analytics Specialist sees all base tools PLUS the video context MCP (A9).
+Technical + Tactical agents keep the cache-warm shared TOOL_SCHEMAS list."""
+
 # Registry for dispatching tool_use blocks coming back from the Opus stream.
 ToolExecutor = Callable[[ToolContext, dict[str, Any]], dict[str, Any]]
 
@@ -349,7 +455,12 @@ TOOL_EXECUTORS: dict[str, ToolExecutor] = {
     "compare_to_baseline": execute_compare_to_baseline,
     "get_rally_context": execute_get_rally_context,
     "get_match_phase": execute_get_match_phase,
+    "query_video_context_mcp": execute_query_video_context_mcp,
 }
+
+STUBBED_MCP_TOOLS: frozenset[str] = frozenset({"query_video_context_mcp"})
+"""Tools whose TraceToolCall/TraceToolResult should carry provenance='stubbed_mcp'
+(G9). Consulted by scouting_committee._EventRecorder when stamping trace events."""
 
 
 def dispatch_tool(ctx: ToolContext, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:

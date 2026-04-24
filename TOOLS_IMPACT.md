@@ -528,6 +528,21 @@ The combined session shipped PR #4 with 4 commits and no hot-fix revert. That's 
 | **`run_golden_data.sh` preflight script** | Founder-only helper: exports ANTHROPIC_API_KEY length check (GOTCHA-033 defense), runs precompute with canonical args, checks exit code. | **HIGH** (saves 10-15 min of manual arg-assembly + defends against env-var corruption) | New script shipped this phase. Preflight catches the GOTCHA-033 class of "invisible byte" bugs via `echo "len=${#ANTHROPIC_API_KEY}"` before the ~2-min Anthropic call surface is touched. |
 | **HUD layout width-clamp repair** | STATE TelemetryLog moved into center column under CoachPanel (adjacent to right-rail SIGNAL log); CoachPanel `maxHeight` clamp bumped from 88/260 to 220/380 to fit col-span-6 wrapped text. | **MEDIUM** (visual polish, pre-recording) | Meta-observation: width-assumption-baked-into-pixel-clamp is the layout-level analog of GOTCHA-030 (JSON Syntax Trap from truncation marker) — both involve a UI-rendering assumption that stops holding at real content sizes. |
 
+### Backend Surgery Bootstrap (pre-Golden-Run, ~13:00-14:15 EST)
+
+Before the full Golden Run fired, the morning session ran a **3-Step Bootstrap** (PATTERN-076) that shipped the display-only G43 architecture (DECISION-016) and verified it against the 4-Criteria Protocol (PATTERN-075). Tools that carried the morning:
+
+| Tool / Pattern | Outcome | ROI | Notes |
+|---|---|---|---|
+| **`video-frame-validator` agent (single-pass per G38)** | Extracted frames at 1 s intervals for the demo window. Discovered Player A is NOT in frames 0-8s — only Player B visible; `BREAK POINT` scoreboard overlay active; Player A enters at t=9s, serves at t=11s. **Invalidated the plan's t=0-8s narration grid.** | **CRITICAL** (saved shipping a narration track that contradicts what judges literally see; whole class of authoring errors prevented by one gate) | Captured as GOTCHA-042 ("Frame-ground BEFORE authoring"). Extends `video-validation-protocol` skill's remit from demo-playback validation to pre-authoring narration grounding. |
+| **`ffmpeg -ss <t> -frames:v 1` one-liner** | Cheap primary-source sanity check on "what's on screen at time T." Ran inside the video-frame-validator agent's single-pass loop. | **HIGH** (canonical pre-authoring gate) | Alternative — trusting the plan's visual assumptions — would have shipped wrong narration. Rule: the video file itself is the only reliable primary source. |
+| **Pydantic v2 model additions** (`QualitativeNarration`, `PlayerProfile`, `AuthoredStateTransition`, `ProvenancedValue`, `ProfileMeta`, `RallyMicroPhase`, `NarrationKind`, `NarrationSource`, `ProvenanceTag`) in `backend/db/schema.py` | Every authored-content inter-module contract mechanically enforced. No dict hallucinations. `provenance="stubbed_mcp"` stamping enabled end-to-end for honest disclosure. | **HIGH** (type safety carried through the entire display-only stack + made the 4-Criteria verification mechanical) | Mirror TS types in `dashboard/src/lib/types.ts` added with ALL fields OPTIONAL per G28. The Pydantic v2 discipline from earlier phases paid compound interest here — every new model was trivially self-documenting. |
+| **Ad-hoc 4-Verification-Criteria checks** (jq/grep against `match_data.json` + `agent_trace.json`) | (a) `display_narrations`/`display_transitions`/`display_player_profile` populated, (b) `query_video_context_mcp` is FIRST tool call in Analytics trace with `provenance="stubbed_mcp"`, (c) ToolResult carries authored text, (d) `signals[].state` still pinned to 4-member `PlayerState` (no `RallyMicroPhase` leakage). | **CRITICAL** (verified display-only vs live partition held; prevents silent regression class where authored content leaks into telemetry stream) | Captured as PATTERN-075 — generalizes to any future "display-only vs live" architectural change. |
+| **Shell-wrapper surgical fixes** to `run_golden_data.sh` | Added `"$@"` forwarding to `python -m backend.precompute`; relaxed hard ANTHROPIC_API_KEY preflight when `--skip-scouting-committee` is in args. Unblocks Step 1 baseline-without-swarm. | **HIGH** (enables the cost-minimization discipline of WORKFLOW-009 — baseline before spending Anthropic budget) | 2-line script fix unlocked the "baseline → frame-ground → full swarm" bootstrap sequence. |
+| **Dynamic identity rule (G10)** in `_build_baseline_context` of `scouting_committee.py` | Profile present → `"PROFILE DETECTED: You MUST refer to {player_profile.name} and cite specific stats"`; profile absent → strict anonymity. Unblocked profile citation while preserving the anti-hallucination guardrail for unprofiled runs. | **HIGH** (narrative density unlocked without breaking anti-hallucination invariant) | Captured as DECISION-014 (locked) + USER-CORRECTION-034 (Hurkacz → UTR Pro A anonymization). Verified: all 3 agents cite "UTR Pro A", zero hallucinated player names. |
+
+**Meta-pattern: the 3-Step Bootstrap saved ~$1-1.60 + ~3 hours wall-clock** vs. naïve-iterate approach of launching the full swarm first and iterating post-swarm on authoring errors. Every Step 2 correction made pre-swarm is a Step 3 API call avoided. WORKFLOW-009 institutionalizes the discipline.
+
 ### Skills that FIRED during Phase A
 
 - `panopticon-hackathon-rules` (prime directive carried through)
@@ -539,6 +554,7 @@ The combined session shipped PR #4 with 4 commits and no hot-fix revert. That's 
 
 ### Agents that FIRED during Phase A
 
+- `video-frame-validator` — single-pass frame extraction + visual verification across the demo window. Discovered Player A off-screen 0-8s. Extends the skill's remit from playback validation to pre-authoring grounding. GOTCHA-042.
 - `general-purpose` agent × 6 for cherry-pick execution (inside isolated worktree, `mode: "acceptEdits"` every time — zero plan-mode stalls)
 - `code-reviewer`, `python-reviewer`, `typescript-reviewer`, `security-reviewer` — parallel orthogonal panel, ~2 min wall time for all 4
 
@@ -565,3 +581,88 @@ The combined session shipped PR #4 with 4 commits and no hot-fix revert. That's 
 **Orthogonality over quantity**, as articulated in global CLAUDE.md, is a force multiplier when the stakes are merge-level or deploy-level. 4 specialized reviewers running in parallel caught 3 HIGH findings nobody else would have surfaced; 4 `code-reviewer` instances running in parallel would have caught the same 1-2 findings 4 times. The discipline is to NAME each reviewer's distinct failure-mode lens BEFORE dispatching, and collapse redundant lenses.
 
 **PATTERN-062 is now the canonical merge methodology for this project.** Any future multi-commit cross-branch merge — including post-submission PR prep against main — should use the 4-layer recipe. The ROI compounded specifically because the session required TWO merges in sequence; each time the recipe executed cleanly, building confidence that the main workdir stayed pristine while risky operations happened inside the worktree.
+
+---
+
+## Phase 6 — Final 20 % Polish Sprint (2026-04-24 PM)
+
+Post-backend-fortress team-lead override: pivot from engineering to UX craft. 5 polish directives executed in ~90 min edit + ~5 min validation. ZERO new correctness fixes — every directive hardened the demo perimeter.
+
+### Tools used with highest ROI
+
+- **`Skill` tool → `react-30fps-canvas-architecture`** — single-invocation load of the canonical canvas-resize pattern. Informed D3 (PATTERN-070 DPR-aware Canvas Resize) directly. ROI: replaced what would have been 30 min of "read the skeleton canvas code + figure out how to DPR-scale" with a 60 s skill load + 15 min surgical edit.
+- **`Edit` tool with narrow `old_string` scopes** — 10 edits across 5 files, each with enough surrounding context to be unambiguous but scoped tight enough for surgical review. Zero edit collisions, zero retry loops.
+- **`Bash` + `curl`** — smoke tests on the running dev server (HTTP 200 + page HTML grep for "LOADING BIOMETRIC" / "Broadcast narration" / "STUB") confirmed HMR picked up every edit without a single broken render.
+- **`TaskCreate`/`TaskUpdate`** — set up 8 new tasks (consolidation + 5 directives + validation + logging), clean in-progress/completed transitions, kept progress legible across an interrupted session.
+
+### Tools NOT used (deliberately — diminishing returns)
+
+- **Multi-agent review panel (`/code-review` wrapping `code-reviewer` + `security-reviewer` + `typescript-reviewer`)** — scope was surgical (≤300 LoC across 5 files, each directive owning a distinct concern). Panel would have surfaced 0-1 findings for 4× the wall clock. Saved ~20 min for an orthogonal-lens review that wasn't earning its cost. Captured lesson: reserve multi-agent panels for merge-level/deploy-level stakes, not polish sprints.
+- **`Perplexity`/`Context7` MCP** — directives were prescriptive (the team lead named each API signature and behavior). External research would have been noise. Non-use case worth naming: when the user hands you a spec, call the code, not the web.
+- **`/e2e` Playwright** — existing manual browser scrub at `localhost:3000` + `curl`/`grep` smoke test covered the visual regression surface for the 5 directives. Playwright adds value when you have a test journey to regress; these were single-page additions where the journey is "did the page render with banner + loading state." Save `/e2e` for Saturday's full storyboard rehearsal.
+- **`demo-director` agent dispatch** — the v4 Detective Cut storyboard was ALREADY written in `demo-presentation/PLAN.md`. Dispatching an agent to re-write or review it would have been redundant. Consolidation was a file-copy task, not a reasoning task.
+- **`documentation-librarian` agent** — I wrote MEMORY.md / FORANDREW.md / TOOLS_IMPACT.md myself. Dispatching the agent would have added latency for formatting an already-scoped append. Rule: dispatch the librarian for END-OF-DAY log rolls that aggregate multi-session patterns; do direct append for in-session entries.
+
+### Skills NOT used (would have been redundant)
+
+- **`awwwards-animations`** / **`animation-designer`** — my Framer Motion usage was a 3-line per-property transition override, not an animation choreography. Loading these skills would have been 50+ tokens for zero additional guidance.
+- **`nextjs-hydration-traps`** — LoadingScreen is a presentation-layer component that renders AFTER hydration; the hydration-traps skill is about SSR/RSC prop death, a different failure mode.
+- **`hackathon-demo-director`** — the storyboard was already locked (v4 Detective Cut after 4 iterations of dialectical steelmanning in the sibling worktree). Loading the skill would have been "re-plan the plan."
+- **`vercel-react-best-practices`** — deployment wasn't touched this phase. The Vercel perimeter was strengthened defensively (GOTCHA-039 LoadingScreen) but not via deploy-config changes.
+
+### Validation suite (5 min total)
+
+- `./node_modules/.bin/tsc --noEmit` → exit 0
+- `./node_modules/.bin/vitest run` → 96/96 tests pass (6 test files)
+- `curl -s http://localhost:3000 | grep -oE "LOADING BIOMETRIC|Broadcast narration|STUB|UTR Pro A"` → 4/4 expected strings present
+- `curl -s /match_data/utr_01_segment_a.json` → `display_narrations: 5`, `display_transitions: 4`, `display_player_profile.name: UTR Pro A`
+
+### Meta-learning this phase
+
+**The Final 20 % is UX craft, not engineering.** This phase did not add a single correctness fix. Every directive was about masking, blocking, or hardening the PERIMETER. The engineering was done; the presentation discipline is categorically the highest-ROI work of hackathon week because judges evaluate what they SEE, not what the code DOES.
+
+**Tool orthogonality mapping BEFORE editing is a workflow gate.** Name each directive's primary file surface before any code moves. Same-file collisions force serialization; distinct-file directives unlock parallel-safe execution (~30 % time savings). WORKFLOW-008.
+
+**The `pointer-events: auto` on a blocker inner panel is the single most load-bearing CSS rule for cold-boot defense.** Without it, the LoadingScreen would render over the video but video's native controls would still receive clicks through the transparent parent. PATTERN-072 names this explicitly so future overlays don't forget it.
+
+---
+
+## Phase 6 — Friday Pull-Forward Sprint (2026-04-24 Evening)
+
+Pulled Saturday's code-level items (A1 + A2a + A7 + A8-minimal) forward into Friday evening to buy multi-hour slack on Saturday's physical-presence recording day.
+
+### Tools used with highest ROI
+
+- **`AskUserQuestion` tool** — two early scope questions (A8 aggressiveness + handoff-doc treatment) shaped the entire sprint before any code moved. Saved ~1 h of scope-guess-and-correct. Tool-use lesson: spend 30 s asking to save 30 min executing wrong scope.
+- **`Bash` + `ffmpeg` one-liner** — A7 frame extraction (`-ss 45.3 -frames:v 1 -q:v 2`). 180 KB JPEG in ~100 ms. Would have taken 10 min to wire a Python ffmpeg-wrapper.
+- **`Anthropic` Python SDK (vision)** — A7 biomechanics observation on the t=45.3 s frame. 3 335 input tokens (mostly image) + 207 output tokens = well under $0.05. Returned parseable JSON on first call thanks to the ```json fence directive in the prompt. ROI: $0.05 for a demo-critical cold-open overlay.
+- **`Write` + `Edit` for surgical hook + component** — `useSlowMoAtAnomalies.ts` (117 LoC, pure function + rAF wrapper) + `Tickertape.tsx` (110 LoC, phase-weighted component) + `useSlowMoAtAnomalies.test.ts` (96 LoC, 15 test cases). Zero cross-file coupling.
+- **`vitest run` on a single test file** — 15 new tests in 289 ms. Pure-function testability of `computePlaybackRate` is a direct consequence of the hook's design (ramp/hold/exit math extracted into a side-effect-free function).
+- **`Skill` tool for `react-30fps-canvas-architecture`** (inherited from polish sprint) — already loaded the canonical DPR-aware canvas pattern, so A2a's rAF-slaved design was informed by a 60 s skill load, not by re-deriving from first principles.
+
+### Tools NOT used this evening (deliberately — diminishing returns)
+
+- **Multi-agent steelman / review panel** — scope was sequential (A1 → A2a → A7 → A8-minimal) with clear specs. Convening a review panel would have doubled wall-clock for 0-1 findings.
+- **`Perplexity` / `Context7` MCP** — every API signature was known (Anthropic vision, HTMLMediaElement `playbackRate`, Framer Motion per-property transitions). External research would have been padding.
+- **`Remotion` MCP / `Canva` MCP** — explicitly out of scope tonight (A4/A5/A6 are Saturday physical-presence items).
+- **`video-frame-validator` agent for A7** — the `run_vision_pass.py` script IS the frame-validator for this use case. Dispatching a separate agent to "validate the frame before vision call" would have been redundant.
+
+### The "transient APIConnectionError" learning
+
+First post-STEP-3 golden run had an APIConnectionError on the Analytics Specialist (first agent with tool-use = highest call-surface). Trace: `[error: Analytics Specialist failed with APIConnectionError: Connection error.]`. The pipeline's `NEVER raises` contract held — Technical + Tactical still completed, just with the error text as their upstream input. A clean retry was cheap (~60 s + $0.50-1) and the RIGHT move for demo-load-bearing artifacts. **Rule: when a background CV/API pipeline produces a textual error in a downstream trace, the issue is almost always transient network — one retry before escalating to code-level investigation.** Saved ~15 min of debugging a non-existent code bug.
+
+### Validation after Friday pull-forward
+
+- `tsc --noEmit` → exit 0
+- `vitest run` → **111/111** tests passing (96 baseline + 15 new A2a unit tests)
+- Dev server at localhost:3000 HMR'd all new components; curl confirms Tickertape + LoadingScreen + DisclosureBanner rendering
+- `dashboard/public/match_data/vision_pass.json` parsed successfully with biomech annotation
+- Golden run retry in flight (pending notification)
+
+### Meta-learning this sprint
+
+**"Pull code work forward when evenings are free" is the dual of "save physical-presence work for the physical-presence day."** Code work is concentration-bound but not location-bound or time-bound. Recording, Canva design work, Remotion rendering, OBS takes, YouTube uploads, and CV form submission are all time-windowed or coordination-bound. Freeing tomorrow's morning by burning tonight's evening is a universal hackathon-arbitrage.
+
+**Sibling worktrees are read-only context libraries, not work surfaces.** The sibling `hackathon-demo-v1/` has been consolidated into this branch's `demo-presentation/`. It lives on disk but is no longer a work surface. This disambiguates future "where do I edit?" questions — the answer is always "here, in `hackathon-research/`".
+
+**Adaptive thinking is a prompt-engineering problem.** Opus 4.7 won't emit thinking blocks for "analyze these signals" — the model judges that single-step. It WILL emit for "consider this alternative hypothesis and explicitly reject it with evidence" — that's a genuine 2-step reasoning task. The STEP 3 nudge is the prompt-design equivalent of "always wire the multi-hypothesis structure explicitly." Captured as GOTCHA-040.

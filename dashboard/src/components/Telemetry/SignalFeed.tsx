@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 
+import DisclosureBanner from '@/components/Broadcast/DisclosureBanner';
 import { usePanopticonState } from '@/lib/PanopticonProvider';
 import { colors } from '@/lib/design-tokens';
 import { buildTimeline, fmtClock } from '@/lib/telemetry';
@@ -30,6 +31,9 @@ export default function SignalFeed() {
       style={{ background: colors.bg0 }}
     >
       <FeedHeader total={totalEvents} currentTimeMs={currentTimeMs} />
+      <div className="mt-3">
+        <DisclosureBanner />
+      </div>
       <div className="mt-4 flex flex-1 flex-col">
         <TelemetryLog heightClass="flex-1" density="comfortable" showHeader />
       </div>

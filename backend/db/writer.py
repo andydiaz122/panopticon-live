@@ -29,11 +29,14 @@ from pydantic import BaseModel, ConfigDict
 
 from backend.db.schema import (
     AnomalyEvent,
+    AuthoredStateTransition,
     CoachInsight,
     FrameKeypoints,
     HUDLayoutSpec,
     MatchMeta,
     NarratorBeat,
+    PlayerProfile,
+    QualitativeNarration,
     SignalSample,
     StateTransition,
 )
@@ -289,6 +292,13 @@ class _MatchData(BaseModel):
     narrator_beats: list[NarratorBeat]
     hud_layouts: list[HUDLayoutSpec]
     transitions: list[StateTransition]
+    # ──── Display-only authoring (G43) ────
+    # Populated by precompute.py when dashboard/public/match_data/_authoring/
+    # contains hand-authored broadcaster content. NEVER merges with live
+    # transitions/signals. Frontend reads these for TelemetryLog + CoachPanel.
+    display_narrations: list[QualitativeNarration] = []
+    display_transitions: list[AuthoredStateTransition] = []
+    display_player_profile: PlayerProfile | None = None
 
 
 def dump_match_data_json(
@@ -301,6 +311,9 @@ def dump_match_data_json(
     hud_layouts: Iterable[HUDLayoutSpec],
     transitions: Iterable[StateTransition],
     narrator_beats: Iterable[NarratorBeat] = (),
+    display_narrations: Iterable[QualitativeNarration] = (),
+    display_transitions: Iterable[AuthoredStateTransition] = (),
+    display_player_profile: PlayerProfile | None = None,
 ) -> Path:
     """Export full match payload as a single JSON file.
 
@@ -310,6 +323,10 @@ def dump_match_data_json(
 
     Materializes each Iterable via list() before composing the root model
     so generators are OK.
+
+    `display_*` parameters carry hand-authored broadcaster content (G43). When
+    empty/None, the emitted JSON's display_* fields are empty lists / null —
+    backwards-compatible with frontend consumers that treat them as optional.
     """
     data = _MatchData(
         meta=meta,
@@ -320,6 +337,9 @@ def dump_match_data_json(
         narrator_beats=list(narrator_beats),
         hud_layouts=list(hud_layouts),
         transitions=list(transitions),
+        display_narrations=list(display_narrations),
+        display_transitions=list(display_transitions),
+        display_player_profile=display_player_profile,
     )
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)

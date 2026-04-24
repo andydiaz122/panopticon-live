@@ -2,8 +2,10 @@ import { colors } from './design-tokens';
 import { SIGNAL_COPY } from './signalCopy';
 import type {
   AnomalyEvent,
+  AuthoredStateTransition,
   CoachInsight,
   MatchData,
+  QualitativeNarration,
   SignalSample,
   StateTransition,
 } from './types';
@@ -45,11 +47,34 @@ export function buildTimeline(data: MatchData): FeedRow[] {
     });
   }
 
+  // G43 display-only — authored 7-state RallyMicroPhase timeline. Rendered
+  // alongside live transitions with a 📝 AUTHORED prefix so judges can see
+  // both realities in the same log. Nullish-coalesce per G28 — pre-migration
+  // JSON without display_transitions still renders.
+  for (const adt of data.display_transitions ?? []) {
+    if (adt.player !== 'A') continue;
+    rows.push({
+      kind: 'state',
+      t: adt.timestamp_ms,
+      text: authoredTransitionText(adt),
+    });
+  }
+
   for (const insight of data.coach_insights) {
     rows.push({
       kind: 'insight',
       t: insight.timestamp_ms,
       text: oneLineOpener(insight),
+    });
+  }
+
+  // G43 display-only — authored broadcaster narrations. Prefixed with 👤 so
+  // they read as "written by a human broadcaster," not as Opus output.
+  for (const narr of data.display_narrations ?? []) {
+    rows.push({
+      kind: 'insight',
+      t: narr.timestamp_ms,
+      text: authoredNarrationText(narr),
     });
   }
 
@@ -97,6 +122,22 @@ export function fmtClock(ms: number): string {
 
 export function transitionText(tr: StateTransition): string {
   return `player=${tr.player} ${tr.from_state} -> ${tr.to_state} reason=${tr.reason}`;
+}
+
+/** Authored transition label — prefixed 📝 AUTHORED so judges can visually
+ * separate the G43 display-only 7-state timeline from live CV transitions.
+ * Reason field is always "hand_authored" for AuthoredStateTransition, so we
+ * don't render it (noise). */
+export function authoredTransitionText(tr: AuthoredStateTransition): string {
+  return `📝 AUTHORED · player=${tr.player} ${tr.from_state} -> ${tr.to_state}`;
+}
+
+/** Authored narration one-liner — prefixed 👤 BROADCAST so judges read it as
+ * human-authored broadcaster script, not as Opus output. */
+export function authoredNarrationText(n: QualitativeNarration): string {
+  const flat = n.narration_text.replace(/\s+/g, ' ').trim();
+  const truncated = flat.length > 110 ? flat.slice(0, 107) + '…' : flat;
+  return `👤 BROADCAST · ${truncated}`;
 }
 
 export function oneLineOpener(c: CoachInsight): string {

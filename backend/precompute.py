@@ -55,6 +55,7 @@ from backend.cv.state_machine import MatchStateMachine
 from backend.cv.temporal_signals import RollingBounceDetector
 from backend.db.schema import (
     DOUBLES_COURT_WIDTH_M,
+    AuthoredStateTransition,
     CoachInsight,
     CornersNormalized,
     FrameKeypoints,
@@ -62,6 +63,8 @@ from backend.db.schema import (
     MatchMeta,
     NarratorBeat,
     PlayerDetection,
+    PlayerProfile,
+    QualitativeNarration,
     SignalSample,
     StateTransition,
 )
@@ -311,6 +314,73 @@ def _empty_gpu_cache_if_due(frame_idx: int, device: str) -> None:
 
 # Backward-compat alias for existing tests that reference the old name.
 _empty_mps_cache_if_due = _empty_gpu_cache_if_due
+
+
+# ──────────────────────────── Display-only authoring ingestion (A6 / G43) ────────────────────────────
+#
+# Hand-authored broadcaster content lives in
+# `dashboard/public/match_data/_authoring/*.json`. Loaded at end of Pass 3
+# DAG; populates `display_*` fields on the emitted MatchData JSON. NEVER
+# merges with live transitions/signals — backend physics stays pure (3-state
+# FSM); frontend's TelemetryLog + CoachPanel read display_* for the
+# broadcaster narrative.
+
+
+def _glob_merge_sorted(
+    authoring_dir: Path, pattern: str, model: type,
+) -> list:
+    """Glob + validate + merge JSON-array files in deterministic filename order (G4).
+
+    APFS glob results are filesystem-order (non-deterministic across runs).
+    Without `sorted()`, two Golden Runs on the same inputs could produce
+    different `display_narrations` orderings, breaking reproducibility.
+
+    Each matched file must contain a JSON array whose elements validate
+    against `model`. Raises ValidationError on any bad entry — authored
+    content is fail-loud because it's hand-authored and expected to be
+    correct.
+    """
+    merged: list = []
+    for path in sorted(authoring_dir.glob(pattern), key=lambda p: p.name):
+        raw = json.loads(path.read_text())
+        if not isinstance(raw, list):
+            raise ValueError(
+                f"authoring file {path.name} must contain a JSON array; got {type(raw).__name__}",
+            )
+        for entry in raw:
+            merged.append(model.model_validate(entry))
+    return merged
+
+
+def _load_if_exists(path: Path, model: type):
+    """Load + validate a single-object JSON file, or return None if absent.
+
+    Unlike `_glob_merge_sorted`, this is for files that are a SINGLE JSON
+    object (e.g., `player_profile.json`). Absence is non-fatal — returns None.
+    """
+    if not path.exists():
+        return None
+    raw = json.loads(path.read_text())
+    return model.model_validate(raw)
+
+
+def _ingest_authoring_dir(
+    match_data_json_path: Path,
+) -> tuple[list[QualitativeNarration], list[AuthoredStateTransition], PlayerProfile | None]:
+    """Load all hand-authored content from the sibling `_authoring/` directory (G43).
+
+    Path derived from `match_data_json_path.resolve().parent / "_authoring"`
+    (G16 — don't depend on a non-existent dashboard_public_path variable).
+    Skips gracefully if the directory is absent (returns empty lists + None).
+    """
+    authoring_dir = match_data_json_path.resolve().parent / "_authoring"
+    if not authoring_dir.exists():
+        return [], [], None
+
+    narrations = _glob_merge_sorted(authoring_dir, "narrations_*.json", QualitativeNarration)
+    transitions = _glob_merge_sorted(authoring_dir, "state_grid_*.json", AuthoredStateTransition)
+    profile = _load_if_exists(authoring_dir / "player_profile.json", PlayerProfile)
+    return narrations, transitions, profile
 
 
 # ──────────────────────────── Frame wrapping ────────────────────────────
@@ -694,6 +764,15 @@ def run_precompute(
             final_meta = provisional_meta.model_copy(update={"duration_ms": recomputed_ms})
             writer.write_match_meta(final_meta)
 
+        # 7b. Display-only authoring ingestion (A6 / G43). Load hand-authored
+        #     broadcaster content from `_authoring/` sibling dir. Skipped
+        #     gracefully if the directory is absent. NEVER merges with live
+        #     transitions/signals — populates display_* fields on MatchData
+        #     and feeds the Scouting Committee's ToolContext.
+        display_narrations, display_transitions, display_player_profile = (
+            _ingest_authoring_dir(match_data_json_path)
+        )
+
         # 8. Phase 2 agent phase (Coach + Designer + Narrator), if a client was provided.
         #    Writer is still open — agent outputs get queued into DuckDB here.
         all_coach_insights: list[CoachInsight] = []
@@ -732,6 +811,11 @@ def run_precompute(
                     match_id=match_id,
                     signals=all_signals,
                     transitions=all_transitions,
+                    # A9: authored context consumed by query_video_context_mcp tool.
+                    # Analytics Specialist's first tool call reads `narrations` via
+                    # this context, forced by SOP in its system prompt.
+                    narrations=tuple(display_narrations),
+                    player_profile=display_player_profile,
                 )
                 scout_trace = asyncio.run(
                     generate_scouting_report(
@@ -771,6 +855,9 @@ def run_precompute(
         hud_layouts=all_hud_layouts,
         transitions=all_transitions,
         narrator_beats=all_narrator_beats,
+        display_narrations=display_narrations,
+        display_transitions=display_transitions,
+        display_player_profile=display_player_profile,
     )
 
     return frames_processed, signals_emitted

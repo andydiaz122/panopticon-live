@@ -1,0 +1,65 @@
+85dd4ff|2026-04-24 06:53:56 -0400|docs: exhaustive memory hygiene — ID-reuse warnings + Phase A meta-patterns
+144a0f6|2026-04-24 06:50:46 -0400|docs: Phase A durable-memory hygiene + content-consistency fix (state-machine fan language)
+3f616c9|2026-04-24 05:12:11 -0400|chore(golden): 2026-04-24 Golden Run outputs — 3-Pass DAG + Multi-Agent Swarm
+f707a9a|2026-04-24 04:51:50 -0400|docs(merge): add renumbering-map disclaimer to TOOLS_IMPACT.md
+0728fb6|2026-04-24 04:51:09 -0400|fix(merge): Phase-3 review — complete cross-ref renumbering sweep
+f3a2440|2026-04-24 04:41:30 -0400|merge: origin/main into hackathon-research — Option A (Orchestration Console wins)
+0f94b4c|2026-04-24 04:05:22 -0400|fix(hud): glue STATE telemetry under CoachPanel + unclip Opus commentary
+e53aebb|2026-04-24 03:16:18 -0400|Merge pull request #5 from andydiaz122/hackathon-demo-v1
+1a08947|2026-04-23 19:33:55 -0400|docs(merge): PATTERN-062 merge methodology + narrative — Phase 5 of demo-v1 absorb
+f2bd4e2|2026-04-23 19:33:34 -0400|docs: Phase 5 postmortem — GOTCHA-019/020/021, PATTERN-055…058, DECISION-010
+2557419|2026-04-23 19:29:29 -0400|fix(merge): Phase-3 review findings — 3 HIGH fixes
+9913c23|2026-04-23 11:25:09 -0400|docs: Phase 4 team-lead handoff + local settings
+920c6ec|2026-04-23 02:35:41 -0400|docs: Phase 4 kickoff — PATTERN-053 + PATTERN-054 + 2 USER-CORRECTIONs
+ece24d2|2026-04-23 18:12:32 -0400|fix(telemetry): stable FeedLine keys + restore Tab 2 progress counter
+26f9102|2026-04-23 14:38:36 -0400|feat(dashboard): visible anomaly injections + dual TelemetryLog slots
+e6e75c9|2026-04-23 02:34:20 -0400|fix(cv): edge-trigger MatchStateMachine bounce coupling — PATTERN-053
+591b950|2026-04-23 07:55:10 -0400|docs: add GOTCHA-018 — multi-line paste embeds newlines in single-quoted env vars
+defd5a6|2026-04-23 19:07:49 -0400|docs: pre-flight audit + B2B seed-round roadmap (Phase 4 continuation)
+d02d427|2026-04-23 18:14:23 -0400|Merge pull request #4 from andydiaz122/hackathon-demo-v1
+787a5d1|2026-04-23 18:12:32 -0400|fix(telemetry): stable FeedLine keys + restore Tab 2 progress counter
+d6ebc1e|2026-04-23 17:43:33 -0400|feat(panopticon): Phase 2B→4.5 — RTS smoother + 3-Pass DAG + Multi-Agent Swarm + Trace Playback
+888acb5|2026-04-23 14:38:36 -0400|feat(dashboard): visible anomaly injections + dual TelemetryLog slots
+b20c370|2026-04-23 12:26:07 -0400|fix(deploy): move maxDuration from actions.ts to vercel.json
+4f9df37|2026-04-23 11:58:04 -0400|chore(deploy): force-add golden data and video for Vercel production build
+def7b66|2026-04-23 11:40:11 -0400|Merge pull request #3 from andydiaz122/hackathon-stage-3
+e79bca8|2026-04-23 11:25:09 -0400|docs: Phase 4 team-lead handoff + local settings
+a0093e7|2026-04-23 07:55:10 -0400|docs: add GOTCHA-018 — multi-line paste embeds newlines in single-quoted env vars
+1558805|2026-04-23 02:35:41 -0400|docs: Phase 4 kickoff — PATTERN-053 + PATTERN-054 + 2 USER-CORRECTIONs
+26cc73f|2026-04-23 02:34:36 -0400|feat(dashboard,actions): wire Tab 3 to live Opus 4.7 via Client-Driven Payload — PATTERN-054
+47edaf0|2026-04-23 02:34:20 -0400|fix(cv): edge-trigger MatchStateMachine bounce coupling — PATTERN-053
+0c2aac7|2026-04-23 01:47:24 -0400|Merge pull request #1 from andydiaz122/hackathon-stage-2
+317acee|2026-04-23 01:42:01 -0400|ci(claude): accept either CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY
+595b50c|2026-04-23 01:00:03 -0400|feat(dashboard,agents): Phase 3.5 Walking Skeleton — 3-tab shell + Telestrator auto-pause + state-gating
+a64533b|2026-04-22 23:51:46 -0400|ci: add claude-code GitHub Action for @claude PR/issue responses
+6c51329|2026-04-22 23:09:12 -0400|feat(dashboard,docs): Phase 3 Core Trio HUD + DECISION-009 biometrics-first pivot
+3719b99|2026-04-22 21:23:14 -0400|docs: add docs/RESUME.md — new-session handoff pointer
+e854ab5|2026-04-22 21:13:20 -0400|feat(agents,docs): Single-Player Focus pivot — DECISION-008 + PATTERN-041
+bb70b39|2026-04-22 20:47:26 -0400|fix(cv): Skeleton Sanitation Sprint — USER-CORRECTION-030 + PATTERN-039 + PATTERN-040 + GOTCHA-016
+e702afd|2026-04-22 18:01:06 -0400|feat(dashboard): Phase 3 scaffold — Next.js 16 + PanopticonEngine rAF loop
+a1c004f|2026-04-22 17:53:48 -0400|fix(agents): GOTCHA-015 demo-killer patch (warmup + dedup + name binding)
+aa94517|2026-04-22 17:22:27 -0400|fix(agents): Opus 4.7 adaptive thinking API (USER-CORRECTION-027)
+bd2f7ac|2026-04-22 17:04:10 -0400|docs: Action 4.4 smoke-test learnings - USER-CORRECTION-026, PATTERN-037, GOTCHA-014
+4b83fbf|2026-04-22 17:03:29 -0400|feat(cv): --doubles-corners flag for doubles-alley court annotations
+b7b452d|2026-04-22 16:18:49 -0400|docs: full documentation pass after court-annotator saga + Phase 2 landing
+114c1f0|2026-04-22 16:16:10 -0400|fix(cv): precompute accepts both wrapped + bare corners JSON shapes
+3061d5d|2026-04-22 16:05:41 -0400|fix(tools): court-annotator ID collision bug + 9 static-validation tests
+101cafb|2026-04-22 15:35:07 -0400|docs: Phase 2 learnings - 2 USER-CORRECTIONs, 5 PATTERNs, 2 GOTCHAs, 1 DECISION
+c981773|2026-04-22 15:31:25 -0400|feat(agents): Phase 2 - Opus Coach + HUD Designer + Haiku Narrator (offline)
+47c354b|2026-04-22 13:35:24 -0400|fix(cv,db): Action 4.3 — reviewer HIGH + MEDIUM + LOW hardening
+66d8cf5|2026-04-22 13:27:54 -0400|feat(cv): Action 4.2 — precompute.py master CLI + mocked integration tests
+faca491|2026-04-22 13:18:23 -0400|feat(db): Action 4.1 — DuckDBWriter + setup tests (match_data.json export)
+a20e747|2026-04-22 13:11:16 -0400|docs: pre-compact save — Action 3/3.5 complete, Action 4 kickoff
+23de0f2|2026-04-22 02:19:23 -0400|feat(cv): Action 3.5 — FeatureCompiler + end-to-end integration
+67fb7ae|2026-04-22 02:14:39 -0400|feat(cv): Action 3 Fleet 3 — crouch_depth_degradation_deg + baseline_retreat_distance_m
+144343a|2026-04-22 02:07:11 -0400|feat(cv): Action 3 Fleet 2 — serve_toss_variance_cm + ritual_entropy_delta
+8ecb27e|2026-04-22 01:58:44 -0400|feat(cv): Action 3 Fleet 1 — recovery_latency_ms + split_step_latency_ms
+5d2395f|2026-04-22 01:53:19 -0400|docs(cv): Action 3 pre-flight (round 2) — USER-CORRECTIONs 018-022 + fail-fast lateral_work_rate
+058cf32|2026-04-22 01:17:13 -0400|feat(cv): Action 3 Fleet 4 PILOT — lateral_work_rate (USER-CORRECTION-017 compliant)
+6a12399|2026-04-22 01:12:08 -0400|docs(cv): Action 3 pre-flight — USER-CORRECTION-017 Homography Z=0 Invariant
+5e22166|2026-04-22 00:43:13 -0400|feat(cv): Action 2.5 spine patches — USER-CORRECTIONs 011-016 + BaseSignalExtractor ABC + float rounding + conditional uncoupling + RollingBounceDetector + 2 new skills
+a309bbb|2026-04-21 22:32:17 -0400|docs: comprehensive pre-compact documentation save — session state preserved
+cd52758|2026-04-21 22:29:32 -0400|feat(cv): Phase 1 CV Spine — homography + pose + kalman + state machine
+db2a1e9|2026-04-21 22:17:50 -0400|docs: integrate 10 USER-CORRECTIONs from team-lead waves 1+2
+c03e242|2026-04-21 19:59:43 -0400|docs: finalize Day-0 TOOLS_IMPACT ROI log + probe_clip slope-sign fix
+7dcc751|2026-04-21 19:58:36 -0400|feat: initialize PANOPTICON LIVE — Day-0 scaffolding + GO validation

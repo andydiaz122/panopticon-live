@@ -1,4 +1,4 @@
-import type { PlayerState, SignalName } from './types';
+import type { PlayerState, RallyMicroPhase, SignalName } from './types';
 
 /**
  * Frontend defense-in-depth state-gating (Action 1.2 + PATTERN-052).
@@ -13,76 +13,129 @@ import type { PlayerState, SignalName } from './types';
  * a new point when the athlete is going to serve again." Signals should
  * be contextually correct for the athlete's current phase of play.
  *
- * This module encodes the hard mapping from PlayerState → permitted signals,
- * applied as a frontend filter on top of whatever the Designer selected.
+ * Phase A4.5 refactor (team-lead override 2026-04-24) — moved from if-else
+ * branches to a `Record<RallyMicroPhase, readonly SignalName[]>` map. The
+ * object-literal declaration forces compile-time exhaustiveness: adding a
+ * new RallyMicroPhase member without a gating entry fails `tsc`. Covers
+ * both the live 4-member PlayerState (subset of RallyMicroPhase) AND the
+ * 3 authored-only display states (WARMUP, SERVE, CHANGEOVER) so display
+ * timelines never render a signal into a phase that is biomechanically
+ * impossible.
+ */
+
+/**
+ * Exhaustive rally-phase → permitted-signals map.
  *
- * ⚠️ Keep this in sync with the biomechanical-signal-semantics skill's
- * state gating. If the backend Designer gets smarter about state, this
- * filter should relax (the filter is a safety net, not the primary logic).
+ * Type invariant: `Record<RallyMicroPhase, readonly SignalName[]>` — TypeScript
+ * fails compile if a new RallyMicroPhase member is added to `types.ts` without
+ * a corresponding entry here. This replaces the if-else chain's "new member
+ * falls through to `return true`" silent-permit bug (G25).
  */
+export const GATING_MAP: Record<RallyMicroPhase, readonly SignalName[]> = {
+  // Pre-state warmup convergence window — permit everything (safer default
+  // before any state transition has fired).
+  UNKNOWN: [
+    'recovery_latency_ms',
+    'serve_toss_variance_cm',
+    'ritual_entropy_delta',
+    'crouch_depth_degradation_deg',
+    'baseline_retreat_distance_m',
+    'lateral_work_rate',
+    'split_step_latency_ms',
+  ],
+  // Match-warmup period — player hits practice shots, no formal serve ritual
+  // yet. Only state-agnostic signals apply.
+  WARMUP: [
+    'recovery_latency_ms',
+    'split_step_latency_ms',
+  ],
+  // Pre-serve ritual — ball-bounce cadence, crouch-depth, toss-variance all
+  // read here. Rally-movement signals (lateral work, baseline retreat) are
+  // off because the player is stationary.
+  PRE_SERVE_RITUAL: [
+    'recovery_latency_ms',
+    'serve_toss_variance_cm',
+    'ritual_entropy_delta',
+    'crouch_depth_degradation_deg',
+    'split_step_latency_ms',
+  ],
+  // Active serve motion — same gating as PRE_SERVE_RITUAL (toss/ritual
+  // signals still active, rally-movement signals still off).
+  SERVE: [
+    'recovery_latency_ms',
+    'serve_toss_variance_cm',
+    'ritual_entropy_delta',
+    'crouch_depth_degradation_deg',
+    'split_step_latency_ms',
+  ],
+  // Rally in progress — court-coverage + retreat signals dominate. Serve-
+  // ritual signals (toss-variance, ritual-entropy, crouch-depth) are off.
+  ACTIVE_RALLY: [
+    'recovery_latency_ms',
+    'baseline_retreat_distance_m',
+    'lateral_work_rate',
+    'split_step_latency_ms',
+  ],
+  // Between-point dead time — same as PRE_SERVE_RITUAL (player is resetting).
+  DEAD_TIME: [
+    'recovery_latency_ms',
+    'serve_toss_variance_cm',
+    'ritual_entropy_delta',
+    'crouch_depth_degradation_deg',
+    'split_step_latency_ms',
+  ],
+  // Changeover (~90s seated break) — only state-agnostic recovery signal
+  // applies; toss/ritual signals don't read during a seated break.
+  CHANGEOVER: [
+    'recovery_latency_ms',
+  ],
+};
 
 /**
- * Signals that only make sense BETWEEN points — during serve ritual or dead
- * time when the athlete is stationary / preparing. Hidden during ACTIVE_RALLY.
+ * Belt-and-braces compile-time exhaustiveness check. If GATING_MAP's keys
+ * ever diverge from RallyMicroPhase (a new member added, an existing one
+ * removed), this line fails tsc. The primary enforcement is the Record type
+ * above; this helper catches the `Partial<Record<…>> as Record<…>` cast
+ * escape hatch (G26).
  */
-const PRE_SERVE_EXCLUSIVE: ReadonlySet<SignalName> = new Set([
-  'serve_toss_variance_cm',
-  'ritual_entropy_delta',
-  'crouch_depth_degradation_deg',
-]);
+type AssertExhaustive<R extends Record<U, unknown>, U extends string> =
+  [keyof R] extends [U]
+    ? [U] extends [keyof R]
+      ? true
+      : never
+    : never;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _GatingMapIsExhaustive = AssertExhaustive<typeof GATING_MAP, RallyMicroPhase>;
 
 /**
- * Signals that only make sense DURING a rally — court coverage, retreat,
- * recovery. Hidden during PRE_SERVE_RITUAL / DEAD_TIME.
- */
-const RALLY_EXCLUSIVE: ReadonlySet<SignalName> = new Set([
-  'lateral_work_rate',
-  'baseline_retreat_distance_m',
-]);
-
-/**
- * Signals allowed in every state (state-agnostic). These are either
- * context-invariant (recovery_latency_ms measures post-rally recovery and
- * is valid once a rally has ended) or always-on (split_step_latency_ms
- * fires on opponent contact — rare but not state-restricted).
- */
-const STATE_AGNOSTIC: ReadonlySet<SignalName> = new Set([
-  'recovery_latency_ms',
-  'split_step_latency_ms',
-]);
-
-/**
- * Is the given signal appropriate for the current player state?
+ * Is the given signal appropriate for the current rally phase?
  *
- * Rules per Andrew's directive:
- *   - ACTIVE_RALLY → reject PRE_SERVE_EXCLUSIVE (serve-ritual signals)
- *   - PRE_SERVE_RITUAL / DEAD_TIME → reject RALLY_EXCLUSIVE (rally-movement signals)
- *   - UNKNOWN (pre-first-transition warmup) → permit everything (safer default)
- *   - null (no active state yet) → permit everything
+ * Accepts both `PlayerState` (live 4-member) and `RallyMicroPhase`
+ * (display-only 7-member). PlayerState ⊂ RallyMicroPhase, so any live-state
+ * value is a valid key into GATING_MAP.
+ *
+ * Fallback behavior (G25 / team-lead override): if `state` somehow lands
+ * outside RallyMicroPhase (malformed authored JSON, runtime coercion bug),
+ * return `false` — reject the signal rather than crash on `undefined.includes`.
+ * This is the opposite of the pre-refactor `return true` fall-through, which
+ * silently permitted ALL signals for unknown states.
  */
 export function isSignalAllowedInState(
   signalName: SignalName,
-  state: PlayerState | null,
+  state: PlayerState | RallyMicroPhase | null,
 ): boolean {
-  if (STATE_AGNOSTIC.has(signalName)) return true;
-  if (state === null || state === 'UNKNOWN') return true;
-
-  if (state === 'ACTIVE_RALLY') {
-    return !PRE_SERVE_EXCLUSIVE.has(signalName);
-  }
-  if (state === 'PRE_SERVE_RITUAL' || state === 'DEAD_TIME') {
-    return !RALLY_EXCLUSIVE.has(signalName);
-  }
-  return true;
+  if (state === null) return true;
+  const allowed = GATING_MAP[state as RallyMicroPhase];
+  return allowed?.includes(signalName) ?? false;
 }
 
 /**
  * Filter an array of signal names down to those permitted in the current
- * player state. Preserves input order.
+ * rally phase. Preserves input order.
  */
 export function filterSignalsByState(
   signalNames: ReadonlyArray<SignalName>,
-  state: PlayerState | null,
+  state: PlayerState | RallyMicroPhase | null,
 ): SignalName[] {
   return signalNames.filter((s) => isSignalAllowedInState(s, state));
 }

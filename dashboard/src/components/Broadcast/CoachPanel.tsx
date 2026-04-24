@@ -115,7 +115,15 @@ function InsightCard({ insight }: { insight: CoachInsight }) {
       initial={{ opacity: 0, y: 40 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 40 }}
-      transition={motionTokens.springStandard}
+      // PATTERN-068 — Framer Motion UX masking (team-lead 2026-04-24):
+      // 500ms opacity fade hides any micro-desync between the Opus
+      // commentary typewriter and the video clock. Position (y) still uses
+      // the existing spring for natural snap — only opacity needs the
+      // longer curve to look like intentional AI-processing flourish.
+      transition={{
+        ...motionTokens.springStandard,
+        opacity: { duration: 0.5, ease: 'easeOut' },
+      }}
       className="flex w-full flex-col gap-2 rounded-lg border px-4 py-3"
       style={{
         background: colors.bg1,

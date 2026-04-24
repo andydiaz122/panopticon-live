@@ -1,5 +1,6 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useEffect, useMemo, useRef } from 'react';
 
 import { usePanopticonState } from '@/lib/PanopticonProvider';
@@ -110,14 +111,23 @@ export default function TelemetryLog({
             # telemetry buffer clear — play the video to stream events
           </div>
         ) : (
+          // PATTERN-068 — each row fades in over 400ms on mount. Masks any
+          // latency between the video clock emitting a transition and the
+          // matching row actually rendering; looks like intentional
+          // streaming-terminal chrome rather than a perceptible delay.
+          // Perf: plain `motion.div` with initial+animate only (no
+          // AnimatePresence / exit) keeps overhead minimal for 100+ rows.
           visibleRows.map((row, i) => (
-            <FeedLine
+            <motion.div
               key={`${row.t}-${row.kind}-${
                 row.kind === 'signal' ? row.signal.signal_name : i
               }`}
-              row={row}
-              compact={isCompact}
-            />
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+            >
+              <FeedLine row={row} compact={isCompact} />
+            </motion.div>
           ))
         )}
       </div>

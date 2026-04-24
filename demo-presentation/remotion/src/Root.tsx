@@ -1,7 +1,9 @@
 import { Composition } from 'remotion';
 
 import { B0Opener } from './compositions/B0Opener';
+import { B5Closing } from './compositions/B5Closing';
 import { GitGraphDemo } from './compositions/GitGraphDemo';
+import { SceneBreakB2, SceneBreakB3, SceneBreakB4 } from './compositions/SceneBreak';
 import { HelloWorld } from './HelloWorld';
 
 /**
@@ -41,6 +43,38 @@ export const RemotionRoot = () => {
         id="gitgraph-demo"
         component={GitGraphDemo}
         durationInFrames={720}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="b5-closing"
+        component={B5Closing}
+        durationInFrames={300}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="scene-break-b2"
+        component={SceneBreakB2}
+        durationInFrames={90}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="scene-break-b3"
+        component={SceneBreakB3}
+        durationInFrames={90}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="scene-break-b4"
+        component={SceneBreakB4}
+        durationInFrames={90}
         fps={60}
         width={1920}
         height={1080}

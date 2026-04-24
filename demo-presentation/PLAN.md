@@ -171,6 +171,48 @@ Our alignment:
 
 ---
 
+## 5.6. Anthropic-Workflow-Minus-Palette Adoption + Vimeo 2nd Reference (LOCKED 2026-04-24 late evening)
+
+**Andrew's directive 2026-04-24 ~21:00 EST**: *"Let's not use the Anthropic colors for our project; however let's use everything else about their video demo generation workflows. Also, I found a demo video: https://vimeo.com/205032211 — I would like for you to research and reverse engineer."*
+
+After the warm-clay palette experiment was reverted (USER-CORRECTION-036 in MEMORY.md), the 3-agent research wave's craft findings remain durable as universal rules — palette doesn't override product-fit, but motion vocabulary, typography hierarchy, pacing discipline, and Figma → Remotion workflow are PORTABLE across domains. Concretely:
+
+### Adopted from Anthropic (cyan-palette-compatible)
+
+- **Typography hierarchy**: Fraunces serif for hero wordmarks (RE-APPLIED to B0 title 2026-04-24 ~21:30 — `Panopticon Live` with italic "Live" in cyan accent, mono subtitle/attribution). Retains the Anthropic "italic-for-emphasis" signature without copying their palette.
+- **Motion vocabulary** (PATTERN-078): hard cuts dominate, ONE scale-pop primitive, word-by-word typewriter for dialog reveals, NO parallax / gradients / glassmorphism / drop shadows. B0 already complies; future B5 + scene-breaks must too.
+- **Pacing** (PATTERN-079): 7-9 cuts/min product-demo register. Long dwells (8-12s per beat). Hard cuts only between beats. Silence/stillness as punctuation.
+- **Editorial layout**: small label above + big headline below + bleeding context off-frame. 6% headline / 94% margin ratio. Generous air. Apply to scene-break cards + B5 closing.
+- **Figma-static / Remotion-truth workflow** (PATTERN-080): Figma frames = scene mockups + color tokens. Remotion = where motion logic lives. Never author motion in Figma Prototype Mode.
+- **Source-truth tokens** (PATTERN-081): if/when palette stabilizes, consolidate to a single tokens file. Currently deferred — palette is settled cyan; B0 inlines hex codes since there are only 4.
+
+### NOT adopted (palette stays sports-broadcast / cyan)
+
+- Anthropic cream/sandstone bg (`#F8F8F8` / `#E0D8C8`)
+- Anthropic Spark coral accent (`#D97757`)
+- Reason: PANOPTICON LIVE is sports-broadcast register, not editorial-paper register. Cyan-on-cool-blue is the native domain convention (ESPN, Hawk-Eye, Sportradar). See MEMORY.md USER-CORRECTION-036 for full rationale.
+
+### Vimeo 205032211 — second design reference (analysis pending)
+
+Andrew's note: *"This is the best looking demo I've seen so far in addition to the Anthropic product release videos."* A research agent has been dispatched to deconstruct it via the same yt-dlp + frame-sampling methodology that worked for the Anthropic videos. Output target: `demo-presentation/assets/references/vimeo_205032211_dna.md`. Cross-reference with Anthropic findings to identify CONVERGENT patterns (universal craft) vs UNIQUE-TO-VIMEO patterns (additional moves we can borrow on top of the Anthropic playbook).
+
+When the agent returns, this section will be revised with the synthesis + concrete edits to B5 / scene-breaks / pacing.
+
+### Tonight's accelerated build sprint (Andrew's 21:00 directive)
+
+Andrew explicitly reversed the "fresh eyes Saturday" plan: *"We are not going to wait to have fresh eyes tomorrow; we are going to work through tonight."* Sequence:
+
+1. ✅ Re-apply Fraunces serif to B0 title card (cyan + serif validation)
+2. ⏳ Build B5 closing card (Anthropic editorial layout + cyan palette)
+3. ⏳ Build SceneBreak primitive (between-beat hard-cut transitions)
+4. ⏳ Vimeo 205032211 deconstruction agent returns → synthesize learnings
+5. ⏳ A5 architecture diagram via `mcp__claude_ai_Figma__generate_diagram` (Mermaid → FigJam)
+6. ⏳ Re-render full B0 + B5 + scene-breaks → DaVinci-ready assets
+
+One thing at a time, polished, with each step rendered + visually confirmed before moving to the next.
+
+---
+
 ## 5.5. Notion Narrative Directives — Path C Integration (LOCKED 2026-04-24 evening)
 
 **Context**: after the v4 Detective Cut was locked earlier on 2026-04-24, Andrew surfaced a Notion-collected set of narrative ideas (Claude mascot as narrator, provocative opening question, typing-on-keyboard SFX, personal-journey arc, "everything is an API" rolling numbers, etc.). On 2026-04-24 evening Andrew confirmed **Path C = hybrid**: keep v4's structural spine (cold-open-on-anomaly, 1:58 climax, Detective Cut narrative arc) AND add Notion creative beats via Remotion chrome. Eliminate Andrew's voiceover entirely — replace with typing animations, on-screen text reveals, and mascot/facsimile motion. Execution principle (Andrew, verbatim): **"one thing at a time, exceptionally well polished — simple and clean execution at a really high level is better than complicated and hard to understand execution done mediocre."**

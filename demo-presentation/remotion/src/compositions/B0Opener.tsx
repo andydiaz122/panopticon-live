@@ -1,7 +1,17 @@
+import { loadFont as loadFraunces } from '@remotion/google-fonts/Fraunces';
 import { AbsoluteFill, Sequence, useCurrentFrame, interpolate } from 'remotion';
 
 import { GitGraph, type GitAnchor } from '../primitives/GitGraph';
 import { TypingLine } from '../primitives/TypingLine';
+
+// Load Fraunces serif (free Google Fonts substitute for Copernicus/Tiempos
+// which Anthropic uses on the Opus 4.6 wordmark). Adopted per Andrew's
+// directive 2026-04-24 evening: "use everything from Anthropic's video demo
+// generation workflows" minus the palette. Cyan stays as the accent color
+// (sports-broadcast domain convention), but typography upgrades to Anthropic's
+// transitional serif for the hero wordmark — broadcast HUD register paired
+// with editorial typography.
+const { fontFamily: FRAUNCES_FAMILY } = loadFraunces();
 
 /**
  * B0 — Personal-journey opener (PLAN.md §5.5).
@@ -210,35 +220,37 @@ const TitleCard = () => {
         opacity,
       }}
     >
-      <div
-        style={{
-          textAlign: 'center',
-          fontFamily: '"JetBrains Mono", monospace',
-        }}
-      >
+      <div style={{ textAlign: 'center' }}>
         <div
           style={{
+            fontFamily: '"JetBrains Mono", monospace',
             fontSize: 12,
             letterSpacing: '0.28em',
             color: META_COLOR,
             textTransform: 'uppercase',
-            marginBottom: 32,
+            marginBottom: 36,
           }}
         >
           biomechanical fatigue telemetry · from 2d broadcast pixels
         </div>
+        {/* Fraunces serif hero wordmark — title-case, italic "Live" in cyan.
+         *  Italic-for-emphasis is an Anthropic signature move ("Website
+         *  analytics that *actually* make sense"). Cool ink + cyan accent
+         *  keeps us in the broadcast HUD palette while adopting their
+         *  editorial typography hierarchy. */}
         <div
           style={{
-            fontSize: 120,
-            fontWeight: 700,
-            letterSpacing: '0.04em',
-            color: CLAUDE_COLOR,
-            textTransform: 'uppercase',
+            fontFamily: FRAUNCES_FAMILY,
+            fontSize: 132,
+            fontWeight: 600,
+            letterSpacing: '-0.02em',
+            color: '#F8FAFC',
             whiteSpace: 'nowrap',
-            lineHeight: 1,
+            lineHeight: 0.95,
+            fontFeatureSettings: '"ss01" 1, "ss02" 1',
           }}
         >
-          Panopticon Live
+          Panopticon <span style={{ color: CLAUDE_COLOR, fontStyle: 'italic' }}>Live</span>
         </div>
         <div
           style={{

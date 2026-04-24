@@ -113,6 +113,18 @@ Every signal is state-gated, physics-grounded, and maps to a fan-facing label. C
 
 Scope note (DECISION-008): we deliberately target Player A — the near-court athlete YOLO can reliably detect on broadcast footage. Moneyball for tennis. One player, forensic depth. See [MEMORY.md](MEMORY.md) GOTCHA-016 for the CV detector-capacity rationale.
 
+### Match-state gating (the CAPS terms you'll see in Tab 2)
+
+Signals don't fire constantly — they fire when the player is in the **right phase** of a point. We track three states per player:
+
+| State | What it means | Why signals gate on it |
+|---|---|---|
+| `PRE_SERVE_RITUAL` | Player is at the baseline, bouncing the ball, setting up to serve (or returner setting their stance). | Toss precision + ritual discipline only fire here — measuring pre-serve mechanics mid-rally is meaningless. |
+| `ACTIVE_RALLY` | A point is in play — player is moving, hitting, covering court. | Lateral work rate, recovery lag, split-step reaction, crouch depth all fire here. |
+| `DEAD_TIME` | Between points — toweling off, walking to position, reset. | No signal fires here; it's the quiet window that separates rallies. |
+
+Transitions between states drive the signal pipeline. The raw telemetry feed in Tab 2 shows every transition inline with signal emissions, e.g., `PRE_SERVE_RITUAL → ACTIVE_RALLY  lateral_work_rate: 2.14`.
+
 ---
 
 ## The Multi-Agent Swarm

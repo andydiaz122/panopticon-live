@@ -104,6 +104,11 @@ Tracks skills we evaluated and consciously skipped. Prevents anti-pattern #18 (i
 | `nutrient-document-processing` | Scouting PDF uses ReportLab (standard lib) | Revisit if PDF complex |
 | `chat-sdk` | Not building a chatbot | N/A |
 | `crosspost` | Post-submit only | Day 6 |
+| `claude-md-improver` | **NOT FOUND** in this installation — does not exist. Fell back to `documentation-librarian`. | If ever installed globally, revisit as preferred tool for CLAUDE.md edits |
+| `IMM-filter` / sliding-window Kalman patterns | PROJECT-2026-04-28 roadmap (B2B post-hackathon); out of scope for Sunday submission | Post-submission (Monday+) |
+| `MotionAGFormer` / `BioPose 3D` monocular lifting | PROJECT-2026-04-28 roadmap; 2D YOLO11m-Pose stays for hackathon | Post-submission |
+| `DuckDB-WASM` HTTP Range Requests | PROJECT-2026-04-28 roadmap; current 15-25MB JSON via `fetch()` + `useEffect` is GOTCHA-026-compliant for 60s clip | Post-submission; needed for 3-hour-match support |
+| `/rules-distill` | Week-end meta-synthesis command | After Sunday submission, before next Monday's Seed-Round prep |
 
 ---
 
@@ -506,3 +511,57 @@ The combined session shipped PR #4 with 4 commits and no hot-fix revert. That's 
 - Preview URL: `panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app` (as of PR #4 merge)
 - 4 commits merged to main: `4f9df37` (force-add assets) → `b20c370` (vercel.json maxDuration fix) → `888acb5` (anomaly injection + TelemetryLog slots) → `787a5d1` (PR-review feedback — stable keys + Tab 2 progress counter)
 - PR #4 URL: https://github.com/andydiaz122/panopticon-live/pull/4
+
+---
+
+## Phase A (Apr 24, 2026 — demo-v1 merge + main-merge + Golden Run on hackathon-research)
+
+### HIGH-IMPACT tools / patterns this session
+
+| Tool / Pattern | Outcome | ROI | Notes |
+|---|---|---|---|
+| **PATTERN-062 Isolated-Worktree + Ordered-Cherry-Pick + Orthogonal-Review Merge** | Applied TWICE in one day. First absorbed demo-v1 UI + CV fix into hackathon-research (6 cherry-picks, 3 skips, renumbering). Second merged `origin/main` into the branch with per-file conflict resolution. Zero regressions across both merges. | **CRITICAL** — unlocked safe multi-commit merges without touching main workdir | 4-layer recipe: (1) `git merge-tree --write-tree` preview, (2) `Agent` with `isolation: "worktree"` for execution, (3) ordered `git cherry-pick -x` per dependency, (4) parallel orthogonal reviewer panel post-merge. Pattern formalized in MEMORY.md PATTERN-062. |
+| **`git merge-tree --write-tree HEAD <sha>`** | Read-only conflict preview per candidate cherry-pick. Zero working-tree impact. | **HIGH** (pre-merge triage) | Tells you which commits apply clean vs conflict BEFORE committing to a strategy. Prevented 3 doomed cherry-picks from wasting time. |
+| **Agent tool with `isolation: "worktree"`** | Executed 6 cherry-picks in isolated worktree. Main workdir untouched while per-commit tests + ruff ran in the worktree. Agent returned only after all gates green. | **CRITICAL** (risk isolation) | Contrast with GOTCHA-011: Day 1 had WorktreeCreate hook missing. By Phase A that had been resolved; the isolated-worktree pattern is now the canonical merge harness. |
+| **Orthogonal 4-reviewer panel** (post-merge): `code-reviewer` + `python-reviewer` + `typescript-reviewer` + `security-reviewer` | Phase 3 post-merge review caught 3 HIGH findings (0 CRITICAL): inline array-literal rowKinds in HudView breaking `useMemo` at 10 Hz, 52 stale ID refs in PHASE_4_TEAM_LEAD_HANDOFF.md, Windows-permission leak in `.claude/settings.json`. Post-main-merge review caught the `See PATTERN-056` → should be PATTERN-064 cross-ref drift at MEMORY.md:1375. | **HIGH** (each lens is distinct; running 3 `code-reviewer` instances would have been redundant, not orthogonal) | Applied the "Orthogonality Over Quantity" principle from global CLAUDE.md. 4 lenses × orthogonal failure modes = super-linear coverage. |
+| **Golden Run execution** (2026-04-24) on `utr_match_01_segment_a.mp4` via `./run_golden_data.sh` | 1800 frames → 53 signals, 5 coach_insights, 6 narrator_beats, 36 state_transitions, 3-step swarm captured in agent_trace.json with 57s real compute. Token budget consumed and within limits. | **HIGH** (demo assets ready) | Critical data fact discovered: **0 anomalies emitted**. Anomaly extractor wired in `anomalies[]` but not populated by signal pipeline (only hand-injected test data at t=36 from demo-v1 reaches the UI). Flagged for follow-up; not a blocker for demo because manual injections (GOTCHA-036) cover the visible anomaly UI path. |
+| **`run_golden_data.sh` preflight script** | Founder-only helper: exports ANTHROPIC_API_KEY length check (GOTCHA-033 defense), runs precompute with canonical args, checks exit code. | **HIGH** (saves 10-15 min of manual arg-assembly + defends against env-var corruption) | New script shipped this phase. Preflight catches the GOTCHA-033 class of "invisible byte" bugs via `echo "len=${#ANTHROPIC_API_KEY}"` before the ~2-min Anthropic call surface is touched. |
+| **HUD layout width-clamp repair** | STATE TelemetryLog moved into center column under CoachPanel (adjacent to right-rail SIGNAL log); CoachPanel `maxHeight` clamp bumped from 88/260 to 220/380 to fit col-span-6 wrapped text. | **MEDIUM** (visual polish, pre-recording) | Meta-observation: width-assumption-baked-into-pixel-clamp is the layout-level analog of GOTCHA-030 (JSON Syntax Trap from truncation marker) — both involve a UI-rendering assumption that stops holding at real content sizes. |
+
+### Skills that FIRED during Phase A
+
+- `panopticon-hackathon-rules` (prime directive carried through)
+- `video-validation-protocol` (new SKILL landed as part of Phase 2B; referenced when sanity-checking Golden Run outputs)
+- `physical-kalman-tracking` (kalman.py edits during Phase 2B/3 still in scope)
+- `2k-sports-hud-aesthetic` (HUD width-clamp repair)
+- `react-30fps-canvas-architecture` (gate HUD refactor against rAF canvas invariants)
+- `multi-agent-trace-playback` (agent_trace.json format referenced)
+
+### Agents that FIRED during Phase A
+
+- `general-purpose` agent × 6 for cherry-pick execution (inside isolated worktree, `mode: "acceptEdits"` every time — zero plan-mode stalls)
+- `code-reviewer`, `python-reviewer`, `typescript-reviewer`, `security-reviewer` — parallel orthogonal panel, ~2 min wall time for all 4
+
+### Agents NOT found / partial-failure recovery (anti-pattern #35 in action)
+
+| Attempted | Outcome | Recovery |
+|---|---|---|
+| `claude-md-improver` agent | Agent not found — does not exist in this installation | **Fell back to `documentation-librarian`** (this very agent). Silently swallowing the failure would have been anti-pattern #35; instead, surfaced the missing-agent fact immediately and used the closest-available orthogonal tool. |
+| `agent_trace.json` stale-ref cross-references | Post-main-merge review flagged `See PATTERN-056` at MEMORY.md:1375 which should be PATTERN-064 (the renumbered ID) | Applied sed-style fix in-worktree before integration; added renumbering-map disclaimer to TOOLS_IMPACT.md header; will be caught by this audit going forward |
+| Vercel auto-deploy not firing on branch push | Expected deploy URL to update, didn't | Diagnosed, escalated to user; confirmed no auto-deploy on this branch per PROJECT-2026-04-23 "do-not-deploy" constraint. Not actually a failure — the constraint worked as designed. Surfaced rather than silently assuming |
+
+**Meta-observation**: partial-failure surfacing happened THREE times in this session (missing agent, stale cross-refs, non-firing auto-deploy) — each surfaced, diagnosed, and either fixed or escalated. This IS anti-pattern #35 in action (global rule, `~/.claude/rules/anti-patterns.md`): never silently swallow tool-call failures. Captured in FORANDREW.md as a real session-level learning worth preserving.
+
+### Skills NOT USED this session (and why)
+
+- `e2e-runner` / `/e2e` Playwright — deferred to pre-submission pass; Golden Run output validates end-to-end via manual visual QA on localhost
+- `hackathon-demo-director` — NEXT session (Sat Apr 25 + Sun Apr 26 — record + submit)
+- `computer-use` — deferred to Sunday Apr 26 OBS recording session
+- `/vercel:deploy` / `/vercel:verification` — blocked by PROJECT-2026-04-23 "do-not-deploy" constraint
+- `biometric-fan-experience` — locked from Phase 3.5; no copy changes needed this phase
+
+### Meta-learning this session
+
+**Orthogonality over quantity**, as articulated in global CLAUDE.md, is a force multiplier when the stakes are merge-level or deploy-level. 4 specialized reviewers running in parallel caught 3 HIGH findings nobody else would have surfaced; 4 `code-reviewer` instances running in parallel would have caught the same 1-2 findings 4 times. The discipline is to NAME each reviewer's distinct failure-mode lens BEFORE dispatching, and collapse redundant lenses.
+
+**PATTERN-062 is now the canonical merge methodology for this project.** Any future multi-commit cross-branch merge — including post-submission PR prep against main — should use the 4-layer recipe. The ROI compounded specifically because the session required TWO merges in sequence; each time the recipe executed cleanly, building confidence that the main workdir stayed pristine while risky operations happened inside the worktree.

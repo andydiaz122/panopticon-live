@@ -441,3 +441,66 @@ The bimodal-histogram diagnostic pattern that broke open the Skeleton Sanitation
 ## Day 3 (Apr 23 — Phase 3 Next.js HUD continuation)
 
 (To be populated as Phase 3 visual polish, motion animations, and HUD widget library development progresses.)
+
+---
+
+## Phase 5 (Apr 23 afternoon → evening — Demo Polish + Vercel Production Deploy; PR #4 merged)
+
+### HIGH-IMPACT tools/patterns this session
+
+| Tool / Pattern | Outcome | ROI | Notes |
+|---|---|---|---|
+| `/vercel:vercel-cli` skill (documentation-only, no command wrappers) | Reading `references/environment-variables.md` clarified the `vercel env add NAME preview "" --value "..." --yes --sensitive` positional-arg pattern and the `printf %s \| pipe` discipline | HIGH (saved 1 failed deploy attempt, ~10 min turnaround) | The skill is pure guidance — it did NOT wrap a command. Knowledge transfer from skill reference → PATTERN-056. Entry worth capturing because the skill type (documentation-only, no executor) is easy to under-use; you have to actively READ it, not just invoke it. |
+| Claude-GitHub-Action `@claude` PR-review bot (landed in `a64533b`) | PR #4: `@claude please review` comment triggered a full orthogonal review in ~3 min. Caught unstable `key={i}`, lost Tab 2 streaming progress counter, vercel.json glob breadth, hardcoded hex vs design-token, `buildTimeline` double-invocation | HIGH (one comment = multi-lens review, zero marginal cost) | Addressed quick wins in same PR (`787a5d1`), deferred perf/style nits with rationale. See https://github.com/andydiaz122/panopticon-live/pull/4#issuecomment-4308215489 |
+| `vercel curl --deployment <url> /<path> -- -I` | Post-deploy asset verification for `public/match_data/*.json` + `public/clips/*.mp4`. Confirmed `Content-Type`, `Content-Length`, `Accept-Ranges: bytes` on the MP4 before declaring deploy green | MEDIUM (turns "I think it works" into "I know these URLs returned 200") | Preferred over plain `curl` because it auto-authenticates against protected preview deploys and attaches the deployment ID. See PATTERN-058. |
+| `vercel logs --deployment <url> --no-follow --limit N --expand --status-code 500` | Surfaced the Turbopack-strip error (`The module has no exports at all`) + later the Anthropic 401 errors (driven by GOTCHA-020 newline corruption) from the Serverless Function logs | HIGH (runtime debugging for Server Actions that 500 on Vercel; unblocked GOTCHA-019/020 diagnosis) | `--status-code 500` filters to failures; `--expand` dumps full stack trace. Entry-point for any Server Action debug flow. |
+| TelemetryLog refactor (`telemetry.ts` + `TelemetryLog.tsx`) | Extracted 115 lines of shared primitives from `SignalFeed.tsx` into a library module; new 192-line `TelemetryLog` component takes props for filter/height/density; slotted 2× in Tab 1 + 1× in Tab 2 with zero visual regression | HIGH-ROI (one refactor unlocked three consumer slots; no bundle bloat) | Captured as PATTERN-055. Net diff: 388 insertions / 248 deletions in 5 files; SignalFeed.tsx shrank from 250 lines to ~80 lines. |
+| `anthropic` TypeScript SDK + Turbopack `'use server'` interaction | Discovered GOTCHA-019 empirically (local worked, Vercel build stripped the module). Fix moved config from `actions.ts` to `vercel.json` | CRITICAL | Would have cost the demo if only caught on Sunday. Caught Thu afternoon with time to fix. |
+
+### Skills that FIRED during Phase 5
+
+- `/vercel:vercel-cli` (documentation reference for env-var CLI)
+- `vercel-ts-server-actions` (route-segment config placement; led to GOTCHA-019 fix)
+- `panopticon-hackathon-rules` (prime directive: demo criterion + CLAUDE.md React architecture rules)
+- `coding-standards` (TS/React idioms — implicit; enforced by `typescript-reviewer` + PR-review bot)
+
+### Skills QUEUED but NOT USED in Phase 5
+
+- `hackathon-demo-director` (recording script — Phase 5 NEXT action, but Sun Apr 26 is the actual recording day)
+- `e2e-runner` / Playwright (would have validated TelemetryLog integration; deferred because pure-function vitest coverage is adequate and demo clip will be visually verified Sat-Sun)
+- `claude-api` / `agent-harness-construction` (Phase 2 wiring already stable; no new agent work in Phase 5)
+- `2k-sports-hud-aesthetic` / `awwwards-animations` / `top-design` (visual polish already landed in Phase 3.5; Phase 5 was deploy + DRY refactor, not new visuals)
+
+### Agents that FIRED during Phase 5
+
+- `claude` GitHub-Action reviewer (invoked via `@claude please review` comment on PR #4) — returned 5 findings; 2 addressed in same PR, 3 deferred with rationale.
+- No local sub-agents invoked (Phase 5 was orchestration-light: refactor + deploy + PR review loop, no fleet dispatches or parallel tasks).
+
+### Anti-patterns dodged this session
+
+- **#29 (redundant tool inventory)** — used existing skill references + system-reminder tool list; no tool-cataloging agent dispatched.
+- **#32 (bypassing quality-preserving commands)** — `@claude please review` IS the canonical review wrapper; used directly on the PR comment rather than dispatching a raw `code-reviewer` agent via Task.
+- **#18 (ignoring skills)** — `/vercel:vercel-cli` reference was actively consulted for PATTERN-056; skill was NOT skipped despite being documentation-only (easy to under-use).
+
+### Anti-patterns we hit (and recovered from)
+
+- **Re-learning GOTCHA-018's class** — GOTCHA-020 is a closely related hidden-byte corruption that I should have anticipated given the recency of GOTCHA-018. Recovery: captured both as cross-linked entries so the next session sees BOTH mechanisms. The meta-lesson is that "same symptom, different upstream cause" deserves its own numbered entry rather than folding into the existing GOTCHA.
+- **Anomaly injection v1 without layout-lookup** — GOTCHA-021. Fixed same session by re-injecting into layout-visible signals. Root cause was "mutating the raw data without consulting the curation filter." Captured.
+
+### Meta-learning this session
+
+**Phase 5 had three distinct sub-phases, each demanding a different tool discipline**:
+
+1. **Demo-data authoring** (morning → afternoon) — anomaly injections. Tool: `jq` + Python `json` edits directly against the golden JSON. Lesson: ALWAYS pre-check the curation filter (HUD layout widget list at target timestamp) before mutating. → GOTCHA-021.
+
+2. **DRY refactor** (mid-afternoon) — TelemetryLog. Tool: Read/Edit/Write on the dashboard source tree; vitest for regression. Lesson: pure-function extraction into a `lib/` module BEFORE component authoring enables three consumers with no duplication. → PATTERN-055.
+
+3. **Production deploy + PR review** (evening) — Vercel wire-up. Tool: `vercel` CLI + `@claude` PR bot + `vercel curl` asset verification + `vercel logs` for debugging. Lesson: the deploy surface is unforgiving; one reliable incantation per task is worth more than three almost-right ones. → GOTCHA-019/020, PATTERN-056/058, WORKFLOW-005, DECISION-010.
+
+The combined session shipped PR #4 with 4 commits and no hot-fix revert. That's the bar for Phase 5 velocity. Phase 6 (Sat polish + Sun record) should preserve this cadence.
+
+### Artifacts
+
+- Preview URL: `panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app` (as of PR #4 merge)
+- 4 commits merged to main: `4f9df37` (force-add assets) → `b20c370` (vercel.json maxDuration fix) → `888acb5` (anomaly injection + TelemetryLog slots) → `787a5d1` (PR-review feedback — stable keys + Tab 2 progress counter)
+- PR #4 URL: https://github.com/andydiaz122/panopticon-live/pull/4

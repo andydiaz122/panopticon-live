@@ -2,31 +2,34 @@
 
 /*
  * PANOPTICON LIVE — design-token CSS variables.
- * Mirror of dashboard/src/lib/design-tokens.ts. See `2k-sports-hud-aesthetic` skill.
+ * Mirror of dashboard/src/lib/design-tokens.ts.
+ *
+ * v2 warm dark broadcast palette (DECISION-017, 2026-04-24 evening) — keep
+ * this file IN SYNC with the TS tokens file. Drift = palette inconsistency.
  */
 :root {
   /* Player identifiers */
-  --color-player-a: #00E5FF;
-  --color-player-b: #FF3D71;
+  --color-player-a: #D97757; /* Anthropic Clay (was cyan #00E5FF) */
+  --color-player-b: #A89E92; /* warm gray (was coral red) */
 
-  /* Signal tone */
-  --color-baseline: #64748B;
-  --color-energized: #34D399;
-  --color-fatigued: #F59E0B;
-  --color-anomaly: #EF4444;
-  --color-opus-thinking: #A855F7;
+  /* Signal tone — warm-family scale, fatigue = brand accent */
+  --color-baseline: #7E7060; /* warm slate (was cool slate #64748B) */
+  --color-energized: #8A9474; /* muted olive (was emerald #34D399) */
+  --color-fatigued: #E89B6F; /* clay-bright (was amber #F59E0B) */
+  --color-anomaly: #C04A2C; /* rust red (was #EF4444) */
+  --color-opus-thinking: #D97757; /* clay (was purple #A855F7 — AI voice = brand accent) */
 
-  /* Background layers */
-  --color-bg-0: #0A0E1A;
-  --color-bg-1: #0F1524;
-  --color-bg-2: #1A2238;
-  --color-border: #243049;
-  --color-border-accent: #3B4F7E;
+  /* Background layers — warm slate progression */
+  --color-bg-0: #1A1614; /* warm slate-black (was #0A0E1A) */
+  --color-bg-1: #26201D; /* warm card bg (was #0F1524) */
+  --color-bg-2: #332B25; /* warm elevated (was #1A2238) */
+  --color-border: #3A3128; /* warm hairline (was #243049) */
+  --color-border-accent: #7E4634; /* clay-dim (was cool blue #3B4F7E) */
 
-  /* Text */
-  --color-text-primary: #F8FAFC;
-  --color-text-secondary: #CBD5E1;
-  --color-text-muted: #64748B;
+  /* Text — warm cream/gray progression */
+  --color-text-primary: #F2EAE0; /* warm cream (was cool #F8FAFC) */
+  --color-text-secondary: #A89E92; /* warm gray (was cool slate #CBD5E1) */
+  --color-text-muted: #5A5247; /* warm muted (was cool slate #64748B) */
 }
 
 @theme inline {

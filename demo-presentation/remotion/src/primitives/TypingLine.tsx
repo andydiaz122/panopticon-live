@@ -30,6 +30,7 @@ export interface TypingLineProps {
   fontSize?: number;
   fontWeight?: number | string;
   letterSpacing?: string;
+  fontFamily?: string;
 }
 
 export const TypingLine = ({
@@ -37,10 +38,11 @@ export const TypingLine = ({
   startFrame = 0,
   charsPerSecond = 25,
   showCursor = true,
-  color = '#00E5FF',
+  color = '#D97757', // Anthropic Clay (default — overridden via tokens.ts)
   fontSize = 48,
   fontWeight = 400,
   letterSpacing = '0',
+  fontFamily = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
 }: TypingLineProps) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -63,7 +65,7 @@ export const TypingLine = ({
   return (
     <span
       style={{
-        fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+        fontFamily,
         fontSize,
         fontWeight,
         letterSpacing,

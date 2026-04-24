@@ -28,11 +28,7 @@ import { COCO_SKELETON_EDGES, type PlayerDetection } from '@/lib/types';
  * magenta skeleton was removed.
  */
 
-// Imported from design-tokens.ts so the dashboard palette stays consistent
-// after the v2 warm-clay pivot (DECISION-017, GOTCHA-044).
-import { colors } from '@/lib/design-tokens';
-
-const COLOR_PLAYER_A = colors.playerA; // Anthropic Clay (was canonical cyan #00E5FF)
+const COLOR_PLAYER_A = '#00E5FF'; // canonical analytics cyan — mirrors design-tokens.ts
 const SKELETON_LINE_WIDTH = 3;
 const JOINT_RADIUS = 4;
 const MIN_JOINT_CONFIDENCE = 0.3;

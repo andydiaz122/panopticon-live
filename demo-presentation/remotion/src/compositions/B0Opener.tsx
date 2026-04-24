@@ -1,22 +1,7 @@
-import { loadFont as loadFraunces } from '@remotion/google-fonts/Fraunces';
 import { AbsoluteFill, Sequence, useCurrentFrame, interpolate } from 'remotion';
 
 import { GitGraph, type GitAnchor } from '../primitives/GitGraph';
 import { TypingLine } from '../primitives/TypingLine';
-import {
-  ACCENT_CLAY,
-  BG_PRIMARY,
-  FONT_MONO,
-  INK_MUTED,
-  INK_PRIMARY,
-  INK_SECONDARY,
-  TYPEWRITER_CPS,
-} from '../tokens';
-
-// Load Fraunces serif (free Google Fonts substitute for Copernicus/Tiempos
-// which Anthropic uses on the Opus 4.6 wordmark). Wakes up the loader at
-// module evaluation so the title-card render has the font ready by frame 0.
-const { fontFamily: FRAUNCES_FAMILY } = loadFraunces();
 
 /**
  * B0 — Personal-journey opener (PLAN.md §5.5).
@@ -37,15 +22,19 @@ const { fontFamily: FRAUNCES_FAMILY } = loadFraunces();
  * the handoff.
  */
 
-// ──────────────────────────── Palette (sourced from src/tokens.ts) ────────────────────────────
+// ──────────────────────────── Palette (v5 — warm dark broadcast, post-research-wave) ────────────────────────────
 //
-// All colors come from the canonical token surface. To iterate the palette,
-// edit src/tokens.ts only — every composition picks up the change.
+// v4 → v5 swap rationale (see demo-presentation/assets/references/design_dna.md):
+//   - 2025-2026 craft language across Anthropic / Linear / Vercel / Tendril / Arc converges on
+//     monochrome warm foundation + ONE saturated accent.
+//   - v4's #00E5FF cyan-on-#05080F was the "sci-fi HUD bloat" anti-pattern.
+//   - v5 adopts Anthropic's published Clay #D97757 as the lone accent (in-culture move on the
+//     Anthropic hackathon) + warm dark slate as the foundation. Andrew approved warmer-but-tailored.
 
-const BG = BG_PRIMARY;
-const USER_COLOR = INK_SECONDARY; // user prompt reads as ambient
-const CLAUDE_COLOR = ACCENT_CLAY; // the ONLY saturated color — Claude's voice
-const META_COLOR = INK_MUTED; // terminal header, sublabels
+const BG = '#1A1614'; // warm slate-black — replaces cool #05080F
+const USER_COLOR = '#A89E92'; // warm gray — user prompt reads as ambient
+const CLAUDE_COLOR = '#D97757'; // Anthropic Clay — the ONLY saturated color, reserved for Claude's voice
+const META_COLOR = '#5A5247'; // warm muted — terminal header, sublabels
 
 // ──────────────────────────── Beat timings (60 fps) ────────────────────────────
 
@@ -149,7 +138,6 @@ export const B0Opener = () => {
             fontWeight={400}
             letterSpacing="0.01em"
             showCursor={frame < CLAUDE_TYPE_START_FRAME}
-            fontFamily={FONT_MONO}
           />
         </div>
 
@@ -177,13 +165,12 @@ export const B0Opener = () => {
             <TypingLine
               text={CLAUDE_TEXT}
               startFrame={0}
-              charsPerSecond={TYPEWRITER_CPS}
+              charsPerSecond={25}
               color={CLAUDE_COLOR}
               fontSize={44}
               fontWeight={500}
               letterSpacing="0.01em"
               showCursor={true}
-              fontFamily={FONT_MONO}
             />
           </div>
         </Sequence>
@@ -222,44 +209,43 @@ const TitleCard = () => {
         opacity,
       }}
     >
-      <div style={{ textAlign: 'center' }}>
+      <div
+        style={{
+          textAlign: 'center',
+          fontFamily: '"JetBrains Mono", monospace',
+        }}
+      >
         <div
           style={{
-            fontFamily: FONT_MONO,
             fontSize: 12,
             letterSpacing: '0.28em',
             color: META_COLOR,
             textTransform: 'uppercase',
-            marginBottom: 36,
+            marginBottom: 32,
           }}
         >
           biomechanical fatigue telemetry · from 2d broadcast pixels
         </div>
-        {/* Hero wordmark in Fraunces serif — matches Anthropic's Opus 4.6 wordmark
-         *  register (transitional serif, classical proportions). Title-case (not
-         *  ALL CAPS) because Fraunces shines at mixed-case display sizes. */}
         <div
           style={{
-            fontFamily: FRAUNCES_FAMILY,
-            fontSize: 132,
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-            color: INK_PRIMARY,
+            fontSize: 120,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            color: CLAUDE_COLOR,
+            textTransform: 'uppercase',
             whiteSpace: 'nowrap',
-            lineHeight: 0.95,
-            fontFeatureSettings: '"ss01" 1, "ss02" 1', // Fraunces stylistic sets — refined "g" and "a"
+            lineHeight: 1,
           }}
         >
-          Panopticon <span style={{ color: ACCENT_CLAY, fontStyle: 'italic' }}>Live</span>
+          Panopticon Live
         </div>
         <div
           style={{
-            fontFamily: FONT_MONO,
             fontSize: 13,
             letterSpacing: '0.24em',
             color: META_COLOR,
             textTransform: 'uppercase',
-            marginTop: 32,
+            marginTop: 28,
           }}
         >
           built with claude opus 4.7 · april 2026

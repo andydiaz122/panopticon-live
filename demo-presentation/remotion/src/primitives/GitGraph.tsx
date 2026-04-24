@@ -1,14 +1,5 @@
 import { useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
 
-import {
-  ACCENT_CLAY,
-  BORDER,
-  FONT_MONO,
-  INK_MUTED,
-  INK_PRIMARY,
-  INK_SECONDARY,
-} from '../tokens';
-
 /**
  * GitGraph — horizontal-timeline commit-graph primitive.
  *
@@ -42,13 +33,13 @@ export interface GitGraphProps {
   y?: number;
 }
 
-// All colors sourced from src/tokens.ts (single source of truth, PATTERN-081).
-const LINE_COLOR = BORDER;
-const LINE_LIVE_COLOR = ACCENT_CLAY;
-const DOT_COLOR = INK_SECONDARY;
-const DOT_LANDING_COLOR = ACCENT_CLAY;
-const LABEL_COLOR = INK_PRIMARY;
-const SUBLABEL_COLOR = INK_MUTED;
+// v5 palette — warm dark broadcast, monochrome + Clay accent (see design_dna.md)
+const LINE_COLOR = '#3A3128'; // warm border / inactive timeline
+const LINE_LIVE_COLOR = '#D97757'; // Anthropic Clay — the live progress line
+const DOT_COLOR = '#A89E92'; // warm gray — already-passed anchors
+const DOT_LANDING_COLOR = '#D97757'; // Clay — the landing anchor (PANOPTICON LIVE)
+const LABEL_COLOR = '#F2EAE0'; // warm cream — anchor labels
+const SUBLABEL_COLOR = '#5A5247'; // warm muted — dates / sublabels
 
 export const GitGraph = ({
   anchors,
@@ -179,7 +170,7 @@ export const GitGraph = ({
               fill={isLanding ? DOT_LANDING_COLOR : LABEL_COLOR}
               opacity={labelOpacity}
               style={{
-                fontFamily: FONT_MONO,
+                fontFamily: '"JetBrains Mono", monospace',
                 fontSize: isLanding ? 18 : 14,
                 fontWeight: isLanding ? 700 : 500,
                 letterSpacing: '0.08em',
@@ -197,7 +188,7 @@ export const GitGraph = ({
                 fill={SUBLABEL_COLOR}
                 opacity={labelOpacity}
                 style={{
-                  fontFamily: FONT_MONO,
+                  fontFamily: '"JetBrains Mono", monospace',
                   fontSize: 11,
                   letterSpacing: '0.12em',
                 }}

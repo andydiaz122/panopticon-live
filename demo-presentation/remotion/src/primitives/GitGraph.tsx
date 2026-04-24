@@ -33,13 +33,16 @@ export interface GitGraphProps {
   y?: number;
 }
 
-// v5 palette — warm dark broadcast, monochrome + Clay accent (see design_dna.md)
-const LINE_COLOR = '#3A3128'; // warm border / inactive timeline
-const LINE_LIVE_COLOR = '#D97757'; // Anthropic Clay — the live progress line
-const DOT_COLOR = '#A89E92'; // warm gray — already-passed anchors
-const DOT_LANDING_COLOR = '#D97757'; // Clay — the landing anchor (PANOPTICON LIVE)
-const LABEL_COLOR = '#F2EAE0'; // warm cream — anchor labels
-const SUBLABEL_COLOR = '#5A5247'; // warm muted — dates / sublabels
+// Restored cyan-on-blue palette (2026-04-24 evening) — matches dashboard's
+// design-tokens.ts after warm-clay revert. v5 warm-clay variant didn't land
+// for this product's broadcast/sports register; research findings preserved
+// in demo-presentation/assets/references/ for any future palette experiment.
+const LINE_COLOR = '#1F2B3F'; // cool border / inactive timeline
+const LINE_LIVE_COLOR = '#00E5FF'; // analytics cyan — the live progress line
+const DOT_COLOR = '#7B8BA8'; // cool gray — already-passed anchors
+const DOT_LANDING_COLOR = '#00E5FF'; // cyan — the landing anchor (PANOPTICON LIVE)
+const LABEL_COLOR = '#B8C4D6'; // cool light gray — anchor labels
+const SUBLABEL_COLOR = '#5A6678'; // cool muted — dates / sublabels
 
 export const GitGraph = ({
   anchors,

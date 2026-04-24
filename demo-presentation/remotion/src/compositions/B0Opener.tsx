@@ -22,19 +22,20 @@ import { TypingLine } from '../primitives/TypingLine';
  * the handoff.
  */
 
-// ──────────────────────────── Palette (v5 — warm dark broadcast, post-research-wave) ────────────────────────────
+// ──────────────────────────── Palette (v4 cyan-on-blue, restored 2026-04-24 evening) ────────────────────────────
 //
-// v4 → v5 swap rationale (see demo-presentation/assets/references/design_dna.md):
-//   - 2025-2026 craft language across Anthropic / Linear / Vercel / Tendril / Arc converges on
-//     monochrome warm foundation + ONE saturated accent.
-//   - v4's #00E5FF cyan-on-#05080F was the "sci-fi HUD bloat" anti-pattern.
-//   - v5 adopts Anthropic's published Clay #D97757 as the lone accent (in-culture move on the
-//     Anthropic hackathon) + warm dark slate as the foundation. Andrew approved warmer-but-tailored.
+// User-correction: tried v5 warm-clay-on-warm-slate (Anthropic-style) per the
+// 3-agent research wave; visually didn't land for THIS product context (dark
+// broadcast HUD register, not editorial paper register). Reverted at user
+// direction. The cyan-on-cool-slate palette aligns with the dashboard's
+// existing 2K-sports HUD identity — broadcast/sports context where saturated
+// data-cyan reads as "live telemetry," not as sci-fi bloat. Research findings
+// preserved in demo-presentation/assets/references/ for future reference.
 
-const BG = '#1A1614'; // warm slate-black — replaces cool #05080F
-const USER_COLOR = '#A89E92'; // warm gray — user prompt reads as ambient
-const CLAUDE_COLOR = '#D97757'; // Anthropic Clay — the ONLY saturated color, reserved for Claude's voice
-const META_COLOR = '#5A5247'; // warm muted — terminal header, sublabels
+const BG = '#05080F'; // cool slate-black, matches dashboard bg0
+const USER_COLOR = '#7B8BA8'; // cool gray — user prompt reads as ambient
+const CLAUDE_COLOR = '#00E5FF'; // analytics cyan — Claude's voice, matches dashboard playerA
+const META_COLOR = '#5A6678'; // cool muted — terminal header, sublabels
 
 // ──────────────────────────── Beat timings (60 fps) ────────────────────────────
 

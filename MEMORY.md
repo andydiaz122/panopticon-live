@@ -1783,6 +1783,95 @@ The Figma MCP exposes ~18 tools through the Claude.ai client. The Figma docs ref
 
 ---
 
+## 2026-04-24 Late Evening — Research Wave Returns + Warm-Clay Pivot REVERTED
+
+Three parallel research agents completed (Anthropic video deconstruction via yt-dlp frame-sampling, Remotion + motion-design craft patterns from Tendril/Linear/Vercel/Arc, Figma → Remotion workflow). All three converge on a single craft language. B0 opener pivoted from cyan-on-blue (v4) to warm-slate + Anthropic Clay accent (v5). Dashboard pivoted to match. **User reverted ~5 minutes after seeing the v2 dashboard live**: *"the Anthropic colors are not working."* Cyan-baseline restored. Research findings preserved as durable cross-session learnings — they're domain-aware, not domain-blind.
+
+### USER-CORRECTION-036 — Warm-clay palette REVERTED; cyan-on-blue stays for THIS product
+
+User correction 2026-04-24 evening (within ~5 min of seeing v2 dashboard): *"Let's revert to the colors we had before. The Anthropic colors are not working."*
+
+Reverted via `git revert 3220d9a` (the v2 pivot commit) plus surgical restore of B0Opener.tsx + GitGraph.tsx (warm-clay was introduced in the earlier insurance commit `708b536`, so the revert alone didn't catch them — required two-line follow-up edit).
+
+**Why the warm palette didn't land here** (the non-obvious lesson):
+
+The 3-agent research wave was CORRECT that 2025-2026 world-class tech-product demos use monochrome + ONE accent + restraint. PATTERN-077/078/079/080/081 still hold as universal craft rules. **But the specific accent + bg pairing must match the PRODUCT'S NATIVE DOMAIN REGISTER.**
+
+- Anthropic's films are EDITORIAL PAPER register: cream + sandstone backgrounds + classical serif + warm coral. Their product is conversational AI on cream-paper-feeling chat surfaces. Warm-on-warm fits THEIR domain.
+- PANOPTICON LIVE is BROADCAST/SPORTS register: dark dashboard HUD + saturated data telemetry + court-overlay skeletons. Sports broadcasts have lived in cool-blue + cyan-data palettes since the 2010s (ESPN BottomLine, Hawk-Eye, Sportradar, ATP/WTA on-screen graphics). The viewer's eye PARSES "live data" as cool/cyan in this context. Warm-clay-on-warm-slate read as "editorial documentary" not as "live broadcast HUD."
+- **Palette doesn't override product-fit.** Even "anti-pattern" cyan-on-blue can be the right answer if the product's domain has a strong native palette convention. Cyan in a 2K-Sports HUD is in-domain even if it's "sci-fi HUD bloat" in a generic tech-demo context.
+
+**Generalizable rule (new)**: research findings about "world-class craft" are domain-aware, not domain-blind. Always cross-check the recommended palette against the product's native domain conventions. Sports broadcast UI ≠ editorial AI chat UI ≠ developer tool dashboard ≠ consumer SaaS — each domain has accumulated visual conventions that override the generic monochrome-plus-one-accent rule.
+
+**Severity for cross-session**: HIGH. Future sessions tempted to re-apply "monochrome warm + ONE accent" to PANOPTICON should re-read THIS entry first. The right palette for this product was settled by user correction; don't re-litigate without explicit user direction.
+
+### PATTERN-077 — Monochrome foundation + ONE saturated accent (universal tech-demo craft rule)
+
+Still durable even after the warm-clay revert — the cyan-on-blue palette ALSO follows this rule. Cool-blue foundation + cyan accent is a valid instance; warm-slate + clay is another. The RULE holds; the specific colors must match the product's domain.
+
+Every world-class tech-product demo in 2025-2026 (Linear, Vercel, Arc, Cursor, Loom, Anthropic's own films, Tendril Studio's reel) follows this principle: monochrome carries 90% of the frame, ONE saturated color carries all signal, a second accent is a red flag. Tendril Studio's 2023 brand refresh explicitly committed to "black-and-white with tones of gray" — they REJECTED a color palette as a brand statement.
+
+**For PANOPTICON**: cool-blue/black is the monochrome foundation; cyan `#00E5FF` is the ONE saturated accent (the sports-broadcast-domain convention for "live data"). Reserved for fatigue telemetry, AI voice, hero numerics. Everything else stays in cool-gray.
+
+**Reference**: `demo-presentation/assets/references/remotion_craft_patterns.md` Pattern 2.
+
+### PATTERN-078 — Anthropic's "restraint IS the brand" motion vocabulary
+
+Still durable. Frame-sampled motion inventory from both Anthropic release videos (Opus 4.6 + Claude for Chrome):
+
+- **95% of cuts are HARD CUTS** (zero ms transition). Crossfades observed once.
+- **One scale-pop** — text appears at scale ~0.9 and springs to 1.0 over 200-300 ms with mild overshoot.
+- **Word-by-word typewriter** for any text appearing in chat/sidebar — ~60 ms per character.
+- **NO parallax** on background frames.
+- **NO ken-burns** or subtle camera drift.
+- **NO gradients, glassmorphism, drop shadows** except subtle UI-window chrome.
+- **Motion happens INSIDE UI mockups** (browser tabs opening, docs filling), not applied AS cinematographic effects.
+
+The inventory is tiny on purpose. Apply to OUR Remotion compositions: catalog every motion, delete any that don't EXPLAIN something static pixels couldn't, aim for ~5 motion primitives in a 3-min film not 25.
+
+### PATTERN-079 — Pacing inversion: cuts-per-minute matches scene intent
+
+Still durable. Anthropic's two release films invert pacing strategy intentionally:
+
+- **Opus 4.6 model launch**: 77 cuts/minute = avg 0.78 s/shot. Social-proof storm. Designed to blur into ONE feeling of cultural gravitational pull.
+- **Claude for Chrome product demo**: 7 cuts/minute = avg 8.6 s dwell per shot. Calm capability narrative.
+
+**The rule**: cuts/min should track scene INTENT, not video length. Storm = launch. Calm = product demonstration. NEVER mix in a single film without a deliberate beat-shift.
+
+**For PANOPTICON LIVE**: the Detective Cut is a PRODUCT DEMO (calm capability). Target 7-9 cuts/minute. Long dwells (8-12 s per beat). Hard cuts only between beats. Silence/stillness as punctuation, not as dead air.
+
+### PATTERN-080 — "Motion never survives if it only lives in Figma"
+
+Still durable. Professional motion-design teams treat Figma as the static reference + brief, Remotion as the ground-truth artifact. Designers who try to author motion curves in Figma Prototype Mode and "hand them off" lose the animation in translation.
+
+**For our project**: Figma frames = scene mockups + color/type tokens. Remotion = where animation logic actually lives.
+
+### PATTERN-081 — Figma Variables → DTCG JSON → `src/tokens.ts` (architectural pattern, even if our specific tokens.ts was reverted)
+
+Still durable as an ARCHITECTURAL pattern. The specific `tokens.ts` file was deleted in the warm-clay revert, but the principle remains: when palette iteration becomes important, consolidate hex codes to a single source (TS or CSS variables) and import everywhere. Saves grep-and-replace pain on future palette tweaks.
+
+For PANOPTICON's CURRENT cyan palette, the dashboard already follows this pattern (`dashboard/src/lib/design-tokens.ts` is the canonical source). Remotion compositions could adopt the same if we ever do another palette iteration.
+
+### GOTCHA-044 — "Sci-fi HUD bloat" is a CONDITIONAL anti-pattern (domain-dependent)
+
+- **In generic tech-demo context** (developer tools, SaaS, AI products): saturated cyan-on-blue reads as derivative-of-tron / unserious / 2010s-sci-fi to engineering-judge audiences. The "sci-fi HUD bloat" anti-pattern.
+- **In sports broadcast / data-telemetry context** (PANOPTICON LIVE's domain): saturated cyan IS the native domain color. ESPN, Hawk-Eye, Sportradar, ATP/WTA on-screen graphics have used cool-blue + cyan-data since the 2010s. Adopting this convention is "in-domain craft," not bloat.
+- **The discriminator**: ask whether the product's NATIVE DOMAIN has accumulated visual conventions. If yes (sports broadcasting yes, financial data yes, medical imaging yes), follow the domain. If no (a generic SaaS dashboard with no inherited convention), use the modern monochrome+one-accent rule.
+
+**Cross-reference**: `demo-presentation/assets/references/remotion_craft_patterns.md` Anti-pattern #1 — useful research, but interpret CONDITIONALLY for domain-bearing products.
+
+### USER-DIRECTIVE-035 — "Document all learnings from Anthropic + world-class design workflows"
+
+User explicit directive 2026-04-24 evening: *"Remember to document all learnings that we extract from Anthropics workflows and world-class design workflows using tools like Remotion and Figma so we can apply it to our own projects."*
+
+This entire 2026-04-24 Late Evening section + the cross-session memory updates at `~/.claude/projects/-Users-andrew-Documents-Coding-Built-with-Opus-4-7-Hackathon/memory/` are the durable answer. Future sessions auto-recall PATTERN-077 through PATTERN-081, GOTCHA-044, USER-CORRECTION-036 via the index.
+
+### Reference docs preserved
+
+`demo-presentation/assets/references/` retains all the research deliverables (anthropic_video_dna.md, remotion_craft_patterns.md, figma_remotion_workflow.md, design_dna.md, competitor_audit.md, mascot_research.md). The HEX-SPECIFIC recommendations in design_dna.md are obsolete for THIS project's current palette, but the PRINCIPLES (PATTERN-077 through 081) are universal.
+
+---
+
 ## DAY 5 LEARNINGS (Apr 26, 2026)
 
 (To be populated)

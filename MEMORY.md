@@ -965,6 +965,7 @@ Cross-session recall. Every entry is:
   4. Only after steps 1-3 pass, blame rate-limits / regional outages.
 - **Severity**: MEDIUM (cost a full Crucible run (~8 min compute) before diagnosis; catchable in <10s with a `${#KEY}` length check)
 - **Note**: Originally numbered GOTCHA-018 in commit a0093e7; renumbered to GOTCHA-033 during merge to avoid collision with prior GOTCHA-018 (SG polyorder).
+- **Related**: See GOTCHA-035 (originally GOTCHA-020 on main, renumbered) for the `printf "%s\n\n"` variant — different mechanism (piped-stdin trailing newline fed into `vercel env add`, not clipboard quoting), same corruption outcome (Anthropic-401 loop). Treat both as members of the same "hidden-byte env-var" class.
 
 ### USER-CORRECTION-031 — Direct User Directive Overrides Forwarded Team-Lead Text
 - **Type**: User-Correction
@@ -975,6 +976,7 @@ Cross-session recall. Every entry is:
   2. If the forwarded directive still disagrees with observed state, ASK the user which path is canonical rather than switching.
   3. Never stage files or start destructive work across worktree boundaries until the path is user-confirmed.
 - **Severity**: HIGH (worktree switches can abandon in-flight work or scatter assets across sibling repos — anti-pattern #31 adjacent)
+- **Phase-5 addendum (2026-04-23)**: During the Vercel env-var rotation saga I flagged that the Anthropic API key had been forwarded in the raw chat transcript and therefore should be rotated before being added to Vercel. Andrew responded "use this exposed API key, don't rotate" — accepting the security trade-off explicitly. I re-surfaced the concern a second time, which was excess friction. **Lesson extension**: when the user has been informed of a security trade-off and chooses to accept it, state the trade-off clearly ONCE ("the key in the transcript is now considered burned; using it means you should rotate after the hackathon"), then comply. Do not re-argue, do not ask again, do not block progress. The override protocol in the original correction ("user directive beats forwarded text") also covers "user directive beats my security instinct, after they've been informed." The forcing function for me is to make the trade-off explicit and the ask singular — not to become a persistent objector.
 
 ### USER-CORRECTION-032 — Vercel NFT Cannot Bundle Dynamic fs.readFile Paths in Server Actions → Use Client-Driven Payload
 - **Type**: User-Correction (deployment trap)
@@ -1337,9 +1339,155 @@ Cross-session recall. Every entry is:
 
 ---
 
-## DAY 3 LEARNINGS (Apr 24, 2026)
+### Phase 5 — Demo Polish + Vercel Production Deploy (2026-04-23 afternoon to evening, PR #4 merged)
 
-(To be populated)
+> **MERGE-RENUMBERING MAP** — the following Phase 5 entries came from `origin/main` under IDs that clash with entries already in this repo. Per PATTERN-062 ID-clash policy, main's IDs were renumbered to next-available slots. Internal cross-references WITHIN the Phase 5 entry bodies below still use main's ORIGINAL numbers to keep the prose self-consistent; readers should consult this map:
+>
+> | Main's original ID | Renumbered (this repo) | Subject |
+> |---|---|---|
+> | GOTCHA-018 | GOTCHA-033 | Multi-line paste newline in env var |
+> | GOTCHA-019 | GOTCHA-034 | Turbopack strips non-async exports |
+> | GOTCHA-020 | GOTCHA-035 | printf newlines into `vercel env add` |
+> | GOTCHA-021 | GOTCHA-036 | Anomaly injection inside active HUD layout |
+> | PATTERN-055 | PATTERN-063 | TelemetryLog primitive |
+> | PATTERN-056 | PATTERN-064 | Non-interactive `vercel env add` |
+> | PATTERN-057 | PATTERN-065 | Stable React keys for monotonic lists |
+> | PATTERN-058 | PATTERN-066 | `vercel curl --deployment` asset verification |
+> | DECISION-010 | DECISION-011 | Vercel deployment topology |
+> | WORKFLOW-005 | WORKFLOW-005 | `@claude` PR-review bot (no clash) |
+
+### GOTCHA-034 — Turbopack Strips Non-Async Exports From use-server Files (originally GOTCHA-019 on main)
+- **Type**: Gotcha (Next.js 16 / Turbopack)
+- **Context**: 2026-04-23, Phase 5 Vercel deploy. `dashboard/src/app/actions.ts` begins with `'use server';` and previously exported both `export const maxDuration = 60` (route-segment config) and `export async function generateScoutingReport(...)` (Server Action). Local `next dev` (Turbopack) built the module correctly. Production build via Turbopack completely stripped `actions.ts` from the client bundle — the `generateScoutingReport` import in `ScoutingReportTab.tsx` resolved to nothing, and the build log emitted `The module has no exports at all`. Root cause: Turbopack's `'use server'` analyzer only keeps async function exports; non-async exports (plain `const`, `let`, etc.) are treated as "not Server Action surface" and the whole module was dropped. This is a Turbopack-specific behavior — Webpack tolerates the mixed-export shape because its `'use server'` boundary-analyzer is more permissive.
+- **Symptom ladder**: (a) local `next dev` — works (Turbopack dev mode). (b) `vercel` preview deploy — build succeeds but Tab 3 throws `TypeError: generateScoutingReport is not a function` in the browser. (c) `next build` locally with Turbopack forced — same error.
+- **Lesson**: Route-segment config (`maxDuration`, `runtime`, `preferredRegion`, `revalidate`, `dynamic`, `fetchCache`, etc.) should NEVER co-habit a `'use server'` file. Move it to `vercel.json` (`functions."src/app/**/*.ts(x)".maxDuration: 60`) or to a non-`'use server'` route handler file.
+- **Fix committed**: `b20c370 fix(deploy): move maxDuration from actions.ts to vercel.json` — deleted the `export const maxDuration = 60` line; added `dashboard/vercel.json` with `{"functions": {"src/app/**/*.ts": {"maxDuration": 60}, "src/app/**/*.tsx": {"maxDuration": 60}}}`.
+- **Generalizes to**: any Next.js 16 `'use server'` file that tried to co-locate config. Treat `'use server'` files as strictly async-exports-only.
+- **Severity**: CRITICAL (silent production break — local works, Vercel 500s)
+- **Files**: `dashboard/src/app/actions.ts`, `dashboard/vercel.json` (new).
+
+### GOTCHA-035 — printf Into vercel-env-add Embeds Trailing Newlines Into Stored Env Value (originally GOTCHA-020 on main)
+- **Type**: Gotcha (Vercel CLI / shell)
+- **Context**: 2026-04-23, Phase 5 production deploy. After GOTCHA-018's clipboard-paste newline variant burned a Crucible run, I was extra-careful rotating the Anthropic API key into Vercel. My command was `printf "%s\n\n" "<redacted-key-body>" | vercel env add ANTHROPIC_API_KEY production --sensitive`. The `\n\n` at the end was reflexive — "make sure stdin ends with a newline so the CLI gets EOF cleanly." Vercel's CLI then displayed `WARNING! Value contains newlines.` and proceeded to store the value WITH the trailing newlines intact. Result: the stored API key was 110 bytes (108 valid + `\n\n`), and every Anthropic SDK call from the Serverless Function returned 401 auth error, because the Authorization header builder passed the newlines through into the HTTP header, which the Anthropic edge rejected as malformed.
+- **Symptom**: identical to GOTCHA-018 from the outside — Anthropic calls fail uniformly. BUT the diagnostic ladder differs: this one lives inside the Vercel env store, not on the local shell. `vercel env pull` cannot reveal it (Sensitive vars do not download). Only way to see the corruption is to deploy and read the Function's runtime error.
+- **Distinction from GOTCHA-018**: GOTCHA-018 was clipboard-paste quoting on the local shell, corrupting `$ANTHROPIC_API_KEY` BEFORE upload. GOTCHA-020 is stdin corruption DURING upload via `printf "%s\n\n"` — the shell env var was clean, but the value that reached Vercel's store was not. Different mechanism, same outcome.
+- **Lesson**: When piping into `vercel env add`, use `printf "%s"` (no trailing newline) — NOT `printf "%s\n"` or `echo` (which append one implicit newline) or `printf "%s\n\n"` (which appends two). If Vercel's CLI prints `WARNING! Value contains newlines`, STOP, abort the upload (Ctrl-C before confirming), remove the var, and re-upload with the clean form.
+- **Preferred incantation (from `/vercel:vercel-cli` reference)**: `vercel env add NAME preview "" --value "..." --yes --sensitive` — `--value` bypasses stdin entirely and stores the exact string you pass, with no newline ambiguity. See PATTERN-056.
+- **Related**: Cross-linked to GOTCHA-018 (shell-quoting newline, same symptom, upstream mechanism). Both belong to the same class: any byte you cannot see in the visible terminal view can end up in your env var.
+- **Severity**: CRITICAL (production break; caught only by deploying and reading runtime logs)
+- **Files**: Vercel project `dmg-decisions/panopticon-live` env store; no repo-level code change.
+
+### GOTCHA-036 — Anomaly Injection Must Target Signals Inside the ACTIVE hud_layouts Entry at That Timestamp (originally GOTCHA-021 on main)
+- **Type**: Gotcha (demo data authoring)
+- **Context**: 2026-04-23, Phase 5 demo anomaly seeding. Golden `utr_01_segment_a.json` had no `baseline_z_score` hits >2.0 during the demo window; the `AnomalyBadge` pulsing-red UI therefore never fired on video. My first injection (v1) set `baseline_z_score: 2.5` on the `lateral_work_rate` signal sample at `timestamp_ms=36166`. Commit shipped; judges would still see a blank UI. Root cause on re-inspection: the active HUD layout at `t=36166` is `hud_34233_8b1eaa` (valid range 34233 to 64233 ms), whose `widgets` list specifies `serve_toss_variance_cm`, `ritual_entropy_delta`, and `crouch_depth_degradation_deg` — `lateral_work_rate` is not among them. The frontend's `SignalRail` only renders bars for signals present in the active layout's widget list (by design — that's how DECISION-009's HUD-Designer curation works). So a z-score flag on a signal the user cannot see is invisible.
+- **Lesson**: Before mutating any `SignalSample` to showcase anomaly UI, ALWAYS look up the ACTIVE `hud_layouts` entry at the target timestamp and confirm the signal appears in that layout's `widgets` list. Pseudocode:
+  ```python
+  layout = next(l for l in match_data["hud_layouts"] if l["timestamp_ms"] <= t_ms < l["valid_until_ms"])
+  assert target_signal_name in [w["signal_name"] for w in layout["widgets"]], \
+      f"{target_signal_name} not rendered at t={t_ms} (layout={layout['layout_id']})"
+  ```
+- **Fix committed (v2)**: `888acb5 feat(dashboard): visible anomaly injections + dual TelemetryLog slots` — injected three on-screen anomalies that ARE in `hud_34233_8b1eaa`:
+  - `serve_toss_variance_cm` at `t=35900ms`, `baseline_z_score=-2.3`
+  - `crouch_depth_degradation_deg` at `t=45300ms`, `baseline_z_score=+2.5`
+  - `crouch_depth_degradation_deg` at `t=59066ms`, `baseline_z_score=+2.8`
+  Each has a matching `AnomalyEvent` entry in the `anomalies[]` array so the firehose log picks it up too. The original `lateral_work_rate@36166` v1 injection is PRESERVED as a Tab 2 easter egg — the Raw Telemetry tab shows ALL signals, so it's visible there even though it's not in the Tab 1 layout.
+- **Generalizes to**: any demo authoring workflow where a proprietary curation layer (LLM-designed HUD, feature-flag gated UI, per-user personalization) sits between the raw data and the judge-visible surface. Mutations to the raw data are only visible if they pass through the curation filter. Always write your mutation by working backward from what the judge actually sees.
+- **Severity**: HIGH (demo credibility — invisible anomaly injection is indistinguishable from a dead feature)
+- **Files**: `dashboard/public/match_data/utr_01_segment_a.json` (signals[] + anomalies[] arrays).
+
+### PATTERN-063 — Reusable TelemetryLog Primitive (factor-out of SignalFeed.tsx) (originally PATTERN-055 on main)
+- **Type**: Frontend architecture / DRY refactor
+- **Context**: 2026-04-23. Tab 1's HUD view had large empty whitespace regions on either side of the video + skeleton center. Tab 2 (Raw Telemetry) had the only live scrolling feed of signals/transitions/insights/anomalies, locked into a full-viewport shell. Goal: slot a telemetry feed into Tab 1's right aside and bottom strip WITHOUT duplicating the 250-line `SignalFeed.tsx` implementation.
+- **Rule**: Extract every reusable primitive from `SignalFeed.tsx` into `dashboard/src/lib/telemetry.ts`. Specifically: `FeedRow` union type (`'state' | 'signal' | 'insight' | 'anomaly'`), `buildTimeline(data: MatchData): FeedRow[]` (merges signals + transitions + insights + anomalies into one time-sorted array, filters `player !== 'A'` per DECISION-008), `upperBound(rows, t)` (binary search for `[0, upperBound)` slice, `(lo + hi) >>> 1` unsigned-shift to prevent `lo+hi` overflow on large arrays), `toneForSignal(s)` (`|z| >= 2` → `colors.anomaly`, `|z| >= 1` → `colors.fatigued`, else `colors.energized`), `fmtClock(ms)` (`mm:ss.cc` with `Math.max(0, ...)` clamp), `transitionText(tr)`, `oneLineOpener(c)` (truncates commentary to 110 chars with ellipsis), `anomalyText(a)`, `signalUnit(signalName)`. Then author a new `dashboard/src/components/Telemetry/TelemetryLog.tsx` component that takes props: `rowKinds: FeedRowKind[]` (filter), `heightClass: string`, `className?: string`, `showHeader?: boolean`, `density?: 'compact' | 'comfortable'`. The component mounts the shared primitive with its own auto-scroll (followRef + effect on `visibleRows.length`).
+- **Why this factoring is correct**: (a) `buildTimeline` is a pure function of `MatchData` — moving it into a library module removes the component-local coupling. (b) Two consumers (Tab 2 full-viewport + Tab 1 two slots) + possible future consumers (a demo-recorder overlay, a PDF snapshot renderer) all share the same timeline shape and tone palette. (c) Props-driven filter (`rowKinds`) lets one component serve three contexts: firehose (`['signal', 'anomaly']`), headlines (`['anomaly', 'insight', 'state']`), full (`['state', 'signal', 'insight', 'anomaly']`).
+- **Concrete usage in `HudView.tsx` (Tab 1)**:
+  - Right aside (under SignalRail, above footer): `<TelemetryLog rowKinds={['signal', 'anomaly']} heightClass="h-[360px]" className="..." />` — "firehose" showing every signal sample + anomaly as it lands.
+  - Bottom strip (under CoachPanel, `max-w-[920px]` clamp): `<TelemetryLog rowKinds={['anomaly', 'insight', 'state']} heightClass="h-[260px]" className="..." />` — "headlines" showing only the narrative-worthy events.
+- **Concrete usage in `SignalFeed.tsx` (Tab 2)**: the whole component collapses into a thin shell that renders `<TelemetryLog rowKinds={['state', 'signal', 'insight', 'anomaly']} heightClass="h-full" showHeader />` inside its full-viewport terminal frame. No visual regression vs. pre-refactor version.
+- **Commit**: `888acb5 feat(dashboard): visible anomaly injections + dual TelemetryLog slots` — 388 insertions / 248 deletions in 5 files. `telemetry.ts` (new, 115 lines) + `TelemetryLog.tsx` (new, 192 lines). `SignalFeed.tsx` went from 250 lines to ~80 lines.
+- **Generalizes to**: any dashboard where a rich scrolling feed is also needed as a smaller inline panel elsewhere. Extract the `buildTimeline`-equivalent + tone-palette into a library module first; only then author the reusable component wrapping them.
+- **Severity**: HIGH-ROI (one refactor unlocked two Tab-1 slots + future consumers; no added bundle weight vs. inlining the logic per-consumer)
+- **Files**: `dashboard/src/lib/telemetry.ts` (new), `dashboard/src/components/Telemetry/TelemetryLog.tsx` (new), `dashboard/src/components/Telemetry/SignalFeed.tsx` (collapsed), `dashboard/src/components/Hud/HudView.tsx` (two new slots).
+
+### PATTERN-064 — Non-Interactive vercel-env-add with All-Preview-Branches Scope (originally PATTERN-056 on main)
+- **Type**: Deploy workflow / Vercel CLI discipline
+- **Context**: 2026-04-23, Phase 5 production env-var rotation. Needed to add `ANTHROPIC_API_KEY` to BOTH production and preview targets, Sensitive-flagged, without interactive prompts (so a hook/script can re-provision cleanly). First three attempts failed for different reasons:
+  1. `vercel env add ANTHROPIC_API_KEY preview --sensitive` (interactive) → CLI hung waiting for stdin value.
+  2. `echo "..." | vercel env add ANTHROPIC_API_KEY preview --sensitive` → worked but auto-attached the CURRENT git branch (`hackathon-demo-v1`) as the preview target, not "all branches."
+  3. `printf "%s\n\n" "..." | vercel env add ...` → corrupted the value (GOTCHA-020).
+- **Rule**: For preview vars scoped to ALL branches (not branch-specific), use: `vercel env add NAME preview "" --value "..." --yes --sensitive`. The three CRITICAL pieces:
+  - `preview ""` — the empty-string 3rd positional ("") explicitly tells Vercel "all preview branches, no git-branch qualifier." Without it, the CLI auto-attaches whatever branch you're currently on.
+  - `--value "..."` — bypasses stdin entirely; the exact string you pass is stored, with no newline/EOF ambiguity.
+  - `--yes` — skip the interactive "are you sure?" prompt.
+  - `--sensitive` — flags the var as non-downloadable via `vercel env pull`. Required for API keys per security policy.
+- **Rule for production**: `printf "%s" "..." | vercel env add NAME production --sensitive`. Production never auto-attaches a branch (production IS the branch), so you don't need the empty-string positional. `printf "%s"` (no `\n`) keeps stdin clean — don't use `echo`, which appends an implicit newline.
+- **Why this matters**: hackathon velocity requires a SINGLE reliable incantation. Three failed attempts on the same day indicate the surface is unforgiving. Codify the one that works and use it exclusively.
+- **Reference**: `/vercel:vercel-cli` skill, `references/environment-variables.md`. The skill is pure documentation (no command wrappers); reading the positional-args section once saves 15 min of trial-and-error.
+- **Generalizes to**: any deploy CLI that layers `interactive | stdin | flag` inputs for the same value. Always prefer an explicit flag (`--value`) when one exists. Fall back to `printf "%s"` only if no flag is available.
+- **Severity**: HIGH (production env-var rotation is demo-day blocker; one reliable incantation is worth more than three almost-right ones)
+- **Files**: Vercel project env store; captured in TOOLS_IMPACT.md Phase 5 ROI block.
+
+### PATTERN-065 — Stable React Keys for Monotonic Append-Only Arrays (originally PATTERN-057 on main)
+- **Type**: React correctness / future-proofing
+- **Context**: 2026-04-23, Phase 5 PR-review feedback from the `@claude` GitHub-Action bot. Initial `TelemetryLog.tsx` rendered rows with `<FeedLine key={i} ... />`. The Claude reviewer flagged: "`visibleRows` is monotonic slice of a sorted array, so React reconciliation won't produce wrong DOM output TODAY — but any future reordering or pruning will cause subtle bugs. A stable key like `` `${row.kind}-${row.t}` `` costs nothing and future-proofs it."
+- **Rule**: For arrays that are "currently monotonic append-only" but are exposed via a component API that doesn't enforce that invariant, ALWAYS use a composite stable key derived from the row's intrinsic identity, not the array index. The row's natural identity is usually `(timestamp, kind, discriminator)` where discriminator is whatever disambiguates same-`(t, kind)` collisions.
+- **Canonical form used in `TelemetryLog.tsx`**:
+  ```tsx
+  visibleRows.map((row, i) => (
+    <FeedLine
+      key={`${row.t}-${row.kind}-${
+        row.kind === 'signal' ? row.signal.signal_name : i
+      }`}
+      row={row}
+      compact={isCompact}
+    />
+  ))
+  ```
+  - For `kind === 'signal'`: the `signal.signal_name` guarantees uniqueness across same-timestamp collisions (two different signals CAN land at the same `t`).
+  - For `kind === 'state' | 'insight' | 'anomaly'`: index fallback is safe because same-`(t, kind)` collisions are rare for those kinds AND the array is monotonic-append-only (so a given `(t, kind, i)` stays stable across re-renders for the current session).
+- **Why the index fallback is acceptable for non-signal kinds**: React's reconciliation uses the key to match previous-render VDOM nodes to current-render VDOM nodes. If the array is monotonic-append-only, `visibleRows[i]` for a given `i` doesn't change identity across renders — so `i` is effectively stable. The fallback is a pragmatic choice for the hackathon: fully stable keys would require a `uuid` field on every state/insight/anomaly, which would bloat the JSON payload. For the signal kind (highest collision risk because same-timestamp multi-signal emissions are routine), we pay the cost of a proper stable key.
+- **Commit**: `787a5d1 fix(telemetry): stable FeedLine keys + restore Tab 2 progress counter` — addresses PR #4 review.
+- **Generalizes to**: any React list rendering a sorted time-series. Default to composite stable keys (`${t}-${kind}-${discriminator}`) over `key={i}`. Index fallback is acceptable only when (a) the array is monotonic-append-only AND (b) you've audited that no collision source exists for the fallback kinds.
+- **Severity**: MEDIUM (correctness — no current bug, but silent landmine under future reordering)
+- **Files**: `dashboard/src/components/Telemetry/TelemetryLog.tsx:113-120`.
+
+### DECISION-011 — Vercel Deployment Topology (dashboard/ root, vercel.json functions config, Sensitive env vars Production+Preview only) (originally DECISION-010 on main)
+- **Type**: Decision / infrastructure
+- **Context**: 2026-04-23, Phase 5 production deploy. Locked the end-state topology after three failed attempts taught us what fails.
+- **Topology**:
+  - **Vercel project**: `dmg-decisions/panopticon-live`. Linked to the GitHub repo `andydiaz122/panopticon-live`.
+  - **Root directory**: `dashboard/` (NOT repo root). The Python `backend/` is NEVER shipped to Vercel. This enforces USER-CORRECTION-006 (Vercel Python Elimination) at the infra layer: Vercel's build starts inside `dashboard/` so it cannot accidentally pick up `backend/` or `requirements-*.txt`.
+  - **Functions config**: `dashboard/vercel.json` declares `{"functions": {"src/app/**/*.ts": {"maxDuration": 60}, "src/app/**/*.tsx": {"maxDuration": 60}}}`. This replaces the `export const maxDuration = 60` line that used to live in `actions.ts` before GOTCHA-019 mandated removal. Glob is intentionally broad (all `.ts`/`.tsx` under `src/app/`) rather than tight (`src/app/actions.ts`) — tight scoping risks breaking silently when a new Server Action lands. Glob breadth means `page.tsx`/`layout.tsx` inherit the 60s timeout too, which is harmless on a hobby plan (static-rendered pages don't hit Serverless at all; they're CDN-served) but worth revisiting on a paid tier.
+  - **Golden data path**: `dashboard/public/match_data/utr_01_segment_a.json` (~94K lines, 4MB). Must be force-added to git (`-f`) because `.gitignore` excludes `**/match_data/` by default. Force-adding is the right call: Vercel needs these files statically served, and the client fetches them via `fetch('/match_data/...')` at runtime.
+  - **Video asset path**: `dashboard/public/clips/utr_match_01_segment_a.mp4` (~3.9MB). Same story — `.gitignore` excludes `**/clips/`, force-added for Vercel.
+  - **Env vars**: `ANTHROPIC_API_KEY` is the only secret. Scoped to Production + Preview (all branches). **Sensitive flag enabled** — Vercel stores it encrypted-at-rest, and `vercel env pull` will NOT write it to `.env.local`. Development target is explicitly NOT set, by design.
+- **Why Development is excluded from Sensitive vars**: Sensitive Vercel env vars cannot target Development because `vercel env pull` (the command that syncs Vercel env into a local `.env.local`) refuses to write Sensitive values — that would violate the "never readable outside runtime" contract. Development target with Sensitive = no-op. Solution: keep Development env vars separately in a local `.env.local` file on disk (gitignored), and treat Sensitive-in-Vercel as a Production+Preview-only mechanism. Locally, devs use their own key, pulled from a password manager or `direnv`.
+- **Golden data commitment protocol**: `git add -f dashboard/public/match_data/utr_01_segment_a.json dashboard/public/clips/utr_match_01_segment_a.mp4 && git commit -m "chore(deploy): force-add golden data and video for Vercel production build"`. Committed as `4f9df37`.
+- **Severity**: HIGH (deploy topology is demo-day load-bearing; departures from this template will re-introduce the failure modes captured in GOTCHA-019/020/021)
+- **Files**: `dashboard/vercel.json`, `dashboard/public/match_data/utr_01_segment_a.json`, `dashboard/public/clips/utr_match_01_segment_a.mp4`, Vercel project settings.
+
+### PATTERN-066 — Vercel Deployment Asset Verification via `vercel curl --deployment` (originally PATTERN-058 on main)
+- **Type**: Deploy workflow / verification
+- **Context**: 2026-04-23, Phase 5 post-deploy smoke-test. After force-adding `public/match_data/*.json` + `public/clips/*.mp4` to a specific deployment URL, I needed to confirm the assets were actually being served before declaring the deploy green. Normal `curl -I <url>/match_data/...` works but requires the deployment URL be public; for preview deploys with protection rules, the deployment-scoped `vercel curl` auto-authenticates.
+- **Rule**: After any deploy involving static assets, run `vercel curl --deployment <url> /<path> -- -I` for each critical asset. Pass flags after the `--` separator to forward them to the underlying `curl`. For JSON payloads: check `Content-Type: application/json` + `Content-Length` reasonable. For MP4: check `Content-Type: video/mp4` + `Accept-Ranges: bytes` (needed for `<video>` scrubbing).
+- **Why `vercel curl` over plain curl**: handles deployment protection (bypass tokens, org SSO) transparently, logs the request server-side for audit, and attaches the deployment ID so the correct build artifact is probed (not a cached earlier deploy).
+- **Paired with**: `vercel logs --deployment <url> --no-follow --limit 50 --expand --status-code 500` for debugging Server Actions that 500 on deploy. `--status-code 500` filters to the failing requests only; `--expand` dumps the full stack trace.
+- **Severity**: MEDIUM (post-deploy verification habit; turns "I think it works" into "I know these URLs returned 200")
+- **Files**: Command-line tooling; no repo artifact.
+
+### WORKFLOW-005 — `@claude` PR-Review Bot (GitHub Action Orthogonal Review)
+- **Type**: Tooling workflow (cross-linked from TOOLS_IMPACT.md)
+- **Context**: 2026-04-23, Phase 5 PR #4 opened. `.github/workflows/claude.yml` (landed in `a64533b ci: add claude-code GitHub Action for @claude PR/issue responses`) configures an Action that listens for `@claude` mentions in PR/issue comments and dispatches the Claude Code agent in review mode. Post-PR-open, commenting `@claude please review` triggered the bot; returned in ~3 min with a full review.
+- **What the bot caught on PR #4**:
+  1. `key={i}` in `TelemetryLog.tsx:113` — monotonic-append-only array works today but silent landmine under future reordering. Addressed in `787a5d1`; captured as PATTERN-057.
+  2. Lost "visible / total events" streaming progress counter in Tab 2 `SignalFeed.tsx` (regression from the `TelemetryLog` extraction). Addressed in `787a5d1` by passing `showHeader={true}` from `SignalFeed` to `TelemetryLog`.
+  3. `vercel.json` glob breadth — `src/app/**/*.ts(x)` applies `maxDuration: 60` to all TS under `src/app/`, including `page.tsx`/`layout.tsx`. Deferred with rationale (hobby plan, static pages don't hit Serverless, tight scoping risks new-Action breakage).
+  4. Hardcoded `#05080F` vs `colors.bg0` in TelemetryLog — `colors.bg0` is `#0A0E1A` (noticeably lighter); the darker hex is intentional terminal-feel treatment. Deferred (not a mistake).
+  5. `buildTimeline` double/triple-invocation across Tab 1 TelemetryLog instances + Tab 2 SignalFeed. Accurate perf observation; deferred (demo clip is 60s, O(n)=94k rows runs in <5ms, not perceptible). Would lift to `PanopticonProvider` + expose as context state for longer clips.
+- **Lesson**: The `@claude` bot review is a cheap orthogonal pass on any PR. Quick wins (stable keys, obvious regressions) are worth addressing in the same PR; perf/style nits are OK to defer with explicit rationale. The bot is not a substitute for human review — but it catches stable-key / regression / perf-smell classes that a human skimmer would miss.
+- **Evidence**: https://github.com/andydiaz122/panopticon-live/pull/4#issuecomment-4308215489
+- **Severity**: HIGH-ROI (one comment triggers a multi-lens review at zero marginal cost; institutionalize as a standard PR step)
+- **Files**: `.github/workflows/claude.yml`; TOOLS_IMPACT.md Phase 5 ROI block.
 
 ---
 

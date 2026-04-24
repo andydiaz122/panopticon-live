@@ -1088,3 +1088,89 @@ Stage-3 worktree was bare: no venv, no clips, no corners, no YOLO weights. Stage
 - `data/corners/utr_match_01_segment_a_corners.json` ← copied from `Built_with_Opus_4-7_Hackathon/`
 - `checkpoints/yolo11m-pose.pt` ← symlinked to the file in `Built_with_Opus_4-7_Hackathon/`
 - Python interpreter: reusing `/Users/andrew/Documents/Coding/Built_with_Opus_4-7_Hackathon/.venv/bin/python` directly (cwd-relative module resolution picks up stage-3's `backend/` correctly; pytest runs green end-to-end that way).
+
+---
+
+## [MERGE UNION] Phase 5 Demo Polish narrative from origin/main
+
+> The section below is the narrative origin/main accumulated over the `hackathon-demo-v1` → `main` PR #4 cycle. It describes the SAME work our hackathon-research branch absorbed as cherry-picks (documented above under "2026-04-23 — MERGE EXECUTED"), but written from main's POV — including the Vercel deploy journey (Hops 1–4), the PR #4 `@claude` bot review loop, and the WORKFLOW-005 institutionalization. All ID references below (GOTCHA-019…021, PATTERN-055…058, DECISION-010, WORKFLOW-005) are the ORIGINAL numbers as they appeared on main. Our canonical renumbered IDs (PATTERN-060, PATTERN-061, GOTCHA-033) live in MEMORY.md. Preserved verbatim for historical completeness.
+
+## 2026-04-23 — Phase 5 Demo Polish (PR #4 merged)
+
+### What happened (Thu afternoon → evening)
+
+A single continuous session covered three distinct workstreams, one PR, four commits. Starting point: the Phase 4 Crucible run had produced the final golden `utr_01_segment_a.json` earlier in the day, and the live-Opus Scouting Report was wired via PATTERN-054 (Client-Driven Payload). The remaining blockers before recording the demo were: (1) no visible on-screen anomalies, (2) Tab 1 had large empty whitespace regions, (3) Tab 3 would 401 on Vercel because `ANTHROPIC_API_KEY` wasn't set in the right env targets with the right format.
+
+### Anomaly injection saga (v1 wrong → v2 right)
+
+First attempt (v1): set `baseline_z_score: 2.5` on the `lateral_work_rate` sample at `t=36166ms` in the golden JSON, committed, and moved on. Then I checked the live demo and the `AnomalyBadge` pulsing-red UI wasn't firing. Root cause on re-inspection: the active HUD layout at `t=36166` is `hud_34233_8b1eaa` (valid 34233 → 64233 ms), whose widgets list is `serve_toss_variance_cm + ritual_entropy_delta + crouch_depth_degradation_deg` — `lateral_work_rate` isn't on the screen. The frontend's `SignalRail` only renders bars for signals in the active layout's widget list, so my flagged signal was invisible.
+
+Second attempt (v2): injected three anomalies on signals that ARE in `hud_34233_8b1eaa`:
+- `serve_toss_variance_cm @ t=35900ms, z=-2.3` (blue anomaly — below baseline toss variance)
+- `crouch_depth_degradation_deg @ t=45300ms, z=+2.5` (red anomaly — crouch degrading)
+- `crouch_depth_degradation_deg @ t=59066ms, z=+2.8` (red anomaly — more degradation)
+
+Each has a matching `AnomalyEvent` entry in the `anomalies[]` array so the firehose log picks it up too. The v1 `lateral_work_rate@36166` injection is preserved as a Tab 2 easter egg (Raw Telemetry shows all signals regardless of layout). Captured as GOTCHA-021 (originally on main) so the next session inverts the workflow: always look up the active layout's widget list BEFORE mutating a signal.
+
+### TelemetryLog primitive (DRY refactor for whitespace)
+
+Tab 1 (HudView) had large empty regions flanking the center video. Tab 2 (Raw Telemetry) was the only place the live scrolling feed existed, locked into a full-viewport shell. Goal: slot a scrolling feed into Tab 1's right aside and bottom strip without duplicating the 250-line `SignalFeed.tsx` implementation.
+
+Refactor: extracted every shared primitive into `dashboard/src/lib/telemetry.ts` — `FeedRow` union type, `buildTimeline`, `upperBound` binary search, `toneForSignal`, `fmtClock`, `transitionText`, `oneLineOpener`, `anomalyText`, `signalUnit`. Then authored `dashboard/src/components/Telemetry/TelemetryLog.tsx` — a 192-line reusable component that takes `rowKinds[]` + `heightClass` + `showHeader` + `density` props. `SignalFeed.tsx` collapsed from 250 lines to ~80 lines as a thin wrapper.
+
+Three consumer slots in HudView:
+- Right aside "firehose": `rowKinds=['signal','anomaly']`, 360px height — every signal sample + anomaly as it lands
+- Bottom strip "headlines": `rowKinds=['anomaly','insight','state']`, 260px height, `max-w-[920px]` clamp — only narrative-worthy events
+- Tab 2 full: `rowKinds=['state','signal','insight','anomaly']`, `h-full`, `showHeader` — all kinds, Tab 2 retained its full-viewport feel
+
+Net diff: 388 insertions / 248 deletions in 5 files. No visual regression on Tab 2. Captured as PATTERN-055 (originally on main).
+
+### Vercel deploy journey (4 hops to green)
+
+**Hop 1 — force-add golden assets (commit `4f9df37`)**. `.gitignore` excludes `**/match_data/` and `**/clips/` by default. For Vercel to serve them statically from `/public`, they have to be in the git tree. `git add -f dashboard/public/match_data/utr_01_segment_a.json dashboard/public/clips/utr_match_01_segment_a.mp4`. Assets are now part of the deploy bundle.
+
+**Hop 2 — Turbopack `maxDuration` strip bug (commit `b20c370`, GOTCHA-019 on main)**. Preview deploy succeeded but Tab 3 threw `TypeError: generateScoutingReport is not a function` in the browser. `vercel logs --deployment <url> --expand --status-code 500` showed `The module has no exports at all` from `actions.ts`. Root cause: Turbopack's `'use server'` analyzer strips non-async exports; my `export const maxDuration = 60` at the top of `actions.ts` caused the whole module to be dropped. Fix: move config to `dashboard/vercel.json` (`{"functions": {"src/app/**/*.ts": {"maxDuration": 60}, "src/app/**/*.tsx": {"maxDuration": 60}}}`) and delete the in-file export. Lesson: `'use server'` files are strictly async-exports-only under Turbopack.
+
+**Hop 3 — env-var rotation saga (GOTCHA-020 on main, PATTERN-056 on main)**. Tab 3 was 401-ing even after the build was green. First tried `printf "%s\n\n" "<key>" | vercel env add ANTHROPIC_API_KEY production --sensitive` — Vercel printed `WARNING! Value contains newlines.` and stored the value WITH the `\n\n` intact. The stored key was 110 bytes (108 valid + `\n\n`); the Anthropic SDK's Authorization header was malformed; every call 401'd. Different mechanism from GOTCHA-018 (clipboard-paste quoting) but same symptom. Recovery: removed the env var, re-read `/vercel:vercel-cli` reference's `environment-variables.md`, and landed on the reliable incantation `vercel env add NAME preview "" --value "..." --yes --sensitive` (empty-string positional = "all preview branches"; `--value` bypasses stdin). For production: `printf "%s" "..." | vercel env add NAME production --sensitive` (no `\n`). Tab 3 finally turned green.
+
+**Hop 4 — anomaly + TelemetryLog commit (`888acb5`)** and PR-review feedback fixes (`787a5d1`). See PR review loop below.
+
+### PR #4 review loop (`@claude` bot + quick wins)
+
+After opening PR #4 (`hackathon-demo-v1` → `main`), commented `@claude please review`. The Claude-GitHub-Action bot (landed in `a64533b`) returned a full orthogonal review in ~3 min. Caught 5 items:
+
+1. `key={i}` in `TelemetryLog.tsx:113` — works for monotonic-append-only arrays today but silent landmine under future reordering/pruning.
+2. Lost "visible / total events" progress counter in Tab 2 — regression from the `TelemetryLog` extraction. `SignalFeed.tsx` passed `showHeader` defaulting to `false`, so the counter was gone from Tab 2.
+3. `vercel.json` glob breadth (`src/app/**/*.ts(x)`) applies `maxDuration: 60` to `page.tsx`/`layout.tsx` too.
+4. Hardcoded `#05080F` vs `colors.bg0` in TelemetryLog.
+5. `buildTimeline` double-invocation across Tab 1 TelemetryLog instances + Tab 2 SignalFeed.
+
+Addressed items 1 + 2 in commit `787a5d1`: composite stable key `` `${row.t}-${row.kind}-${row.kind === 'signal' ? row.signal.signal_name : i}` ``, and passed `showHeader={true}` from SignalFeed to TelemetryLog. Deferred items 3 + 4 + 5 with explicit rationale (glob breadth is harmless on hobby plan; `#05080F` is intentional darker terminal-feel, `colors.bg0` is `#0A0E1A` noticeably lighter; `buildTimeline` is O(94k) runs in <5ms, not perceptible at demo scale). Captured as PATTERN-057 (originally on main) + WORKFLOW-005 (PR-review bot).
+
+PR #4 merged as `d02d427`, 71/71 tests pass, build green.
+
+### Security trade-off (USER-CORRECTION-031 addendum)
+
+During the env-var rotation I flagged that the Anthropic API key had been forwarded in the raw chat transcript earlier and should therefore be rotated before entering production. You responded: "use this exposed API key, don't rotate." I re-surfaced the concern, which was excess friction. Lesson extension to USER-CORRECTION-031: when the user has been informed of a security trade-off and accepts it, state the trade-off clearly once ("the key in the transcript is now considered burned; rotate after the hackathon"), then comply. Don't re-argue, don't ask again, don't block progress. Logged.
+
+### Artifacts
+
+- PR: https://github.com/andydiaz122/panopticon-live/pull/4
+- Preview URL: `panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app`
+- 4 commits on main: `4f9df37` → `b20c370` → `888acb5` → `787a5d1` → merge `d02d427`
+
+### Non-obvious learnings captured (all in MEMORY.md with canonical renumbering)
+
+- **GOTCHA-019** (main) — Turbopack strips non-async exports from `'use server'` files. Move route-segment config to `vercel.json`.
+- **GOTCHA-020** (main) — `printf "%s\n\n"` into `vercel env add` stores the trailing newlines. Different mechanism from GOTCHA-018, same symptom.
+- **GOTCHA-021** (main) — Anomaly injection must target signals inside the ACTIVE HUD layout's widget list at that timestamp.
+- **PATTERN-055** (main) — Reusable `TelemetryLog` primitive. Extract pure functions into `lib/telemetry.ts` first; component wraps them.
+- **PATTERN-056** (main) — Non-interactive `vercel env add` with "all preview branches" scope: `NAME preview "" --value "..." --yes --sensitive`.
+- **PATTERN-057** (main) — Stable React keys for monotonic append-only arrays: `${t}-${kind}-${discriminator}`.
+- **PATTERN-058** (main) — `vercel curl --deployment <url> /<path> -- -I` for post-deploy asset verification.
+- **DECISION-010** (main) — Vercel deployment topology (dashboard/ root, `vercel.json` functions config, Sensitive env vars Production+Preview only).
+- **WORKFLOW-005** (main) — `@claude` PR-review bot as institutionalized cheap orthogonal review layer.
+
+### What's NEXT
+
+Saturday Apr 25 — Phase 6 polish (demo storyboard via `hackathon-demo-director` skill, `/e2e` Playwright sweep on Vercel preview URL, any remaining HUD visual tweaks). Sunday Apr 26 — record 3-min demo via OBS + computer-use, submit by 8pm EST.

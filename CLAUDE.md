@@ -19,6 +19,14 @@
 
 **The demo is the biometric HUD + a Multi-Agent Scouting Committee Orchestration Console.** Tab 3 runs a real 3-agent Claude Managed-Agents swarm (Analytics Specialist → Technical Biomechanics Coach → Tactical Strategist) offline during precompute, captures the full execution trace (thinking/tool_calls/handoffs) into `agent_trace.json`, and replays it client-side with timed pacing so judges physically see the 2030 vision. See PATTERN-056 + USER-CORRECTION-024 in MEMORY.md. This targets the "Opus 4.7 Use" judging criterion (25%) by showcasing real multi-agent reasoning, while immunizing the demo against Vercel's 10-15s serverless timeout via offline capture + UI replay. Banner: "ARCHITECTURAL PREVIEW: SWARM ACCELERATED FOR DEMO" (honest disclosure).
 
+## FINAL PRODUCT FRAMING (DECISION-019, 2026-04-25)
+
+**The dashboard is a SHOWCASE; the FINAL PRODUCT is the data-extraction PLATFORM.** What we ship is a downloadable .csv of biometric signals + qualitative match transcripts from the 3-agent swarm. The dashboard exists to demonstrate what the platform produces. Visible artifact: Tab 2 "Download Match Data (.csv)" button. Closing thesis: *"capture the signal nobody else is reading."* See DECISION-019 in MEMORY.md.
+
+## QUALITY BAR (DECISION-020 / USER-CORRECTION-037, 2026-04-25)
+
+**Anything ship-facing must reach Anthropic-release-video-quality.** Tonight's first-pass Remotion outputs were judged TOY-TIER (single-element frames, 1.5-5s durations, no music, no chapter structure). The new standard: world-class compositions are ≥ 8s with multi-beat internal structure, 3+ animated elements per frame with staggered timing, music bed with hard cuts on beats, typography animation (kerning sweep + italic-reveal-as-separate-beat), and explicit chapter/narrative structure. See `.claude/skills/remotion-cinematic-craft/SKILL.md` for the operationalized standard with The 6 Failure Modes audit checklist. NEVER author or accept a Remotion composition that fails the checklist.
+
 ## SCOPE: SINGLE-PLAYER DEEP-DIVE (DECISION-008, 2026-04-22)
 
 Panopticon Live is a WORLD-CLASS SINGLE-PLAYER biomechanics intelligence system targeting Player A (the near-court player). The "Moneyball for tennis" angle — deep forensic analysis of ONE pro player — is a stronger demo story than shallow two-player coverage, and matches our CV detector's effective resolution on broadcast tennis clips (GOTCHA-016: YOLO11m-Pose cannot reliably detect the small, partially-occluded far-court player). Any widget, prompt, or signal that depends on Player B data (MomentumMeter, PredictiveOverlay, split_step_latency_ms) is explicitly out of scope. Commit fully to the narrow scope — no half-hearted "kinda still supports both" implementations.
@@ -62,6 +70,7 @@ Orthogonal ownership mirrors a professional team:
 | `hud-auteur` | 2K-Sports visual language, HUD widgets, rAF canvas loop, Motion animations | Backend code, CV, Opus prompts |
 | `verification-gate` | TDD tests, eval harness, multi-agent review panels, Vercel deploy verification | Feature code, design |
 | `demo-director` | 3-min video storyboard, narrative pacing, OBS recording, submission QA | Everything technical |
+| `remotion-cinematic-craft` (NEW 2026-04-25) | World-class Remotion authoring at Anthropic-release-video standard. Motion density, layered reveals, typography animation, music sync, chapter structure | Color/font choice (delegates to 2k-sports-hud-aesthetic), React patterns, DaVinci composite |
 
 ## ORCHESTRATION PLAYBOOK
 

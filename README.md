@@ -2,9 +2,55 @@
 
 **Clinical-grade biomechanical fatigue telemetry for pro tennis. Extracted from standard 2D broadcast pixels. No wearables. No sensors. Just pose estimation, physics, and Claude Opus 4.7.**
 
-Panopticon Live is a 2K-Sports-style video-game HUD that reads a pro tennis broadcast the way a team physiologist reads a motion-capture lab. Seven biomechanical signals — recovery lag, crouch depth, toss precision, ritual discipline, court position, court coverage, reaction timing — streamed over the live feed in real time, narrated by a three-agent Claude Opus 4.7 swarm. Built solo in six days for the Anthropic × Cerebral Valley *Built with Opus 4.7* hackathon. MIT licensed.
-
 > Live demo: https://panopticon-live.vercel.app · 3-minute video: [YouTube](https://youtube.com) · Source: [github.com/andydiaz122/panopticon-live](https://github.com/andydiaz122/panopticon-live)
+
+---
+
+## TL;DR — three things that make this novel
+
+1. **Seven biomechanical fatigue signals extracted from 2D broadcast pixels.** Recovery lag, toss precision, ritual discipline, crouch depth, court position, court coverage, reaction timing. No wearables. No mocap. Every signal physics-grounded in court meters, state-gated by a kinematic FSM, and anchored to published biomechanics literature. **Benchmarked against 2025–2026 tennis CV landscape — no prior art for broadcast-only extraction of this signal set.**
+
+2. **Strict 3-Pass Offline DAG.** Forward YOLO11m-Pose + Kalman → RTS backward smoother → semantic state machine + signal extractors on smoothed kinematics. Empirically measured **47 % peak-velocity compression** vs. forward-only noise. Reproducible from `run_golden_data.sh` in under 3 minutes on a Mac Mini M4 Pro.
+
+3. **Multi-Agent Trace Playback.** The Opus 4.7 Scouting Committee — Analytics Specialist → Technical Biomechanics Coach → Tactical Strategist — runs the real reasoning offline (~60 s, uses extended thinking, prompt caching, stubbed-MCP `query_video_context_mcp` tool), captures every `thinking`/`tool_call`/`handoff` event into a Pydantic-typed `AgentTrace`, and replays it client-side at baud-rate pacing. The 2030 architecture: cache the agent loop, replay at interaction time. Ship.
+
+---
+
+## Architecture at a glance
+
+```
+ ┌──────────────────────────────────────────────────────────────────────┐
+ │                      Offline pre-compute (M4 Pro MPS)                │
+ │                                                                      │
+ │   ffmpeg → YOLO11m-Pose → Kalman(forward)    ▲ Pass 1 (forward)      │
+ │                                              │                       │
+ │                    RTS smoother ─────────────┤ Pass 2 (backward)     │
+ │                                              │                       │
+ │   BounceDetector → FSM → 7 signal extractors ▼ Pass 3 (semantic)     │
+ │                                                                      │
+ │   DuckDB  +  dashboard/public/match_data/<id>.json                   │
+ │                                                                      │
+ │   Scouting Committee (Opus 4.7 · extended thinking · prompt cache)   │
+ │        Analytics ──► Technical Coach ──► Tactical Strategist         │
+ │        query_video_context_mcp (stubbed) ───┐                        │
+ │                                             ▼                        │
+ │             agent_trace.json  (captured trace)                       │
+ └──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼   (Vercel CDN · static JSON)
+ ┌──────────────────────────────────────────────────────────────────────┐
+ │                     Next.js 16 dashboard (Turbopack)                 │
+ │                                                                      │
+ │   Tab 1 — Live HUD  · 30 FPS canvas skeleton · SignalBars · CoachPanel│
+ │   Tab 2 — Raw Telemetry · 4-kind firehose feed                       │
+ │   Tab 3 — Orchestration Console · trace playback · STUB chip         │
+ │                                                                      │
+ │   Defense-in-depth: LoadingScreen · visibilityChange auto-pause ·    │
+ │   DPR-aware ResizeObserver · Record<RallyMicroPhase> gating          │
+ └──────────────────────────────────────────────────────────────────────┘
+```
+
+Every arrow is a Pydantic v2 contract. Zero dict crosses a module boundary. See [`backend/db/schema.py`](backend/db/schema.py) for the source of truth.
 
 ---
 
@@ -113,6 +159,18 @@ Every signal is state-gated, physics-grounded, and maps to a fan-facing label. C
 
 Scope note (DECISION-008): we deliberately target Player A — the near-court athlete YOLO can reliably detect on broadcast footage. Moneyball for tennis. One player, forensic depth. See [MEMORY.md](MEMORY.md) GOTCHA-016 for the CV detector-capacity rationale.
 
+### Match-state gating (the CAPS terms you'll see in Tab 2)
+
+Signals don't fire constantly — they fire when the player is in the **right phase** of a point. We track three states per player:
+
+| State | What it means | Why signals gate on it |
+|---|---|---|
+| `PRE_SERVE_RITUAL` | Player is at the baseline, bouncing the ball, setting up to serve (or returner setting their stance). | Toss precision + ritual discipline only fire here — measuring pre-serve mechanics mid-rally is meaningless. |
+| `ACTIVE_RALLY` | A point is in play — player is moving, hitting, covering court. | Lateral work rate, recovery lag, split-step reaction, crouch depth all fire here. |
+| `DEAD_TIME` | Between points — toweling off, walking to position, reset. | No signal fires here; it's the quiet window that separates rallies. |
+
+Transitions between states drive the signal pipeline. The raw telemetry feed in Tab 2 shows every transition inline with signal emissions, e.g., `PRE_SERVE_RITUAL → ACTIVE_RALLY  lateral_work_rate: 2.14`.
+
 ---
 
 ## The Multi-Agent Swarm
@@ -137,7 +195,7 @@ Code: [`backend/agents/scouting_committee.py`](backend/agents/scouting_committee
 
 ## Engineering craft
 
-- **516 tests passing.** 434 Python + 82 TypeScript. Zero regressions across Phase 2, 3, and 4 refactors.
+- **Tests: TypeScript 96 / Python 434+.** Zero regressions across Phase 2-6 refactors (display-only authoring, G10 dynamic identity injection, Phase A4.5 exhaustive gating).
 - **TypeScript strict mode clean.** `next build` compiles in 1327 ms (Next.js 16.2.4 + Turbopack).
 - **Strict 3-Pass DAG** (PATTERN-055). Pass 1: ffmpeg stdout → YOLO → forward Kalman. Pass 2: RTS backward smoother. Pass 3: state-machine + signal extraction on smoothed kinematics. Empirically measured **47% peak-velocity compression** vs forward-only noise on `utr_match_01_segment_a.mp4` (60s, 1800 frames).
 - **Kalman filter on physical court meters**, not normalized pixels (USER-CORRECTION-008). Homography transforms pixel space → court plane before any kinematic claim is made.

@@ -1,10 +1,14 @@
 'use client';
 
 import CoachPanel from '@/components/Broadcast/CoachPanel';
+import DisclosureBanner from '@/components/Broadcast/DisclosureBanner';
 import PlayerNameplate from '@/components/Broadcast/PlayerNameplate';
 import SignalRail from '@/components/Broadcast/SignalRail';
+import Tickertape from '@/components/Hud/Tickertape';
 import PanopticonEngine from '@/components/PanopticonEngine';
 import TelemetryLog from '@/components/Telemetry/TelemetryLog';
+import { usePanopticonStatic } from '@/lib/PanopticonProvider';
+import { useSlowMoAtAnomalies } from '@/lib/useSlowMoAtAnomalies';
 
 // Module-level constants: prevents `useMemo` identity-break inside TelemetryLog
 // on every HudView render. TelemetryLog uses `rowKinds` as a memo dependency;
@@ -36,8 +40,17 @@ const HEADLINE_STRIP_ROW_KINDS = ['anomaly', 'insight', 'state'] as const;
  * switches to other tabs (PATTERN-050 keep-alive).
  */
 export default function HudView() {
+  const { videoRef } = usePanopticonStatic();
+  // A2a slow-mo at the Detective Cut's anomaly beats (PHASE_6_TEAM_LEAD_HANDOFF §2).
+  // Pure HTMLMediaElement API — zero canvas coordination. See
+  // dashboard/src/lib/useSlowMoAtAnomalies.ts for the ramp/hold shape.
+  useSlowMoAtAnomalies(videoRef);
+
   return (
     <div className="flex min-h-[calc(100vh-72px)] flex-col bg-[var(--color-bg-0)] p-6 lg:p-10">
+      <div className="mx-auto mb-4 w-full max-w-[1600px]">
+        <DisclosureBanner />
+      </div>
       <div className="mx-auto grid w-full max-w-[1600px] grid-cols-12 gap-5">
         {/* Top-left: identity chrome */}
         <header className="col-span-12 flex items-start justify-between gap-4 lg:col-span-3">
@@ -75,6 +88,13 @@ export default function HudView() {
             showHeader
           />
         </aside>
+      </div>
+      {/* A1 — Palantir-density phase-weighted tickertape at bottom of HUD.
+       *  Mirrors state-gating so serve-ritual signals only show during
+       *  PRE_SERVE_RITUAL / DEAD_TIME, rally-movement signals during
+       *  ACTIVE_RALLY. Cross-fade on phase transition. */}
+      <div className="mx-auto mt-4 w-full max-w-[1600px]">
+        <Tickertape />
       </div>
     </div>
   );

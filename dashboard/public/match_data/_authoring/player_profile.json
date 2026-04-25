@@ -1,0 +1,29 @@
+{
+  "player_id": "utr_pro_a",
+  "name": "UTR Pro A",
+  "playing_style": {
+    "value": "right-handed; compact pre-serve motion; orange/red racket string color observable in the 0-11s clip window",
+    "data_as_of": "2026-04-24",
+    "source_url": null,
+    "verification_status": "qualitative - observed directly from frames t_0010.jpg + t_0011.jpg; not a full career-style profile"
+  },
+  "pre_serve_ritual_style": {
+    "value": "settle at baseline, racket held at hip before load; exact ball-bounce count not observable in 0-11s frames",
+    "data_as_of": "2026-04-24",
+    "source_url": null,
+    "verification_status": "qualitative - partial observation from frame t_0010.jpg; full ritual cadence requires the full clip"
+  },
+  "known_fatigue_signature": {
+    "value": "not observable from the 0-11s clip window; awaits the Scouting Committee's quantitative signal analysis over the full 60s clip",
+    "data_as_of": "2026-04-24",
+    "source_url": null,
+    "verification_status": "qualitative - placeholder; real fatigue signature needs multi-set video or worn-sensor baseline"
+  },
+  "profile_meta": {
+    "authoring_source": "hand_authored",
+    "authoring_date": "2026-04-24",
+    "schema_version": "0.2.0",
+    "note": "Anonymized profile. The specific player identity on this UTR clip was not verified at authoring time, so all numeric ATP claims (world rank, serve velocity, first-serve %) were DROPPED to comply with G37 provenance (no fabricated stats with fake source URLs). Qualitative fields remain because they describe observable visual evidence from frames t_0010.jpg / t_0011.jpg. The `name` field is non-null so the Scouting Committee's dynamic identity injection fires and agents reference the player by profile name rather than the generic 'Player A' fallback.",
+    "scope_decision_ref": "DECISION-008 - Single-player deep-dive; Player A only"
+  }
+}

@@ -552,17 +552,43 @@ function ThinkingEvent({ event }: { event: TraceThinking }) {
   );
 }
 
+/** Provenance chip rendered on tool_call/tool_result events whose backend
+ * implementation reads local authored JSON rather than a live Anthropic tool
+ * (G9 / A9). Informs judges that `query_video_context_mcp` is a stub for
+ * demo — honest disclosure that the Tab 3 narration handoff is architecturally
+ * real but the video-MCP endpoint is a placeholder. Non-alarming neutral
+ * styling — it's a capability marker, not an error indicator. */
+function ProvenanceChip({ tag }: { tag: 'stubbed_mcp' | 'live_anthropic' }) {
+  if (tag !== 'stubbed_mcp') return null;
+  return (
+    <span
+      className="mono rounded px-1.5 py-0.5"
+      style={{
+        background: `${colors.opusThinking}22`,
+        color: colors.opusThinking,
+        fontSize: 8,
+        letterSpacing: '0.14em',
+      }}
+      title="This tool reads local authored JSON for the hackathon demo. The LLM invoked it as a real tool — the SCHEMA and REASONING are production-grade; only the implementation is stubbed. V2 routes this call to a live Video MCP server."
+    >
+      STUB · Video Context API
+    </span>
+  );
+}
+
 function ToolCallEvent({ event }: { event: TraceToolCall }) {
+  const provenance = event.provenance ?? 'live_anthropic';
   return (
     <div
       className="rounded border px-3 py-2"
       style={{ background: colors.bg2, borderColor: colors.border, fontSize: 12 }}
     >
       <span
-        className="mono mb-1 block text-[9px] uppercase tracking-[0.16em]"
+        className="mono mb-1 flex items-center gap-2 text-[9px] uppercase tracking-[0.16em]"
         style={{ color: colors.textMuted }}
       >
-        Tool call · {event.tool_name}
+        <span>Tool call · {event.tool_name}</span>
+        <ProvenanceChip tag={provenance} />
       </span>
       <code
         className="mono block overflow-x-auto whitespace-pre-wrap break-words"
@@ -581,6 +607,7 @@ function ToolResultEvent({ event }: { event: TraceToolResult }) {
   // from @/lib/agentTracePlayback when a parsed form is required. Here we
   // only render as a raw string, which is safe.
   const isTruncated = isTruncatedToolOutput(event.output_json);
+  const provenance = event.provenance ?? 'live_anthropic';
   const visibleSlice = event.output_json.length > 500
     ? event.output_json.slice(0, 500) + '…'
     : event.output_json;
@@ -598,6 +625,7 @@ function ToolResultEvent({ event }: { event: TraceToolResult }) {
         style={{ color: event.is_error ? colors.anomaly : colors.playerA }}
       >
         <span>{event.is_error ? 'Tool error' : 'Tool result'} · {event.tool_name}</span>
+        <ProvenanceChip tag={provenance} />
         {isTruncated && (
           <span
             className="rounded px-1.5 py-0.5"

@@ -1,0 +1,20 @@
+{
+  "timestamp_ms": 45300,
+  "model": "claude-opus-4-7",
+  "frame_path": "dashboard/public/match_data/vision/frame_t_45300ms.jpg",
+  "raw_response": "```json\n{\n  \"visible_action\": \"Player A is tracked far wide in the deuce-side tramlines, low and reaching with the racquet trailing behind his right hip as he recovers from a wide ball.\",\n  \"biomech_annotation\": {\n    \"label\": \"lateral loading / trunk lean\",\n    \"value\": \"trunk tilt ~20-25\u00b0 toward outside leg, lead-knee flexion ~130-140\u00b0\",\n    \"confidence\": 0.55\n  },\n  \"coach_takeaway\": \"He's been pulled well off the court on deuce \u2014 any reply has to buy recovery time or the open court is wide open.\"\n}\n```",
+  "parsed": {
+    "visible_action": "Player A is tracked far wide in the deuce-side tramlines, low and reaching with the racquet trailing behind his right hip as he recovers from a wide ball.",
+    "biomech_annotation": {
+      "label": "lateral loading / trunk lean",
+      "value": "trunk tilt ~20-25\u00b0 toward outside leg, lead-knee flexion ~130-140\u00b0",
+      "confidence": 0.55
+    },
+    "coach_takeaway": "He's been pulled well off the court on deuce \u2014 any reply has to buy recovery time or the open court is wide open."
+  },
+  "usage": {
+    "input_tokens": 3335,
+    "output_tokens": 207,
+    "cache_read_tokens": 0
+  }
+}

@@ -11,6 +11,8 @@ import {
   type RefObject,
 } from 'react';
 
+import LoadingScreen from '@/components/LoadingScreen';
+
 import {
   clampFrameIdx,
   pickActiveLayoutAtTime,
@@ -185,6 +187,28 @@ export default function PanopticonProvider({
     };
   }, [matchDataSrc]);
 
+  // ── Auto-pause video when the tab is hidden (GOTCHA-029) ─────────────
+  //
+  // Browsers throttle `requestAnimationFrame` to ~0 Hz when the tab is hidden,
+  // but `<video>` keeps playing. After ~10s of hidden tab, the rAF loop and
+  // the video clock desync — when the judge returns, the skeleton is painted
+  // for the wrong frame and the visible HUD lags the video by seconds.
+  //
+  // Defense: pause the video on `document.hidden`. We do NOT auto-resume —
+  // the user must explicitly click play, which guarantees the rAF loop
+  // resumes in phase with the video clock.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        videoRef.current?.pause();
+      }
+      // Intentionally no resume branch — user-initiated play re-syncs rAF
+      // with videoClock cleanly. See team-lead override 2026-04-24.
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
   // ── Single rAF loop with 10Hz state gate (PATTERN-042) ───────────────
   useEffect(() => {
     let rafId = 0;
@@ -299,6 +323,25 @@ export default function PanopticonProvider({
     <PanopticonStaticContext.Provider value={staticApi}>
       <PanopticonStateContext.Provider value={stateApi}>
         {children}
+        {/* GOTCHA-030 — Vercel cold-boot 25 MB payload defense. LoadingScreen
+         * overlays until match_data.json resolves; pointer-events:auto on the
+         * inner panel blocks clicks to video controls. Unmounts with a 500 ms
+         * fade-out (PATTERN-068) so the dashboard doesn't pop in.
+         *
+         * PR #7 Finding 1 fix: ALWAYS mount LoadingScreen and gate the
+         * overlay via the `visible` prop. AnimatePresence's exit animation
+         * only fires when its OWN children unmount; if we conditionally
+         * unmount LoadingScreen here, AnimatePresence is destroyed along
+         * with the tree and the exit fade never runs. */}
+        <LoadingScreen
+          visible={loadState !== 'ready'}
+          state={loadState === 'ready' ? 'loading' : loadState}
+          errorMsg={errorMsg}
+        />
+        {/* When loadState='ready', `visible={false}` triggers the
+         * AnimatePresence exit fade. The `state` prop here is gated to
+         * 'loading' (the visual it renders during fade-out is irrelevant
+         * since the overlay is fading to opacity 0). */}
       </PanopticonStateContext.Provider>
     </PanopticonStaticContext.Provider>
   );

@@ -1,5 +1,15 @@
 # PANOPTICON LIVE — 3-Minute Demo Storyboard
 
+> **🚨 CANONICAL STORYBOARD: [`demo-presentation/PLAN.md`](../demo-presentation/PLAN.md) §5 — v4 Detective Cut (locked 2026-04-24 PM after 4-iteration dialectical review).**
+>
+> The v4 Detective Cut opens COLD on the anomaly (no title card), compresses Managed Agents to ≤ 15 s, and engineers the 1:58 climax frame where left-pane anomaly annotation and right-pane Opus thinking cite the same number (`crouch_angle: -11.69°`). That version supersedes the founder-voice 4-bucket structure below.
+>
+> This file is preserved as the v2 founder's reference (for tone / voiceover word choice) and as the OBS recording setup reference. For beat-by-beat shot list, narration lines, and Saturday build schedule use the v4 canonical source.
+
+---
+
+## Target runtime, deadline, voice (unchanged across versions)
+
 **Target runtime**: 2:55 (5-second safety margin under the 3:00 hard cap).
 **Submission deadline**: Sunday 2026-04-26, 8:00 PM EST. Target upload: 7:30 PM EST.
 **Founder-voiced**: first-person plural, short sentences, numbers over adjectives, zero hedging.
@@ -81,9 +91,9 @@ Each segment specifies: camera / screen / voiceover (verbatim) / on-screen actio
 **Segment 2C (1:00 – 1:15) — The 3-Pass DAG and the Raw Telemetry tab**
 
 - **Camera**: `⌘2` to Tab 2 "Raw Telemetry." The signal stream scrolls live — timestamped signal emissions, one per line, in a monospace feed.
-- **Voiceover (verbatim)**: *"Offline, we run a three-pass DAG. Pass one decodes frames and forward-Kalmans. Pass two runs the RTS backward smoother — zero-lag velocities. Pass three gates signals through the state machine. The smoother compresses peak velocity by 47 percent against forward-only noise. Measured on a real UTR clip."*
-- **On-screen**: the raw telemetry feed shows roughly 46 signal emissions scrolling — `recovery_latency_ms: 612`, `crouch_depth_degradation_deg: 1.8`, `baseline_retreat_distance_m: 0.47`, etc. A small badge reads `3-Pass DAG · RTS Smoother`.
-- **Highlight**: the 47% number is load-bearing credibility. It is a real measurement from `utr_match_01_segment_a.mp4`, 60s, 1800 frames. Do not round.
+- **Voiceover (verbatim)**: *"Offline, we run a three-pass DAG. Pass one decodes frames and forward-Kalmans. Pass two runs the RTS backward smoother — zero-lag velocities. Pass three gates signals through the state machine — each signal fires only when the player is in the right phase: pre-serve ritual before the toss, active rally during the point, dead time between points. The smoother compresses peak velocity by 47 percent against forward-only noise. Measured on a real UTR clip."*
+- **On-screen**: the raw telemetry feed shows roughly 46 signal emissions scrolling — `recovery_latency_ms: 612`, `crouch_depth_degradation_deg: 1.8`, `baseline_retreat_distance_m: 0.47`, etc. — interleaved with `PRE_SERVE_RITUAL → ACTIVE_RALLY` state transitions. A small badge reads `3-Pass DAG · RTS Smoother`.
+- **Highlight**: the 47% number is load-bearing credibility. It is a real measurement from `utr_match_01_segment_a.mp4`, 60s, 1800 frames. Do not round. The state-machine explanation is the narrative bridge that makes the ALL-CAPS state terms legible to non-technical judges.
 
 **If this bucket runs long**: cut Segment 2A to 10s. Keep 2C at full length — the 47% number is the engineering-craft proof.
 

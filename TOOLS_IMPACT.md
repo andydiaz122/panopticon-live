@@ -104,6 +104,11 @@ Tracks skills we evaluated and consciously skipped. Prevents anti-pattern #18 (i
 | `nutrient-document-processing` | Scouting PDF uses ReportLab (standard lib) | Revisit if PDF complex |
 | `chat-sdk` | Not building a chatbot | N/A |
 | `crosspost` | Post-submit only | Day 6 |
+| `claude-md-improver` | **NOT FOUND** in this installation — does not exist. Fell back to `documentation-librarian`. | If ever installed globally, revisit as preferred tool for CLAUDE.md edits |
+| `IMM-filter` / sliding-window Kalman patterns | PROJECT-2026-04-28 roadmap (B2B post-hackathon); out of scope for Sunday submission | Post-submission (Monday+) |
+| `MotionAGFormer` / `BioPose 3D` monocular lifting | PROJECT-2026-04-28 roadmap; 2D YOLO11m-Pose stays for hackathon | Post-submission |
+| `DuckDB-WASM` HTTP Range Requests | PROJECT-2026-04-28 roadmap; current 15-25MB JSON via `fetch()` + `useEffect` is GOTCHA-026-compliant for 60s clip | Post-submission; needed for 3-hour-match support |
+| `/rules-distill` | Week-end meta-synthesis command | After Sunday submission, before next Monday's Seed-Round prep |
 
 ---
 
@@ -452,12 +457,12 @@ The bimodal-histogram diagnostic pattern that broke open the Skeleton Sanitation
 
 | Tool / Pattern | Outcome | ROI | Notes |
 |---|---|---|---|
-| `/vercel:vercel-cli` skill (documentation-only, no command wrappers) | Reading `references/environment-variables.md` clarified the `vercel env add NAME preview "" --value "..." --yes --sensitive` positional-arg pattern and the `printf %s \| pipe` discipline | HIGH (saved 1 failed deploy attempt, ~10 min turnaround) | The skill is pure guidance — it did NOT wrap a command. Knowledge transfer from skill reference → PATTERN-056. Entry worth capturing because the skill type (documentation-only, no executor) is easy to under-use; you have to actively READ it, not just invoke it. |
+| `/vercel:vercel-cli` skill (documentation-only, no command wrappers) | Reading `references/environment-variables.md` clarified the `vercel env add NAME preview "" --value "..." --yes --sensitive` positional-arg pattern and the `printf %s \| pipe` discipline | HIGH (saved 1 failed deploy attempt, ~10 min turnaround) | The skill is pure guidance — it did NOT wrap a command. Knowledge transfer from skill reference → PATTERN-056 (canonical in this repo: PATTERN-064 post-merge). Entry worth capturing because the skill type (documentation-only, no executor) is easy to under-use; you have to actively READ it, not just invoke it. |
 | Claude-GitHub-Action `@claude` PR-review bot (landed in `a64533b`) | PR #4: `@claude please review` comment triggered a full orthogonal review in ~3 min. Caught unstable `key={i}`, lost Tab 2 streaming progress counter, vercel.json glob breadth, hardcoded hex vs design-token, `buildTimeline` double-invocation | HIGH (one comment = multi-lens review, zero marginal cost) | Addressed quick wins in same PR (`787a5d1`), deferred perf/style nits with rationale. See https://github.com/andydiaz122/panopticon-live/pull/4#issuecomment-4308215489 |
-| `vercel curl --deployment <url> /<path> -- -I` | Post-deploy asset verification for `public/match_data/*.json` + `public/clips/*.mp4`. Confirmed `Content-Type`, `Content-Length`, `Accept-Ranges: bytes` on the MP4 before declaring deploy green | MEDIUM (turns "I think it works" into "I know these URLs returned 200") | Preferred over plain `curl` because it auto-authenticates against protected preview deploys and attaches the deployment ID. See PATTERN-058. |
+| `vercel curl --deployment <url> /<path> -- -I` | Post-deploy asset verification for `public/match_data/*.json` + `public/clips/*.mp4`. Confirmed `Content-Type`, `Content-Length`, `Accept-Ranges: bytes` on the MP4 before declaring deploy green | MEDIUM (turns "I think it works" into "I know these URLs returned 200") | Preferred over plain `curl` because it auto-authenticates against protected preview deploys and attaches the deployment ID. See PATTERN-058 (canonical in this repo: PATTERN-066 post-merge). |
 | `vercel logs --deployment <url> --no-follow --limit N --expand --status-code 500` | Surfaced the Turbopack-strip error (`The module has no exports at all`) + later the Anthropic 401 errors (driven by GOTCHA-020 newline corruption) from the Serverless Function logs | HIGH (runtime debugging for Server Actions that 500 on Vercel; unblocked GOTCHA-019/020 diagnosis) | `--status-code 500` filters to failures; `--expand` dumps full stack trace. Entry-point for any Server Action debug flow. |
-| TelemetryLog refactor (`telemetry.ts` + `TelemetryLog.tsx`) | Extracted 115 lines of shared primitives from `SignalFeed.tsx` into a library module; new 192-line `TelemetryLog` component takes props for filter/height/density; slotted 2× in Tab 1 + 1× in Tab 2 with zero visual regression | HIGH-ROI (one refactor unlocked three consumer slots; no bundle bloat) | Captured as PATTERN-055. Net diff: 388 insertions / 248 deletions in 5 files; SignalFeed.tsx shrank from 250 lines to ~80 lines. |
-| `anthropic` TypeScript SDK + Turbopack `'use server'` interaction | Discovered GOTCHA-019 empirically (local worked, Vercel build stripped the module). Fix moved config from `actions.ts` to `vercel.json` | CRITICAL | Would have cost the demo if only caught on Sunday. Caught Thu afternoon with time to fix. |
+| TelemetryLog refactor (`telemetry.ts` + `TelemetryLog.tsx`) | Extracted 115 lines of shared primitives from `SignalFeed.tsx` into a library module; new 192-line `TelemetryLog` component takes props for filter/height/density; slotted 2× in Tab 1 + 1× in Tab 2 with zero visual regression | HIGH-ROI (one refactor unlocked three consumer slots; no bundle bloat) | Captured as PATTERN-055 (canonical in this repo: PATTERN-063 post-merge). Net diff: 388 insertions / 248 deletions in 5 files; SignalFeed.tsx shrank from 250 lines to ~80 lines. |
+| `anthropic` TypeScript SDK + Turbopack `'use server'` interaction | Discovered GOTCHA-019 empirically (local worked, Vercel build stripped the module). Fix moved config from `actions.ts` to `vercel.json` | CRITICAL | Would have cost the demo if only caught on Sunday. Caught Thu afternoon with time to fix. GOTCHA-019 canonical in this repo: **GOTCHA-034** post-merge. |
 
 ### Skills that FIRED during Phase 5
 
@@ -497,7 +502,7 @@ The bimodal-histogram diagnostic pattern that broke open the Skeleton Sanitation
 
 2. **DRY refactor** (mid-afternoon) — TelemetryLog. Tool: Read/Edit/Write on the dashboard source tree; vitest for regression. Lesson: pure-function extraction into a `lib/` module BEFORE component authoring enables three consumers with no duplication. → PATTERN-055.
 
-3. **Production deploy + PR review** (evening) — Vercel wire-up. Tool: `vercel` CLI + `@claude` PR bot + `vercel curl` asset verification + `vercel logs` for debugging. Lesson: the deploy surface is unforgiving; one reliable incantation per task is worth more than three almost-right ones. → GOTCHA-019/020, PATTERN-056/058, WORKFLOW-005, DECISION-010.
+3. **Production deploy + PR review** (evening) — Vercel wire-up. Tool: `vercel` CLI + `@claude` PR bot + `vercel curl` asset verification + `vercel logs` for debugging. Lesson: the deploy surface is unforgiving; one reliable incantation per task is worth more than three almost-right ones. → GOTCHA-019/020 (canonical in this repo: GOTCHA-034/035 post-merge), PATTERN-056/058 (canonical: PATTERN-064/066 post-merge), WORKFLOW-005, DECISION-010 (canonical: DECISION-011 post-merge).
 
 The combined session shipped PR #4 with 4 commits and no hot-fix revert. That's the bar for Phase 5 velocity. Phase 6 (Sat polish + Sun record) should preserve this cadence.
 
@@ -506,3 +511,331 @@ The combined session shipped PR #4 with 4 commits and no hot-fix revert. That's 
 - Preview URL: `panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app` (as of PR #4 merge)
 - 4 commits merged to main: `4f9df37` (force-add assets) → `b20c370` (vercel.json maxDuration fix) → `888acb5` (anomaly injection + TelemetryLog slots) → `787a5d1` (PR-review feedback — stable keys + Tab 2 progress counter)
 - PR #4 URL: https://github.com/andydiaz122/panopticon-live/pull/4
+
+---
+
+## Phase A (Apr 24, 2026 — demo-v1 merge + main-merge + Golden Run on hackathon-research)
+
+### HIGH-IMPACT tools / patterns this session
+
+| Tool / Pattern | Outcome | ROI | Notes |
+|---|---|---|---|
+| **PATTERN-062 Isolated-Worktree + Ordered-Cherry-Pick + Orthogonal-Review Merge** | Applied TWICE in one day. First absorbed demo-v1 UI + CV fix into hackathon-research (6 cherry-picks, 3 skips, renumbering). Second merged `origin/main` into the branch with per-file conflict resolution. Zero regressions across both merges. | **CRITICAL** — unlocked safe multi-commit merges without touching main workdir | 4-layer recipe: (1) `git merge-tree --write-tree` preview, (2) `Agent` with `isolation: "worktree"` for execution, (3) ordered `git cherry-pick -x` per dependency, (4) parallel orthogonal reviewer panel post-merge. Pattern formalized in MEMORY.md PATTERN-062. |
+| **`git merge-tree --write-tree HEAD <sha>`** | Read-only conflict preview per candidate cherry-pick. Zero working-tree impact. | **HIGH** (pre-merge triage) | Tells you which commits apply clean vs conflict BEFORE committing to a strategy. Prevented 3 doomed cherry-picks from wasting time. |
+| **Agent tool with `isolation: "worktree"`** | Executed 6 cherry-picks in isolated worktree. Main workdir untouched while per-commit tests + ruff ran in the worktree. Agent returned only after all gates green. | **CRITICAL** (risk isolation) | Contrast with GOTCHA-011: Day 1 had WorktreeCreate hook missing. By Phase A that had been resolved; the isolated-worktree pattern is now the canonical merge harness. |
+| **Orthogonal 4-reviewer panel** (post-merge): `code-reviewer` + `python-reviewer` + `typescript-reviewer` + `security-reviewer` | Phase 3 post-merge review caught 3 HIGH findings (0 CRITICAL): inline array-literal rowKinds in HudView breaking `useMemo` at 10 Hz, 52 stale ID refs in PHASE_4_TEAM_LEAD_HANDOFF.md, Windows-permission leak in `.claude/settings.json`. Post-main-merge review caught the `See PATTERN-056` → should be PATTERN-064 cross-ref drift at MEMORY.md:1375. | **HIGH** (each lens is distinct; running 3 `code-reviewer` instances would have been redundant, not orthogonal) | Applied the "Orthogonality Over Quantity" principle from global CLAUDE.md. 4 lenses × orthogonal failure modes = super-linear coverage. |
+| **Golden Run execution** (2026-04-24) on `utr_match_01_segment_a.mp4` via `./run_golden_data.sh` | 1800 frames → 53 signals, 5 coach_insights, 6 narrator_beats, 36 state_transitions, 3-step swarm captured in agent_trace.json with 57s real compute. Token budget consumed and within limits. | **HIGH** (demo assets ready) | Critical data fact discovered: **0 anomalies emitted**. Anomaly extractor wired in `anomalies[]` but not populated by signal pipeline (only hand-injected test data at t=36 from demo-v1 reaches the UI). Flagged for follow-up; not a blocker for demo because manual injections (GOTCHA-036) cover the visible anomaly UI path. |
+| **`run_golden_data.sh` preflight script** | Founder-only helper: exports ANTHROPIC_API_KEY length check (GOTCHA-033 defense), runs precompute with canonical args, checks exit code. | **HIGH** (saves 10-15 min of manual arg-assembly + defends against env-var corruption) | New script shipped this phase. Preflight catches the GOTCHA-033 class of "invisible byte" bugs via `echo "len=${#ANTHROPIC_API_KEY}"` before the ~2-min Anthropic call surface is touched. |
+| **HUD layout width-clamp repair** | STATE TelemetryLog moved into center column under CoachPanel (adjacent to right-rail SIGNAL log); CoachPanel `maxHeight` clamp bumped from 88/260 to 220/380 to fit col-span-6 wrapped text. | **MEDIUM** (visual polish, pre-recording) | Meta-observation: width-assumption-baked-into-pixel-clamp is the layout-level analog of GOTCHA-030 (JSON Syntax Trap from truncation marker) — both involve a UI-rendering assumption that stops holding at real content sizes. |
+
+### Backend Surgery Bootstrap (pre-Golden-Run, ~13:00-14:15 EST)
+
+Before the full Golden Run fired, the morning session ran a **3-Step Bootstrap** (PATTERN-076) that shipped the display-only G43 architecture (DECISION-016) and verified it against the 4-Criteria Protocol (PATTERN-075). Tools that carried the morning:
+
+| Tool / Pattern | Outcome | ROI | Notes |
+|---|---|---|---|
+| **`video-frame-validator` agent (single-pass per G38)** | Extracted frames at 1 s intervals for the demo window. Discovered Player A is NOT in frames 0-8s — only Player B visible; `BREAK POINT` scoreboard overlay active; Player A enters at t=9s, serves at t=11s. **Invalidated the plan's t=0-8s narration grid.** | **CRITICAL** (saved shipping a narration track that contradicts what judges literally see; whole class of authoring errors prevented by one gate) | Captured as GOTCHA-042 ("Frame-ground BEFORE authoring"). Extends `video-validation-protocol` skill's remit from demo-playback validation to pre-authoring narration grounding. |
+| **`ffmpeg -ss <t> -frames:v 1` one-liner** | Cheap primary-source sanity check on "what's on screen at time T." Ran inside the video-frame-validator agent's single-pass loop. | **HIGH** (canonical pre-authoring gate) | Alternative — trusting the plan's visual assumptions — would have shipped wrong narration. Rule: the video file itself is the only reliable primary source. |
+| **Pydantic v2 model additions** (`QualitativeNarration`, `PlayerProfile`, `AuthoredStateTransition`, `ProvenancedValue`, `ProfileMeta`, `RallyMicroPhase`, `NarrationKind`, `NarrationSource`, `ProvenanceTag`) in `backend/db/schema.py` | Every authored-content inter-module contract mechanically enforced. No dict hallucinations. `provenance="stubbed_mcp"` stamping enabled end-to-end for honest disclosure. | **HIGH** (type safety carried through the entire display-only stack + made the 4-Criteria verification mechanical) | Mirror TS types in `dashboard/src/lib/types.ts` added with ALL fields OPTIONAL per G28. The Pydantic v2 discipline from earlier phases paid compound interest here — every new model was trivially self-documenting. |
+| **Ad-hoc 4-Verification-Criteria checks** (jq/grep against `match_data.json` + `agent_trace.json`) | (a) `display_narrations`/`display_transitions`/`display_player_profile` populated, (b) `query_video_context_mcp` is FIRST tool call in Analytics trace with `provenance="stubbed_mcp"`, (c) ToolResult carries authored text, (d) `signals[].state` still pinned to 4-member `PlayerState` (no `RallyMicroPhase` leakage). | **CRITICAL** (verified display-only vs live partition held; prevents silent regression class where authored content leaks into telemetry stream) | Captured as PATTERN-075 — generalizes to any future "display-only vs live" architectural change. |
+| **Shell-wrapper surgical fixes** to `run_golden_data.sh` | Added `"$@"` forwarding to `python -m backend.precompute`; relaxed hard ANTHROPIC_API_KEY preflight when `--skip-scouting-committee` is in args. Unblocks Step 1 baseline-without-swarm. | **HIGH** (enables the cost-minimization discipline of WORKFLOW-009 — baseline before spending Anthropic budget) | 2-line script fix unlocked the "baseline → frame-ground → full swarm" bootstrap sequence. |
+| **Dynamic identity rule (G10)** in `_build_baseline_context` of `scouting_committee.py` | Profile present → `"PROFILE DETECTED: You MUST refer to {player_profile.name} and cite specific stats"`; profile absent → strict anonymity. Unblocked profile citation while preserving the anti-hallucination guardrail for unprofiled runs. | **HIGH** (narrative density unlocked without breaking anti-hallucination invariant) | Captured as DECISION-014 (locked) + USER-CORRECTION-034 (Hurkacz → UTR Pro A anonymization). Verified: all 3 agents cite "UTR Pro A", zero hallucinated player names. |
+
+**Meta-pattern: the 3-Step Bootstrap saved ~$1-1.60 + ~3 hours wall-clock** vs. naïve-iterate approach of launching the full swarm first and iterating post-swarm on authoring errors. Every Step 2 correction made pre-swarm is a Step 3 API call avoided. WORKFLOW-009 institutionalizes the discipline.
+
+### Skills that FIRED during Phase A
+
+- `panopticon-hackathon-rules` (prime directive carried through)
+- `video-validation-protocol` (new SKILL landed as part of Phase 2B; referenced when sanity-checking Golden Run outputs)
+- `physical-kalman-tracking` (kalman.py edits during Phase 2B/3 still in scope)
+- `2k-sports-hud-aesthetic` (HUD width-clamp repair)
+- `react-30fps-canvas-architecture` (gate HUD refactor against rAF canvas invariants)
+- `multi-agent-trace-playback` (agent_trace.json format referenced)
+
+### Agents that FIRED during Phase A
+
+- `video-frame-validator` — single-pass frame extraction + visual verification across the demo window. Discovered Player A off-screen 0-8s. Extends the skill's remit from playback validation to pre-authoring grounding. GOTCHA-042.
+- `general-purpose` agent × 6 for cherry-pick execution (inside isolated worktree, `mode: "acceptEdits"` every time — zero plan-mode stalls)
+- `code-reviewer`, `python-reviewer`, `typescript-reviewer`, `security-reviewer` — parallel orthogonal panel, ~2 min wall time for all 4
+
+### Agents NOT found / partial-failure recovery (anti-pattern #35 in action)
+
+| Attempted | Outcome | Recovery |
+|---|---|---|
+| `claude-md-improver` agent | Agent not found — does not exist in this installation | **Fell back to `documentation-librarian`** (this very agent). Silently swallowing the failure would have been anti-pattern #35; instead, surfaced the missing-agent fact immediately and used the closest-available orthogonal tool. |
+| `agent_trace.json` stale-ref cross-references | Post-main-merge review flagged `See PATTERN-056` at MEMORY.md:1375 which should be PATTERN-064 (the renumbered ID) | Applied sed-style fix in-worktree before integration; added renumbering-map disclaimer to TOOLS_IMPACT.md header; will be caught by this audit going forward |
+| Vercel auto-deploy not firing on branch push | Expected deploy URL to update, didn't | Diagnosed, escalated to user; confirmed no auto-deploy on this branch per PROJECT-2026-04-23 "do-not-deploy" constraint. Not actually a failure — the constraint worked as designed. Surfaced rather than silently assuming |
+
+**Meta-observation**: partial-failure surfacing happened THREE times in this session (missing agent, stale cross-refs, non-firing auto-deploy) — each surfaced, diagnosed, and either fixed or escalated. This IS anti-pattern #35 in action (global rule, `~/.claude/rules/anti-patterns.md`): never silently swallow tool-call failures. Captured in FORANDREW.md as a real session-level learning worth preserving.
+
+### Skills NOT USED this session (and why)
+
+- `e2e-runner` / `/e2e` Playwright — deferred to pre-submission pass; Golden Run output validates end-to-end via manual visual QA on localhost
+- `hackathon-demo-director` — NEXT session (Sat Apr 25 + Sun Apr 26 — record + submit)
+- `computer-use` — deferred to Sunday Apr 26 OBS recording session
+- `/vercel:deploy` / `/vercel:verification` — blocked by PROJECT-2026-04-23 "do-not-deploy" constraint
+- `biometric-fan-experience` — locked from Phase 3.5; no copy changes needed this phase
+
+### Meta-learning this session
+
+**Orthogonality over quantity**, as articulated in global CLAUDE.md, is a force multiplier when the stakes are merge-level or deploy-level. 4 specialized reviewers running in parallel caught 3 HIGH findings nobody else would have surfaced; 4 `code-reviewer` instances running in parallel would have caught the same 1-2 findings 4 times. The discipline is to NAME each reviewer's distinct failure-mode lens BEFORE dispatching, and collapse redundant lenses.
+
+**PATTERN-062 is now the canonical merge methodology for this project.** Any future multi-commit cross-branch merge — including post-submission PR prep against main — should use the 4-layer recipe. The ROI compounded specifically because the session required TWO merges in sequence; each time the recipe executed cleanly, building confidence that the main workdir stayed pristine while risky operations happened inside the worktree.
+
+---
+
+## Phase 6 — Final 20 % Polish Sprint (2026-04-24 PM)
+
+Post-backend-fortress team-lead override: pivot from engineering to UX craft. 5 polish directives executed in ~90 min edit + ~5 min validation. ZERO new correctness fixes — every directive hardened the demo perimeter.
+
+### Tools used with highest ROI
+
+- **`Skill` tool → `react-30fps-canvas-architecture`** — single-invocation load of the canonical canvas-resize pattern. Informed D3 (PATTERN-070 DPR-aware Canvas Resize) directly. ROI: replaced what would have been 30 min of "read the skeleton canvas code + figure out how to DPR-scale" with a 60 s skill load + 15 min surgical edit.
+- **`Edit` tool with narrow `old_string` scopes** — 10 edits across 5 files, each with enough surrounding context to be unambiguous but scoped tight enough for surgical review. Zero edit collisions, zero retry loops.
+- **`Bash` + `curl`** — smoke tests on the running dev server (HTTP 200 + page HTML grep for "LOADING BIOMETRIC" / "Broadcast narration" / "STUB") confirmed HMR picked up every edit without a single broken render.
+- **`TaskCreate`/`TaskUpdate`** — set up 8 new tasks (consolidation + 5 directives + validation + logging), clean in-progress/completed transitions, kept progress legible across an interrupted session.
+
+### Tools NOT used (deliberately — diminishing returns)
+
+- **Multi-agent review panel (`/code-review` wrapping `code-reviewer` + `security-reviewer` + `typescript-reviewer`)** — scope was surgical (≤300 LoC across 5 files, each directive owning a distinct concern). Panel would have surfaced 0-1 findings for 4× the wall clock. Saved ~20 min for an orthogonal-lens review that wasn't earning its cost. Captured lesson: reserve multi-agent panels for merge-level/deploy-level stakes, not polish sprints.
+- **`Perplexity`/`Context7` MCP** — directives were prescriptive (the team lead named each API signature and behavior). External research would have been noise. Non-use case worth naming: when the user hands you a spec, call the code, not the web.
+- **`/e2e` Playwright** — existing manual browser scrub at `localhost:3000` + `curl`/`grep` smoke test covered the visual regression surface for the 5 directives. Playwright adds value when you have a test journey to regress; these were single-page additions where the journey is "did the page render with banner + loading state." Save `/e2e` for Saturday's full storyboard rehearsal.
+- **`demo-director` agent dispatch** — the v4 Detective Cut storyboard was ALREADY written in `demo-presentation/PLAN.md`. Dispatching an agent to re-write or review it would have been redundant. Consolidation was a file-copy task, not a reasoning task.
+- **`documentation-librarian` agent** — I wrote MEMORY.md / FORANDREW.md / TOOLS_IMPACT.md myself. Dispatching the agent would have added latency for formatting an already-scoped append. Rule: dispatch the librarian for END-OF-DAY log rolls that aggregate multi-session patterns; do direct append for in-session entries.
+
+### Skills NOT used (would have been redundant)
+
+- **`awwwards-animations`** / **`animation-designer`** — my Framer Motion usage was a 3-line per-property transition override, not an animation choreography. Loading these skills would have been 50+ tokens for zero additional guidance.
+- **`nextjs-hydration-traps`** — LoadingScreen is a presentation-layer component that renders AFTER hydration; the hydration-traps skill is about SSR/RSC prop death, a different failure mode.
+- **`hackathon-demo-director`** — the storyboard was already locked (v4 Detective Cut after 4 iterations of dialectical steelmanning in the sibling worktree). Loading the skill would have been "re-plan the plan."
+- **`vercel-react-best-practices`** — deployment wasn't touched this phase. The Vercel perimeter was strengthened defensively (GOTCHA-039 LoadingScreen) but not via deploy-config changes.
+
+### Validation suite (5 min total)
+
+- `./node_modules/.bin/tsc --noEmit` → exit 0
+- `./node_modules/.bin/vitest run` → 96/96 tests pass (6 test files)
+- `curl -s http://localhost:3000 | grep -oE "LOADING BIOMETRIC|Broadcast narration|STUB|UTR Pro A"` → 4/4 expected strings present
+- `curl -s /match_data/utr_01_segment_a.json` → `display_narrations: 5`, `display_transitions: 4`, `display_player_profile.name: UTR Pro A`
+
+### Meta-learning this phase
+
+**The Final 20 % is UX craft, not engineering.** This phase did not add a single correctness fix. Every directive was about masking, blocking, or hardening the PERIMETER. The engineering was done; the presentation discipline is categorically the highest-ROI work of hackathon week because judges evaluate what they SEE, not what the code DOES.
+
+**Tool orthogonality mapping BEFORE editing is a workflow gate.** Name each directive's primary file surface before any code moves. Same-file collisions force serialization; distinct-file directives unlock parallel-safe execution (~30 % time savings). WORKFLOW-008.
+
+**The `pointer-events: auto` on a blocker inner panel is the single most load-bearing CSS rule for cold-boot defense.** Without it, the LoadingScreen would render over the video but video's native controls would still receive clicks through the transparent parent. PATTERN-072 names this explicitly so future overlays don't forget it.
+
+---
+
+## Phase 6 — Friday Pull-Forward Sprint (2026-04-24 Evening)
+
+Pulled Saturday's code-level items (A1 + A2a + A7 + A8-minimal) forward into Friday evening to buy multi-hour slack on Saturday's physical-presence recording day.
+
+### Tools used with highest ROI
+
+- **`AskUserQuestion` tool** — two early scope questions (A8 aggressiveness + handoff-doc treatment) shaped the entire sprint before any code moved. Saved ~1 h of scope-guess-and-correct. Tool-use lesson: spend 30 s asking to save 30 min executing wrong scope.
+- **`Bash` + `ffmpeg` one-liner** — A7 frame extraction (`-ss 45.3 -frames:v 1 -q:v 2`). 180 KB JPEG in ~100 ms. Would have taken 10 min to wire a Python ffmpeg-wrapper.
+- **`Anthropic` Python SDK (vision)** — A7 biomechanics observation on the t=45.3 s frame. 3 335 input tokens (mostly image) + 207 output tokens = well under $0.05. Returned parseable JSON on first call thanks to the ```json fence directive in the prompt. ROI: $0.05 for a demo-critical cold-open overlay.
+- **`Write` + `Edit` for surgical hook + component** — `useSlowMoAtAnomalies.ts` (117 LoC, pure function + rAF wrapper) + `Tickertape.tsx` (110 LoC, phase-weighted component) + `useSlowMoAtAnomalies.test.ts` (96 LoC, 15 test cases). Zero cross-file coupling.
+- **`vitest run` on a single test file** — 15 new tests in 289 ms. Pure-function testability of `computePlaybackRate` is a direct consequence of the hook's design (ramp/hold/exit math extracted into a side-effect-free function).
+- **`Skill` tool for `react-30fps-canvas-architecture`** (inherited from polish sprint) — already loaded the canonical DPR-aware canvas pattern, so A2a's rAF-slaved design was informed by a 60 s skill load, not by re-deriving from first principles.
+
+### Tools NOT used this evening (deliberately — diminishing returns)
+
+- **Multi-agent steelman / review panel** — scope was sequential (A1 → A2a → A7 → A8-minimal) with clear specs. Convening a review panel would have doubled wall-clock for 0-1 findings.
+- **`Perplexity` / `Context7` MCP** — every API signature was known (Anthropic vision, HTMLMediaElement `playbackRate`, Framer Motion per-property transitions). External research would have been padding.
+- **`Remotion` MCP / `Canva` MCP** — explicitly out of scope tonight (A4/A5/A6 are Saturday physical-presence items).
+- **`video-frame-validator` agent for A7** — the `run_vision_pass.py` script IS the frame-validator for this use case. Dispatching a separate agent to "validate the frame before vision call" would have been redundant.
+
+### The "transient APIConnectionError" learning
+
+First post-STEP-3 golden run had an APIConnectionError on the Analytics Specialist (first agent with tool-use = highest call-surface). Trace: `[error: Analytics Specialist failed with APIConnectionError: Connection error.]`. The pipeline's `NEVER raises` contract held — Technical + Tactical still completed, just with the error text as their upstream input. A clean retry was cheap (~60 s + $0.50-1) and the RIGHT move for demo-load-bearing artifacts. **Rule: when a background CV/API pipeline produces a textual error in a downstream trace, the issue is almost always transient network — one retry before escalating to code-level investigation.** Saved ~15 min of debugging a non-existent code bug.
+
+### Validation after Friday pull-forward
+
+- `tsc --noEmit` → exit 0
+- `vitest run` → **111/111** tests passing (96 baseline + 15 new A2a unit tests)
+- Dev server at localhost:3000 HMR'd all new components; curl confirms Tickertape + LoadingScreen + DisclosureBanner rendering
+- `dashboard/public/match_data/vision_pass.json` parsed successfully with biomech annotation
+- Golden run retry in flight (pending notification)
+
+### Meta-learning this sprint
+
+**"Pull code work forward when evenings are free" is the dual of "save physical-presence work for the physical-presence day."** Code work is concentration-bound but not location-bound or time-bound. Recording, Canva design work, Remotion rendering, OBS takes, YouTube uploads, and CV form submission are all time-windowed or coordination-bound. Freeing tomorrow's morning by burning tonight's evening is a universal hackathon-arbitrage.
+
+**Sibling worktrees are read-only context libraries, not work surfaces.** The sibling `hackathon-demo-v1/` has been consolidated into this branch's `demo-presentation/`. It lives on disk but is no longer a work surface. This disambiguates future "where do I edit?" questions — the answer is always "here, in `hackathon-research/`".
+
+**Adaptive thinking is a prompt-engineering problem.** Opus 4.7 won't emit thinking blocks for "analyze these signals" — the model judges that single-step. It WILL emit for "consider this alternative hypothesis and explicitly reject it with evidence" — that's a genuine 2-step reasoning task. The STEP 3 nudge is the prompt-design equivalent of "always wire the multi-hypothesis structure explicitly." Captured as GOTCHA-040.
+
+---
+
+## Phase 6 — Late-Late Evening Vimeo/Numerai Sprint (2026-04-24 ~19:30-22:00 EST)
+
+### Tool: Custom local agent — Vimeo deconstruction
+
+**Cost**: 1 background agent dispatch, ~7 minutes wall-clock, ~175K tokens, 55 tool uses.
+**Output**: 4.1MB DNA file at `demo-presentation/assets/references/vimeo_205032211_dna.md` with 11 numbered sections, hex-confirmed palette tables, scene-by-scene log.
+**ROI**: **HIGH**. Three direct wins:
+1. Identified the source as Numerai's *Introducing Numeraire* — gave us proper context, not just "some cool video."
+2. Section "What's UNIQUE to Numerai" + "Cross-reference with Anthropic — CONVERGENT" provided a structured ADOPT-vs-REJECT framework that prevented copy-paste mistakes (letterbox, single-family typography, two-card-split would all have been wrong inheritances).
+3. Section §10 ("Five-to-Seven Concrete Remotion Principles") gave us 7 transferable surgical mechanics, of which 3 (logo ignition, whispered body copy, slow drift) landed in code that same evening.
+**When to repeat**: any time a design reference video / film / motion piece comes in cold. Spend the 7 minutes on background analysis BEFORE the synthesis attempt. The agent's structured "convergent vs unique vs anti-pattern" framing is what makes the synthesis tractable.
+**Anti-pattern caught**: would have inherited Numerai's letterbox + two-card-split + single-family typography wholesale without the agent's "register-bearing vs surgical-mechanic" distinction. Captured as DECISION-017 in MEMORY.md.
+
+### Tool: `mcp__claude_ai_Figma__generate_diagram` (Figma MCP)
+
+**Cost**: 1 tool call. EXEMPT from the 6-call/month MCP budget (GOTCHA-043). ~20 seconds wall-clock from Mermaid syntax → FigJam diagram with shareable URL.
+**Output**: PANOPTICON LIVE pipeline architecture diagram in FigJam at `figma.com/board/1McYlYT0isbmTOJshc9ip9`. 9 nodes (ffmpeg → YOLO → Kalman → 3-Pass DAG → 7 Signals → DuckDB → Server Action → Opus 4.7 → 2K HUD) + dotted feedback edge from Opus to HUD.
+**ROI**: **HIGH for our specific use case**. The diagram needs to LIVE somewhere collaborative + editable + exportable as PNG for the demo. Mermaid CLI would render a static PNG faster but couldn't be edited, embedded in Figma branding, or shared with team members. The Figma MCP fits the "architecture-as-living-document" use case exactly.
+**Caveats**:
+- Returns an `imageUrl` that's S3-signed with a 7-day expiry. Don't reference that URL in deliverables — re-export to local PNG before expiry. Captured as GOTCHA-045.
+- The tool generates ONE diagram per call. Don't attempt to compose multi-diagram boards in a single call.
+- Saving to a `planKey` (Andrew's team key from `whoami`) keeps the diagram in his account so it's not lost when the conversation ends.
+- Cannot move/style individual shapes after generation — all visual customization happens at the Mermaid syntax level. For richer post-generation editing, open in FigJam.
+**When to repeat**: any time a project needs an architecture diagram, decision tree, sequence diagram, or state diagram that lives in a shareable surface. Don't use for: data visualizations, design-system layouts, interactive prototypes.
+
+### Tool: ToolSearch (deferred-tool loader)
+
+**Cost**: 1-2 tool calls per session to load deferred tool schemas. Negligible token cost (one tool's schema is ~500 tokens).
+**Use case this session**: loaded `mcp__claude_ai_Figma__generate_diagram`, `TaskUpdate`, `TaskCreate` schemas on demand. The schema-on-demand pattern (vs. all tools loaded upfront) keeps the global tool list short and the system reminder small.
+**ROI**: **MEDIUM**. Mainly invisible — saves ~5-10K tokens per session by deferring rarely-used tool schemas. The visible benefit is "I forgot how to call this tool" → ToolSearch with a name → schema loads → done. Better than guessing parameters and getting InputValidationError.
+**Anti-pattern caught**: tried to call `mcp__claude_ai_Figma__generate_diagram` directly without loading its schema → would have failed with InputValidationError. ToolSearch + name resolves cleanly.
+**When to use**: any time a tool name appears in the deferred-tools list at session start but isn't in the active tool list. Don't keyword-search if you know the name — use the `select:NAME` form for an exact match.
+
+### Tool: Remotion render (`./node_modules/.bin/remotion render <id>`)
+
+**Cost**: ~2-5 seconds per second of output video on M4 Pro. b0-opener (25s) renders in ~50s; 5s closing card in ~10s; 1.5s scene break in ~5s.
+**Use this session**: rendered 5 compositions (b0-opener, b5-closing, scene-break-b2/b3/b4) in a single batch. Used `run_in_background: true` for the 4-composition batch (~70s total) so the main session could continue writing docs.
+**ROI**: **EXTREMELY HIGH for this project**. Programmatic Remotion + frame-driven animations + batch rendering = full DaVinci-ready chrome library in ~2 minutes after each Remotion code change. Compare to After Effects manual render farm: ~30+ minutes per pass.
+**Patterns established**:
+- ALWAYS use `./node_modules/.bin/remotion` (full path) instead of `bunx remotion` — avoids cwd drift bugs.
+- Batch background renders log to `/tmp/render-batch.log` so progress can be tailed without interrupting the main session.
+- Render each composition individually rather than chained — clearer error isolation when one breaks.
+
+### Meta-learning this micro-sprint
+
+**Tool selection cascade for design references**: when a user drops a design reference, the optimal pipeline is:
+1. **ToolSearch** to confirm tool availability (cheap)
+2. **Custom local agent** (background) for deep deconstruction (~7 min, finds patterns that take humans hours)
+3. **Synthesize structured ADOPT-vs-REJECT** in main session while agent runs
+4. **Apply** as surgical code edits (Edit tool, not Write — preserves git diff readability)
+5. **Render** to verify visually (Remotion + background batch)
+6. **Document** the synthesis durably (PLAN.md + MEMORY.md + FORANDREW.md + TOOLS_IMPACT.md — ALL FOUR)
+
+Skipping step 6 is the silent failure mode. The lessons learned tonight (PATTERN-082, 083, 084, DECISION-017, GOTCHA-045) are worth more across future projects than the specific B5 closing card itself. Documenting durably is the leverage move.
+
+---
+
+## Phase 6 — Pre-Dawn Vercel Deploy + chrome-devtools-mcp Install (2026-04-25 ~02:30-04:30 EDT)
+
+### Tool: `chrome-devtools-mcp` (Chrome DevTools team, official)
+
+**Cost**: 1 install command (`claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest`). Hot-loads into running session within minutes. No restart needed. Auto-launches Chrome on first call.
+**Output**: 30 tools across 6 capability clusters (navigation, visual capture, interaction, inspection, performance, emulation).
+**ROI**: **CRITICAL FOR HACKATHON DEMO READINESS — 10x leverage tool**. Without this MCP, "verify the deploy" was just grepping the deploy log. With it, every deploy gets a full verification cycle: navigate → screenshot → snapshot accessibility tree → list console messages → list network requests → Lighthouse audit → performance trace. The gap between "build succeeded" and "demo works for judges" is closed by this tool.
+
+**Concrete wins tonight**:
+- Caught dangling `panopticon-live.vercel.app` alias 404 (would have been a Saturday-morning surprise)
+- Caught Vercel preview SSO gate (would have prevented sharing preview URLs)
+- Caught 2 Lighthouse a11y failures, fixed them, verified fix on prod (94 → 100)
+- Verified Tab 3 swarm replay end-to-end on prod
+- Confirmed CSV download flow works (button click → file in ~/Downloads)
+- Performance trace: 193ms LCP, 0.00 CLS, 34ms TTFB
+
+**When to repeat**: every major UI deploy. The "screenshot + console + network + lighthouse" combo is so standard now I should default-include it in every prod-deploy verification.
+
+**Anti-pattern caught**: my earlier "MCP install requires Claude Code restart" claim was WRONG (CORRECTION-002 in MEMORY.md). The daemon hot-loads new MCPs into the deferred tool list. Don't waste restart cycles.
+
+### Tool: `mcp__vercel__updateProject` (community Vercel MCP)
+
+**Cost**: 1 API call to update project settings.
+**Output**: Patches Vercel project's `rootDirectory`, `installCommand`, `buildCommand`, `outputDirectory`, `framework`. Returns full project config.
+**ROI**: **HIGH** for fixing the Vercel project misconfiguration that broke deploys 4-5 tonight. Without this MCP, the alternative was the Vercel dashboard UI (manual click work) or undocumented `vercel project --update` CLI commands that don't expose all fields.
+**Use case**: any time Vercel auto-detection produces wrong defaults, or project settings cached from a prior deploy block a new deploy. Fix via API once, persists across all future deploys.
+**Note**: also returns the project's `ssoProtection.deploymentType` config — useful for diagnosing preview SSO gates without inferring from a 302 redirect.
+
+### Tool: `vercel deploy --prod --yes --cwd <path>`
+
+**Cost**: 30-60s per deploy on Apple M4 Pro for the dashboard project (Next.js 16 + Tailwind + Bun toolchain).
+**Use this session**: 6 deploy attempts (4 fails + 2 successes). Each fail surfaced a layered config issue.
+**ROI**: **REQUIRED — but iteration discipline matters**. Each deploy was followed by chrome-devtools verification. Fast iteration with full verification beats slow iteration with deferred verification.
+**Patterns established**:
+- Always pass `--cwd` explicitly. Session cwd drift is real and silent (caused deploy 6 failure tonight).
+- After ANY Vercel project setting change via `mcp__vercel__updateProject`, the next deploy is your verification — re-deploy and verify, don't trust the API response alone.
+- `vercel link --yes` AUTO-CREATES a new project if no `.vercel/project.json` exists AND cwd dir name doesn't match an existing project. ALWAYS pass `--project <name>` explicitly. (GOTCHA-047)
+
+### Tool: Lighthouse audit via chrome-devtools-mcp
+
+**Cost**: ~5 seconds per audit on a small page.
+**Output**: A11y / Best Practices / SEO scores + 45+ audit results + JSON report.
+**ROI**: **HIGH for hackathon submission**. Engineering judges check Web Vitals. Going from 94 → 100 a11y took ~10 minutes (color-contrast + landmark fixes). The polished-product signal it sends to judges is disproportionate to the work.
+**When to repeat**: before every "this is the demo URL we're submitting" moment. Run on the actual public URL judges will hit.
+
+### Tool: Performance trace via chrome-devtools-mcp
+
+**Cost**: ~10s for autoStop pageload trace.
+**Output**: LCP, CLS, TTFB, render-blocking insights, network dependency tree, full call tree.
+**ROI**: **HIGH-MEDIUM**. Confirmed our Vercel-deployed Next.js dashboard hits 193ms LCP / 0.00 CLS — submission-grade numbers we can put in the YouTube description if we want. Caught zero issues, but the absence of issues IS the signal.
+**When to repeat**: pre-recording on Saturday. Slow page on the recording machine = jittery OBS capture. Trace + fix BEFORE the recording starts.
+
+### Meta-learning
+
+**The tool that closes the "build succeeded vs demo works" gap is the highest-ROI tool to install on a hackathon project.** Should have installed chrome-devtools-mcp on Day 1 instead of Day 5. Logged as PATTERN for future hackathons: install browser-control MCP BEFORE writing the first line of UI code.
+
+**Vercel iteration speed matters more than first-deploy success rate.** 6 deploys in 10 minutes (4 fails + 2 successes) was strictly faster than the alternative ("read the docs carefully, plan the perfect deploy, ship once") because each fail surfaced a NEW layer of config — no amount of pre-reading would have caught all four. Iteration with verification IS the strategy.
+
+**Documentation pass cost ~10 minutes for ~3 hours of durable lessons.** This update + the FORANDREW.md entry + DECISION-019 in MEMORY.md is the difference between "we did the thing" and "we did the thing AND know why it worked." The second compounds across projects.
+
+## Phase 7 — Ground-Truth Sync (Sat 2026-04-25 ~09:00–10:30 EDT)
+
+### Tool: Multi-agent orthogonal review panel (4 parallel agents)
+
+**Cost**: ~5 minutes wall-clock (parallel), ~250K total tokens across 4 agents.
+**Output**: 4 severity-graded markdown reports in `/tmp/<agent>-review.md` + 200-token summary per agent in chat.
+**Composition** (per CLAUDE.md "Orthogonality Over Quantity"):
+- `data-integrity-guard` — Pydantic v2 schema + invariant verification → PASS (0 critical, 4 low)
+- `biomech-signal-architect` — claim defensibility + math → PASS WITH FIXES (1 CRITICAL, 1 HIGH, 2 MEDIUM)
+- `demo-director` — narrative coherence + Anthropic-Minimalism alignment → PASS WITH FIXES (3 HIGH, 4 MEDIUM)
+- `python-reviewer` — script idempotency + atomic-write safety → PASS WITH FIXES (3 HIGH, 2 MEDIUM)
+
+**ROI**: **EXTREME — caught 1 CRITICAL fabrication that LLM self-review missed.** I had written "~0.6m behind the baseline" in a coach_insight; actual signal value was 0.0412m (14x error). The insight read fluently. Self-review cannot catch this kind of fabrication because the LLM doesn't query its own cited numbers. The `biomech-signal-architect` agent did query the underlying `baseline_retreat_distance_m` time series and caught the order-of-magnitude error. **Without this panel, the demo would have shipped with a fabricated number that any careful judge inspecting the data could surface — destroying credibility.**
+
+**Pattern established (PATTERN-087 candidate)**: any time content makes specific quantitative claims, dispatch a domain-expert reviewer agent with explicit instructions to cross-reference the source data. Don't trust LLM self-review for fact claims.
+
+**When to repeat**: every time we author content (narrations, insights, transcripts, coach commentary) for a deliverable that judges/customers will scrutinize. Cost is ~5 minutes; ROI is preserving credibility on every numerical claim.
+
+### Tool: Python sync script (vs LLM direct-edit of large JSON)
+
+**Cost**: ~30 minutes to author the script; ~0.5 seconds to run; ~480 lines of code (mostly inline content tables).
+**Output**: Surgical mutation of 5 arrays + 1 profile field in a 549 KB JSON; preserves invariant fields byte-identical; idempotent (MD5 stable across runs); atomic write via `.tmp` + `os.replace()`.
+**ROI**: **HIGH — avoided LLM-JSON-truncation risk entirely.** Team lead's directive: "LLMs notoriously struggle to rewrite massive JSON files directly without dropping a closing bracket or truncating the output (yielding an Unexpected token EOF in JSON error). Instruct Claude to write a Python script to load the JSON, mutate the specific arrays, and dump it back to disk safely." This was the right call — even with 1M context, asking the LLM to emit a 549 KB JSON verbatim with edits introduces non-trivial risk of truncation or formatting drift.
+
+**Patterns**:
+- Backup OUTSIDE the deployment dir (`data/match_data_backups/` not `dashboard/public/`) so Vercel doesn't deploy the pre-sync file as a static asset.
+- Compact JSON format (`separators=(",", ":")`) — `indent=2` would balloon a 549KB file to 1.5MB (+200%) and ALL of that ships to every dashboard mount over the wire.
+- Atomic write via `.tmp` + `os.replace()` — Ctrl-C mid-write would otherwise corrupt the JSON.
+- `raise ValueError(...)` instead of `assert ...` — assertions are silenced under `python3 -O`.
+- ID uniqueness check in the validator — silent duplicate IDs are a corruption class the type checker can't catch.
+- Preserve original schema fields (`visible_action_ref`, `tool_calls`, `input_tokens`, etc.) even when their values are vestigial — React layer may consume them.
+
+**When to repeat**: any time we need to mutate a large JSON/YAML/binary file with surgical changes. Always prefer scripted edits over LLM string-rewrite for files >50KB.
+
+### Tool: chrome-devtools-mcp `evaluate_script` + `list_console_messages`
+
+**Cost**: ~3 seconds to load page, ~1 second to query.
+**Output**: Console messages filtered by type + JS execution result.
+**Use this session**: Confirmed `localhost:3000` rendered the synced data with zero console errors. Dashboard's dual-layer (live FSM + authored display) both visible: nameplate showed live state ("PRE-SERVE RITUAL"), broadcast overlay showed authored state ("Between points · recovery clock active"). No runtime errors despite the schema-tight TypeScript types.
+**ROI**: **HIGH for "build green ≠ runtime green" delta.** TSC + Next.js build both passed; visual scrub confirmed RUNTIME was also green. Cheaper than full E2E test but catches a class of issues that pure-static-analysis misses.
+
+### Tool: `gh pr` family (planned for Saturday)
+
+**Use case**: check PR #7 (or whatever PR is currently open) for any review comments left while we were heads-down on the sync. Per Andrew's directive: "look for any comments" specifically meant PR comments.
+**Pattern**: `gh pr list --state open` → identify open PRs → `gh pr view <num> --comments` for inline + general comments.
+
+### Meta-learning Phase 7
+
+**The "no rush, do it right" framing dramatically changes outcome quality.** Earlier in Phase 6 (Tier 1 Remotion overhaul), I budgeted single-iteration audits (per PATTERN-086). For the ground-truth sync, Andrew explicitly overrode the team-lead's "speed up execution" suggestion with "take your time, push the envelope of our quality." Result: I dispatched a 4-agent panel that caught a CRITICAL fabrication. If I'd executed the team-lead's "Tier 1.5 Surgical Sync" speed-up version, that fabrication would have shipped to Vercel.
+
+**Multi-agent panels are the closest LLM-era equivalent to peer review.** Solo LLM authoring + LLM self-review is the cheapest workflow but has a known blind spot: the LLM doesn't catch its own confident-sounding fabrications. Dispatching domain-expert reviewers IS the peer review — and parallel dispatch makes it close to single-agent latency (~5 min wall-clock for 4 reviewers at ~250K tokens combined). The cost is small; the credibility-preservation is enormous.
+
+**Save-not-trash is the right discipline for ideas during a deadline-constrained sprint.** Created `docs/deferred_ideas.md` to capture 21+ ideas we vetoed or deferred. Each tagged with revisit-trigger (POST-SUBMISSION / V2-PRODUCT / RESEARCH / NEEDS-DATA). The project will outlive the hackathon; these ideas are real value waiting to be unlocked when constraints loosen.

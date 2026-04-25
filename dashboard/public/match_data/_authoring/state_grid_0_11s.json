@@ -1,0 +1,42 @@
+[
+  {
+    "timestamp_ms": 500,
+    "player": "A",
+    "from_state": "UNKNOWN",
+    "to_state": "DEAD_TIME",
+    "reason": "hand_authored",
+    "source": "hand_authored",
+    "authoring_note": "Between-point dead time following break-point situation. Player A off-camera, regathering. Shifted from t=0 to t=500ms per G20 to avoid collision with live FSM's initial transition at t=0.",
+    "visible_action_ref": "frames/t_0000.jpg"
+  },
+  {
+    "timestamp_ms": 9000,
+    "player": "A",
+    "from_state": "DEAD_TIME",
+    "to_state": "PRE_SERVE_RITUAL",
+    "reason": "hand_authored",
+    "source": "hand_authored",
+    "authoring_note": "Server enters frame, walking to baseline. The 7-state RallyMicroPhase taxonomy lacks a dedicated WALKING_TO_BASELINE phase (G31 deferred PlayerPosition stream to Phase B) - PRE_SERVE_RITUAL is the closest rally-micro phase aligned with 'approach and settle' per TenniSet literature.",
+    "visible_action_ref": "frames/t_0009.jpg"
+  },
+  {
+    "timestamp_ms": 10500,
+    "player": "A",
+    "from_state": "PRE_SERVE_RITUAL",
+    "to_state": "SERVE",
+    "reason": "hand_authored",
+    "source": "hand_authored",
+    "authoring_note": "Toss-motion initiation. Frame t_0011 shows mid-toss with ball in air at waist level — the toss BEGAN ~500-700ms earlier. t=10500ms is the visible onset of the serve motion (plant foot + loading arm).",
+    "visible_action_ref": "frames/t_0010.jpg"
+  },
+  {
+    "timestamp_ms": 11200,
+    "player": "A",
+    "from_state": "SERVE",
+    "to_state": "ACTIVE_RALLY",
+    "reason": "hand_authored",
+    "source": "hand_authored",
+    "authoring_note": "Ball contact, point begins. Aligns with live FSM's own PRE_SERVE_RITUAL -> ACTIVE_RALLY transition at t=11200ms (reason=kinematic) - the authored timeline RE-CONVERGES to live CV here, which is the correct behavior (display-only authoring for the pre-live window, live CV takes over from the first real event).",
+    "visible_action_ref": "frames/t_0011.jpg"
+  }
+]

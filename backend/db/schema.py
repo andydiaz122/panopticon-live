@@ -60,6 +60,39 @@ SignalName = Literal[
     "split_step_latency_ms",
 ]
 
+# ──────────────────────────── Display-only authoring types (G43) ────────────────────────────
+#
+# The "authored narrative" stream is separate from live CV. It populates
+# `display_*` fields on MatchData and is consumed by the Orchestration Console
+# for broadcast-style narration. It never merges with live transitions/signals.
+#
+# RallyMicroPhase is the 7-state taxonomy aligned with TenniSet academic
+# benchmarks (G31). It is DISTINCT from PlayerState (4-member live FSM union)
+# to avoid the G1 namespace collision — the live state machine continues to
+# emit PlayerState; authored transitions use RallyMicroPhase.
+
+RallyMicroPhase = Literal[
+    "UNKNOWN",
+    "WARMUP",
+    "PRE_SERVE_RITUAL",
+    "SERVE",
+    "ACTIVE_RALLY",
+    "DEAD_TIME",
+    "CHANGEOVER",
+]
+
+NarrationKind = Literal["broadcast", "coach_strategy"]
+NarrationSource = Literal["opus_coach", "hand_authored"]
+ProvenanceTag = Literal["stubbed_mcp", "live_anthropic"]
+"""Tool-call provenance discriminator (G9).
+
+`stubbed_mcp` = the tool's implementation reads from local authored JSON
+(e.g., query_video_context_mcp reads _authoring/narrations_*.json). Used by the
+UI to render a `STUB · Video Context API` chip.
+
+`live_anthropic` = native Anthropic API tool invocation. Default for back-compat
+so pre-migration `agent_trace.json` validates without edits."""
+
 # COCO keypoint indices (17 total)
 COCO_KEYPOINTS = [
     "nose", "left_eye", "right_eye", "left_ear", "right_ear",
@@ -318,6 +351,105 @@ class CoachInsight(PanopticonBase):
     cache_creation_tokens: int = Field(default=0, ge=0)
 
 
+# ──────────────────────────── Display-only authoring models (G43) ────────────────────────────
+
+
+class ProvenancedValue(PanopticonBase):
+    """A single PlayerProfile entry with auditable source provenance (G37).
+
+    Every numeric claim in `player_profile.json` must carry `data_as_of` and
+    `source_url` so the Scouting Committee's citations trace back to a URL
+    (e.g., atptour.com). Qualitative fields (style descriptions) may have
+    `source_url=None` but still carry `data_as_of`.
+    """
+
+    value: str | int | float | None
+    data_as_of: str = Field(min_length=10)  # ISO date YYYY-MM-DD
+    source_url: str | None = None
+    verification_status: str | None = Field(
+        default=None,
+        description=(
+            "Free-text annotation. 'pending' = numeric value is an example, "
+            "replace with live stats before demo. 'qualitative' = observational, "
+            "not a published stat."
+        ),
+    )
+
+
+class ProfileMeta(PanopticonBase):
+    """Authoring metadata bundled with every PlayerProfile."""
+
+    authoring_source: str = Field(min_length=1)
+    authoring_date: str = Field(min_length=10)
+    schema_version: str = Field(min_length=1)
+    note: str = ""
+    scope_decision_ref: str | None = None
+
+
+class PlayerProfile(PanopticonBase):
+    """Hand-authored ATP/WTA profile card for Player A (single-player scope per DECISION-008).
+
+    Consumed by:
+      - Shared Blackboard's `player_profile` field (A9) — all 3 Scouting Committee
+        agents reference it in user prompts.
+      - Frontend PlayerNameplate for identity chrome.
+      - `display_player_profile` field on MatchData.
+    """
+
+    player_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    nationality: ProvenancedValue | None = None
+    world_rank: ProvenancedValue | None = None
+    serve_velocity_avg_kmh: ProvenancedValue | None = None
+    first_serve_pct: ProvenancedValue | None = None
+    playing_style: ProvenancedValue | None = None
+    pre_serve_ritual_style: ProvenancedValue | None = None
+    known_fatigue_signature: ProvenancedValue | None = None
+    profile_meta: ProfileMeta | None = None
+
+
+class QualitativeNarration(PanopticonBase):
+    """Hand-authored broadcaster narration for a specific match-time window (G17).
+
+    Distinct Pydantic model (NOT a type alias on CoachInsight) so
+    `isinstance(event, QualitativeNarration)` filters correctly at runtime.
+
+    The `biometric_hook` names the signal this narration primes (e.g., "the
+    toss variance we'll track the moment the ball leaves his hand"). Enables
+    the Scouting Committee to cross-reference narration ↔ signal.
+    """
+
+    narration_id: str = Field(min_length=1)
+    timestamp_ms: int = Field(ge=0)
+    match_time_range_ms: tuple[int, int]
+    narration_text: str = Field(min_length=1)
+    biometric_hook: SignalName | None = None
+    player_profile_ref: str | None = None
+    source: NarrationSource = "hand_authored"
+    narration_kind: NarrationKind = "broadcast"
+    visible_action_ref: str | None = None
+    authoring_note: str | None = None
+
+
+class AuthoredStateTransition(PanopticonBase):
+    """Hand-authored state transition for the display-only 7-state taxonomy (G43).
+
+    Distinct from live `StateTransition` (which uses 4-member `PlayerState`)
+    because authored transitions use the richer `RallyMicroPhase` taxonomy
+    (7 members, TenniSet-aligned per G31). Lives in `display_transitions` on
+    MatchData; never merges with live `transitions`.
+    """
+
+    timestamp_ms: int = Field(ge=0)
+    player: PlayerSide
+    from_state: RallyMicroPhase
+    to_state: RallyMicroPhase
+    reason: Literal["hand_authored"] = "hand_authored"
+    source: NarrationSource = "hand_authored"
+    authoring_note: str | None = None
+    visible_action_ref: str | None = None
+
+
 class NarratorBeat(PanopticonBase):
     """One Haiku 4.5 per-second ESPN-style color-commentary beat.
 
@@ -403,22 +535,34 @@ class TraceThinking(PanopticonBase):
 
 class TraceToolCall(PanopticonBase):
     """A tool invocation by an agent. `input_json` is pre-serialized to avoid
-    arbitrary-dict drift between Python producer and TS consumer."""
+    arbitrary-dict drift between Python producer and TS consumer.
+
+    `provenance` discriminates between native Anthropic tool calls and
+    stubbed-MCP tools (e.g., query_video_context_mcp reads local JSON).
+    Default `live_anthropic` for back-compat — pre-migration traces validate
+    without edits.
+    """
 
     kind: Literal["tool_call"] = "tool_call"
     t_ms: int = Field(ge=0)
     tool_name: str = Field(min_length=1)
     input_json: str
+    provenance: ProvenanceTag = "live_anthropic"
 
 
 class TraceToolResult(PanopticonBase):
-    """A tool result returned to the agent. `output_json` is pre-serialized."""
+    """A tool result returned to the agent. `output_json` is pre-serialized.
+
+    `provenance` mirrors the matching TraceToolCall so UI consumers can style
+    the result pill without cross-referencing the call event.
+    """
 
     kind: Literal["tool_result"] = "tool_result"
     t_ms: int = Field(ge=0)
     tool_name: str = Field(min_length=1)
     output_json: str
     is_error: bool = False
+    provenance: ProvenanceTag = "live_anthropic"
 
 
 class TraceText(PanopticonBase):

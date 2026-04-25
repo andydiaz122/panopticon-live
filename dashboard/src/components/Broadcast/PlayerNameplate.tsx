@@ -21,12 +21,18 @@ const STATE_COPY: Record<PlayerState, { label: string; tone: string }> = {
   UNKNOWN: { label: 'Reading…', tone: colors.textMuted },
 };
 
+/** Safe fallback for any state value that slips past the 4-member PlayerState
+ * union at runtime (malformed match_data JSON, schema drift, race condition).
+ * Prevents React white-screen on undefined.label (team-lead override 2026-04-24). */
+const STATE_FALLBACK = { label: 'Unknown State', tone: colors.textMuted };
+
 export default function PlayerNameplate() {
   const { matchData, activePlayerState } = usePanopticonState();
-  const playerName = matchData?.meta.player_a ?? 'Player A';
+  const playerName =
+    matchData?.display_player_profile?.name ?? matchData?.meta.player_a ?? 'Player A';
 
   const stateEntry = activePlayerState
-    ? STATE_COPY[activePlayerState]
+    ? (STATE_COPY[activePlayerState] ?? STATE_FALLBACK)
     : { label: 'Warmup', tone: colors.textMuted };
 
   return (

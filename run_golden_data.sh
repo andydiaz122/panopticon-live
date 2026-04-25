@@ -56,8 +56,21 @@ info() { printf "\033[36m[INFO]\033[0m  %s\n" "$*"; }
 ok()   { printf "\033[32m[OK]\033[0m    %s\n" "$*"; }
 warn() { printf "\033[33m[WARN]\033[0m  %s\n" "$*" >&2; }
 
+# Detect --skip-scouting-committee in args so we can relax the API-key preflight
+# (the Scouting Committee swarm is the only consumer of ANTHROPIC_API_KEY).
+SKIP_SWARM=false
+for arg in "$@"; do
+  [[ "$arg" == "--skip-scouting-committee" ]] && SKIP_SWARM=true
+done
+
 if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-  err "ANTHROPIC_API_KEY is not set. Export it and re-run. The Multi-Agent Swarm will not execute without it."
+  if [[ "$SKIP_SWARM" == "true" ]]; then
+    warn "ANTHROPIC_API_KEY not set — OK because --skip-scouting-committee is active (swarm disabled)"
+    # Stub-set so the downstream partial-key visibility line does not dereference an unset var.
+    ANTHROPIC_API_KEY="unset-skip-scouting-committee-active"
+  else
+    err "ANTHROPIC_API_KEY is not set. Export it and re-run. The Multi-Agent Swarm will not execute without it."
+  fi
 fi
 
 # Partial-key visibility so the operator can sanity-check they exported the right one
@@ -115,6 +128,7 @@ PYTHONPATH="$REPO_ROOT" ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
     --out-json    "$OUT_MATCH_JSON" \
     --agent-trace-json "$OUT_TRACE_JSON" \
     --device      mps \
+    "$@" \
   2>&1 | tee "$LOG_FILE"
 
 # ──────────────────────────── Post-run sanity ────────────────────────────

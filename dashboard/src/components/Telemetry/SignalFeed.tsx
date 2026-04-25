@@ -2,10 +2,12 @@
 
 import { useMemo } from 'react';
 
+import DisclosureBanner from '@/components/Broadcast/DisclosureBanner';
 import { usePanopticonState } from '@/lib/PanopticonProvider';
 import { colors } from '@/lib/design-tokens';
 import { buildTimeline, fmtClock } from '@/lib/telemetry';
 
+import DownloadCsvButton from './DownloadCsvButton';
 import TelemetryLog from './TelemetryLog';
 
 /**
@@ -30,6 +32,9 @@ export default function SignalFeed() {
       style={{ background: colors.bg0 }}
     >
       <FeedHeader total={totalEvents} currentTimeMs={currentTimeMs} />
+      <div className="mt-3">
+        <DisclosureBanner />
+      </div>
       <div className="mt-4 flex flex-1 flex-col">
         <TelemetryLog heightClass="flex-1" density="comfortable" showHeader />
       </div>
@@ -62,13 +67,17 @@ function FeedHeader({
           standard 2D broadcast pixels with zero hardware sensors.
         </p>
       </div>
-      <div className="mono flex flex-col items-end text-[10px] uppercase tracking-[0.14em]">
-        <span style={{ color: colors.textMuted }}>
-          {fmtClock(currentTimeMs)} / {fmtClock(60000)}
-        </span>
-        <span style={{ color: colors.playerA }}>
-          {total.toLocaleString()} events
-        </span>
+      <div className="flex items-end gap-4">
+        <div className="mono flex flex-col items-end text-[10px] uppercase tracking-[0.14em]">
+          <span style={{ color: colors.textMuted }}>
+            {fmtClock(currentTimeMs)} / {fmtClock(60000)}
+          </span>
+          <span style={{ color: colors.playerA }}>
+            {total.toLocaleString()} events
+          </span>
+        </div>
+        {/* DECISION-019: surface the data product. Click → biometric_signals.csv */}
+        <DownloadCsvButton />
       </div>
     </header>
   );

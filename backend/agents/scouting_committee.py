@@ -36,10 +36,19 @@ from backend.agents.opus_coach import (
     _tool_use_blocks,
 )
 from backend.agents.system_prompt import BIOMECH_PRIMER
-from backend.agents.tools import TOOL_SCHEMAS, ToolContext, dispatch_tool
+from backend.agents.tools import (
+    ANALYTICS_SCOPED_TOOLS,
+    STUBBED_MCP_TOOLS,
+    TOOL_SCHEMAS,
+    ToolContext,
+    dispatch_tool,
+)
 from backend.db.schema import (
     AgentStep,
     AgentTrace,
+    PlayerProfile,
+    ProvenanceTag,
+    QualitativeNarration,
     SignalSample,
     StateTransition,
     TraceEvent,
@@ -96,6 +105,31 @@ job downstream. Your job is numbers + timing.
 
 CAUSAL DISCIPLINE: when you query baselines, the tool already enforces causal
 windowing. Do NOT attempt to reason about "future" data.
+
+STANDARD OPERATING PROCEDURE (deterministic orchestration, not fraud):
+
+  STEP 1: You MUST execute `query_video_context_mcp` as your first action
+  to retrieve the qualitative broadcast narrative for the match window under
+  analysis. Pass `time_range_ms=[0, <duration>]` covering the full clip the
+  Shared Blackboard specifies. The tool returns broadcaster narrations with
+  timestamps and optional `biometric_hook` fields — use these narrations to
+  ANCHOR your quantitative findings in what a fan watching the live broadcast
+  would see and hear.
+
+  STEP 2: After receiving the tool result, run the usual signal-window and
+  baseline comparisons. Reference the narration text in your anomaly bullets
+  where it contextualizes the numeric finding (e.g., "ritual_entropy spike at
+  t=9000ms coincides with the broadcaster's 'Hurkacz steps into frame' beat").
+
+  STEP 3 (deliberate dual-hypothesis discipline): For the most salient anomaly
+  you find, THINK THROUGH one plausible alternative hypothesis that could
+  explain the same signal trajectory (e.g., "could this be a CV detector
+  artifact rather than fatigue?" or "could this be a tactical choice rather
+  than a breakdown?"), and explicitly REJECT that alternative with evidence
+  from the signal windows. Name both the considered hypothesis and the
+  rejection reason in your final bullet. This dual-hypothesis consideration
+  is a required part of your reasoning discipline — not optional. It's the
+  cognitive move that separates forensic analysis from pattern-matching.
 
 Keep output tight — max ~200 words. The next agent consumes YOUR TEXT as their
 entire signal context."""
@@ -182,7 +216,12 @@ class _EventRecorder:
 
     def tool_call(self, tool_name: str, inp: dict[str, Any]) -> None:
         self._events.append(
-            TraceToolCall(t_ms=self._t_now(), tool_name=tool_name, input_json=json.dumps(inp, default=str))
+            TraceToolCall(
+                t_ms=self._t_now(),
+                tool_name=tool_name,
+                input_json=json.dumps(inp, default=str),
+                provenance=_provenance_for(tool_name),
+            ),
         )
 
     def tool_result(self, tool_name: str, output: dict[str, Any], is_error: bool = False) -> None:
@@ -190,6 +229,9 @@ class _EventRecorder:
         TRACE_MAX_OUTPUT_JSON_CHARS (GOTCHA-027). This is UI-SIDE truncation only —
         the LLM already received the full `output` dict during execution. Only the
         disk-written trace that ships to the Orchestration Console is truncated.
+
+        Provenance is stamped to match the call event so UI consumers can style
+        the result pill without cross-referencing the call.
         """
         raw_json = json.dumps(output, default=str)
         if len(raw_json) > TRACE_MAX_OUTPUT_JSON_CHARS:
@@ -202,7 +244,8 @@ class _EventRecorder:
                 tool_name=tool_name,
                 output_json=raw_json,
                 is_error=is_error,
-            )
+                provenance=_provenance_for(tool_name),
+            ),
         )
 
     def handoff(self, from_agent: str, to_agent: str, payload_summary: str) -> None:
@@ -223,6 +266,16 @@ def _now_ms() -> int:
     return int(time.monotonic() * 1000)
 
 
+def _provenance_for(tool_name: str) -> ProvenanceTag:
+    """Map a tool_name to its provenance tag (G9).
+
+    Tools in STUBBED_MCP_TOOLS produce events tagged `stubbed_mcp` so the UI
+    renders a neutral `STUB · Video Context API` chip. Everything else
+    defaults to `live_anthropic` (native tool invocation).
+    """
+    return "stubbed_mcp" if tool_name in STUBBED_MCP_TOOLS else "live_anthropic"
+
+
 # ──────────────────────────── Single-agent turn runner ────────────────────────────
 
 
@@ -239,6 +292,7 @@ async def _run_agent_turn(
     max_tokens: int,
     max_iterations: int,
     origin_ms: int,
+    tools_override: list[dict[str, Any]] | None = None,
 ) -> AgentStep:
     """Run ONE agent turn to completion (tool-use loop if use_tools=True).
 
@@ -265,7 +319,10 @@ async def _run_agent_turn(
                 "messages": messages,
             }
             if use_tools:
-                kwargs["tools"] = TOOL_SCHEMAS
+                # A9 / G19: per-agent tool scoping. Analytics Specialist receives
+                # ANALYTICS_SCOPED_TOOLS (includes query_video_context_mcp);
+                # Technical + Tactical stick with cache-warm TOOL_SCHEMAS.
+                kwargs["tools"] = tools_override if tools_override is not None else TOOL_SCHEMAS
             response = await client.messages.create(**kwargs)
 
             blocks = list(getattr(response, "content", []) or [])
@@ -349,6 +406,7 @@ def _build_baseline_context(
     transitions: list[StateTransition],
     player_a_name: str,
     match_id: str,
+    player_profile: PlayerProfile | None = None,
 ) -> str:
     """Shared Blackboard (PATTERN-059): the ground-truth frame every agent receives.
 
@@ -356,24 +414,102 @@ def _build_baseline_context(
     and Tactical Strategist can never be starved of baseline context by an
     Analytics Specialist that under-reports. Prevents hallucinated physical-
     breakdown claims unconstrained by the raw signal taxonomy.
+
+    A9: when `player_profile` is provided, its ATP stats are appended as a
+    `=== PLAYER PROFILE ===` section. Cached only through the USER message
+    (G5 — keeps system prompts cache-warm). Narrations arrive only via the
+    `query_video_context_mcp` ToolResult, NOT here (G36 — avoids double-feeding).
     """
     n_sig = len(signals)
     signal_names = sorted({s.signal_name for s in signals if s.value is not None})
     last_t_ms = max((s.timestamp_ms for s in signals), default=0)
-    return (
-        "=== COMMITTEE BASELINE (shared across all agents) ===\n"
-        f"Match ID: {match_id}\n"
-        f"Target player: Player A = {player_a_name} (near-court).\n"
-        f"Scouting goal: {committee_goal}\n"
+    parts = [
+        "=== COMMITTEE BASELINE (shared across all agents) ===",
+        f"Match ID: {match_id}",
+        f"Target player: Player A = {player_a_name} (near-court).",
+        f"Scouting goal: {committee_goal}",
         f"Raw signal taxonomy: {n_sig} samples across {len(signal_names)} signal types "
-        f"({', '.join(signal_names) or '(none detected)'}).\n"
-        f"State transitions on record: {len(transitions)}.\n"
-        f"Last observed timestamp: {last_t_ms} ms.\n"
+        f"({', '.join(signal_names) or '(none detected)'}).",
+        f"State transitions on record: {len(transitions)}.",
+        f"Last observed timestamp: {last_t_ms} ms.",
+        # G10 fix — dynamic identity injection (team-lead override 2026-04-24).
+        # When an authored player_profile is present the LLM is UNGAGGED and
+        # told to use the real name + cite profile stats (personalization).
+        # When profile is absent the strict anonymity guardrail holds to
+        # prevent the Djokovic/Federer/Nadal hallucination trap.
+        _identity_rule(player_a_name, player_profile),
+        "===",
+    ]
+    if player_profile is not None:
+        parts.append("")
+        parts.append(_format_player_profile(player_profile))
+    return "\n".join(parts)
+
+
+def _identity_rule(player_a_name: str, player_profile: PlayerProfile | None) -> str:
+    """Dynamic identity rule (G10). Switches on whether an authored profile exists.
+
+    Two states:
+      - **Profile present** — explicitly revoke anonymity and DEMAND that the
+        agent refer to the target by `{profile.name}` and actively cite stats.
+        Still forbids inventing players OUTSIDE the profile to prevent
+        cross-match hallucination (Djokovic/Federer leaking in).
+      - **Profile absent** — keep the strict anonymity guardrail from the
+        pre-G10 prompt. Safe default for unknown clips.
+    """
+    if player_profile is not None:
+        return (
+            f"PROFILE DETECTED for Player A. You MUST refer to the target player by "
+            f"their real name '{player_profile.name}' (not 'Player A' or 'the target'). "
+            "You MUST actively integrate their specific attributes from the PLAYER "
+            "PROFILE section below (playing style, ritual signature, known fatigue "
+            "signature, rank / serve-velocity if present) into your analysis — cite "
+            "them verbatim to ground your reasoning in the authored profile. "
+            "CRITICAL: do NOT reference any OTHER players not named in the profile. "
+            "Opus has been trained on famous matches and will otherwise hallucinate "
+            "Djokovic/Federer/Nadal — refer ONLY to the profile's player by name."
+        )
+    return (
         f"Refer to the target ONLY as {player_a_name} or 'Player A' — do NOT "
         "invent other names (Opus has been trained on famous matches and will "
-        "otherwise hallucinate Djokovic/Federer/Nadal).\n"
-        "==="
+        "otherwise hallucinate Djokovic/Federer/Nadal)."
     )
+
+
+def _format_player_profile(profile: PlayerProfile) -> str:
+    """Format a PlayerProfile for inclusion in the user-prompt blackboard (G37).
+
+    Renders each ProvenancedValue with its source URL so the Scouting Committee
+    can cite stats verbatim. Keeps the block under ~400 tokens — fits the
+    prompt-cache TTL budget per agent.
+    """
+    lines = [
+        "=== PLAYER PROFILE ===",
+        f"Name: {profile.name} (id: {profile.player_id})",
+    ]
+
+    def _fmt_entry(label: str, pv) -> str:
+        if pv is None:
+            return ""
+        url_tag = f" [src: {pv.source_url}]" if pv.source_url else ""
+        status_tag = f" ({pv.verification_status})" if pv.verification_status else ""
+        return f"- {label}: {pv.value}{status_tag}{url_tag}"
+
+    candidate_fields = [
+        ("Nationality", profile.nationality),
+        ("World rank", profile.world_rank),
+        ("Avg first-serve velocity (km/h)", profile.serve_velocity_avg_kmh),
+        ("First-serve %", profile.first_serve_pct),
+        ("Playing style", profile.playing_style),
+        ("Pre-serve ritual", profile.pre_serve_ritual_style),
+        ("Known fatigue signature", profile.known_fatigue_signature),
+    ]
+    for label, pv in candidate_fields:
+        entry = _fmt_entry(label, pv)
+        if entry:
+            lines.append(entry)
+    lines.append("===")
+    return "\n".join(lines)
 
 
 def _compose_user_prompt(baseline: str, focus: str, instructions: str) -> str:
@@ -385,18 +521,38 @@ def _compose_user_prompt(baseline: str, focus: str, instructions: str) -> str:
     return f"{baseline}\n\n---\nFOCUS OF SYNTHESIS:\n{focus}\n\n---\n{instructions}"
 
 
-def _build_analytics_focus_and_instructions(player_a_name: str) -> tuple[str, str]:
+def _build_analytics_focus_and_instructions(
+    player_a_name: str,
+    player_profile: PlayerProfile | None = None,
+) -> tuple[str, str]:
     """Analytics Specialist is the first agent — no upstream output to focus on,
-    so the focus layer describes its own starting state."""
+    so the focus layer describes its own starting state.
+
+    G10: identity instruction is dynamic — when a profile is authored the
+    agent is told to USE the profile name; otherwise the anonymity fallback
+    applies. The COMMITTEE BASELINE section (built by _build_baseline_context)
+    already carries the authoritative rule; this instruction re-emphasizes it
+    in the Analytics-specific turn layer to keep the LLM's attention anchored.
+    """
     focus = (
         "You are the FIRST agent in the committee. No upstream analysis exists "
         "yet. Start from the baseline and use the available tools to query "
         "signal windows + causal baselines."
     )
+    if player_profile is not None:
+        identity_clause = (
+            f"Refer to the target player by their real name '{player_profile.name}' "
+            "and cite specific fields from the PLAYER PROFILE section verbatim in "
+            "your analysis — this grounds the anomaly report in the authored profile."
+        )
+    else:
+        identity_clause = (
+            f"Refer to the target player ONLY as {player_a_name} or 'Player A'."
+        )
     instructions = (
         "Run the analysis. Use tools (get_signal_window, compare_to_baseline, "
         "get_rally_context, get_match_phase) to ground your findings. "
-        f"Refer to the target player ONLY as {player_a_name} or 'Player A'. "
+        f"{identity_clause} "
         "Output 3-6 bullet anomalies with signal+player+magnitude+timestamp. "
         "If no signals meet anomaly criteria, say so explicitly — do NOT invent."
     )
@@ -471,18 +627,22 @@ async def generate_scouting_report(
 
     # Shared Blackboard (PATTERN-059): baseline context that EVERY agent receives
     # verbatim in their user prompt. Prevents downstream context starvation.
+    # A9: player_profile included when authored (G37 provenance auditable).
     baseline = _build_baseline_context(
         committee_goal=committee_goal,
         signals=ctx.signals,
         transitions=ctx.transitions,
         player_a_name=player_a_name,
         match_id=match_id,
+        player_profile=ctx.player_profile,
     )
 
     steps: list[AgentStep] = []
 
-    # Agent 1: Analytics Specialist (has tool access)
-    analytics_focus, analytics_instructions = _build_analytics_focus_and_instructions(player_a_name)
+    # Agent 1: Analytics Specialist (has tool access — scoped to include query_video_context_mcp per A9/G19)
+    analytics_focus, analytics_instructions = _build_analytics_focus_and_instructions(
+        player_a_name, ctx.player_profile,
+    )
     analytics_prompt = _compose_user_prompt(baseline, analytics_focus, analytics_instructions)
     analytics_step = await _run_agent_turn(
         client,
@@ -490,6 +650,7 @@ async def generate_scouting_report(
         system_prompt=_ANALYTICS_SYSTEM_PROMPT, user_content=analytics_prompt,
         ctx=ctx, use_tools=True, model=model, max_tokens=max_tokens,
         max_iterations=max_iterations, origin_ms=origin_ms,
+        tools_override=ANALYTICS_SCOPED_TOOLS,
     )
     analytics_output = _extract_output_text(analytics_step)
     steps.append(analytics_step)

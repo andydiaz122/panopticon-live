@@ -43,6 +43,26 @@ export type FallbackMode = 'ankle' | 'knee' | 'hip';
 
 export type TransitionReason = 'kinematic' | 'match_coupling' | 'initial';
 
+// ──────────────────────────── Display-only authoring (G43) ────────────────────────────
+//
+// Hand-authored broadcaster content. Distinct from live CV types — never
+// merges with live transitions/signals. Mirrors schema.py types of the same
+// name. Every field on display-only interfaces is OPTIONAL in MatchData so
+// pre-migration JSON files still deserialize (G28).
+
+export type RallyMicroPhase =
+  | 'UNKNOWN'
+  | 'WARMUP'
+  | 'PRE_SERVE_RITUAL'
+  | 'SERVE'
+  | 'ACTIVE_RALLY'
+  | 'DEAD_TIME'
+  | 'CHANGEOVER';
+
+export type NarrationKind = 'broadcast' | 'coach_strategy';
+export type NarrationSource = 'opus_coach' | 'hand_authored';
+export type ProvenanceTag = 'stubbed_mcp' | 'live_anthropic';
+
 export type WidgetKind =
   | 'PlayerNameplate'
   | 'SignalBar'
@@ -212,12 +232,75 @@ export interface MatchMeta {
 
 // ──────────────────────────── Full match_data.json payload ────────────────────────────
 
+// ──────────────────────────── Display-only authoring interfaces ────────────────────────────
+//
+// Mirrors backend/db/schema.py's QualitativeNarration, AuthoredStateTransition,
+// PlayerProfile, ProvenancedValue, ProfileMeta. Consumed by the Orchestration
+// Console + TelemetryLog for broadcast-style narrative. Every numeric entry
+// in PlayerProfile carries source_url + data_as_of (G37 provenance).
+
+export interface ProvenancedValue {
+  value: string | number | null;
+  data_as_of: string;
+  source_url?: string | null;
+  verification_status?: string | null;
+}
+
+export interface ProfileMeta {
+  authoring_source: string;
+  authoring_date: string;
+  schema_version: string;
+  note?: string;
+  scope_decision_ref?: string | null;
+}
+
+export interface PlayerProfile {
+  player_id: string;
+  name: string;
+  nationality?: ProvenancedValue | null;
+  world_rank?: ProvenancedValue | null;
+  serve_velocity_avg_kmh?: ProvenancedValue | null;
+  first_serve_pct?: ProvenancedValue | null;
+  playing_style?: ProvenancedValue | null;
+  pre_serve_ritual_style?: ProvenancedValue | null;
+  known_fatigue_signature?: ProvenancedValue | null;
+  profile_meta?: ProfileMeta | null;
+}
+
+export interface QualitativeNarration {
+  narration_id: string;
+  timestamp_ms: number;
+  match_time_range_ms: [number, number];
+  narration_text: string;
+  biometric_hook?: SignalName | null;
+  player_profile_ref?: string | null;
+  source?: NarrationSource;
+  narration_kind?: NarrationKind;
+  visible_action_ref?: string | null;
+  authoring_note?: string | null;
+}
+
+export interface AuthoredStateTransition {
+  timestamp_ms: number;
+  player: PlayerSide;
+  from_state: RallyMicroPhase;
+  to_state: RallyMicroPhase;
+  reason?: 'hand_authored';
+  source?: NarrationSource;
+  authoring_note?: string | null;
+  visible_action_ref?: string | null;
+}
+
 /**
  * Top-level shape of the file at `/match_data/<match_id>.json`.
  * Matches `backend/db/writer.py:_MatchData` exactly.
  *
  * The engine loads this ONCE into a `useRef` at mount and never re-reads it —
  * keypoints are too high-frequency to live in React state.
+ *
+ * `display_*` fields (G43): hand-authored broadcaster content. OPTIONAL so
+ * pre-migration JSON files still deserialize (G28). Consumers should use
+ * nullish-coalesce: `(data.display_narrations ?? []).length`.
  */
 export interface MatchData {
   meta: MatchMeta;
@@ -228,6 +311,9 @@ export interface MatchData {
   narrator_beats: ReadonlyArray<NarratorBeat>;
   hud_layouts: ReadonlyArray<HUDLayoutSpec>;
   transitions: ReadonlyArray<StateTransition>;
+  display_narrations?: ReadonlyArray<QualitativeNarration>;
+  display_transitions?: ReadonlyArray<AuthoredStateTransition>;
+  display_player_profile?: PlayerProfile | null;
 }
 
 // ──────────────────────────── Multi-Agent Trace (PATTERN-056) ────────────────────────────
@@ -245,6 +331,12 @@ export interface TraceToolCall {
   t_ms: number;
   tool_name: string;
   input_json: string;
+  /**
+   * Stubbed-MCP vs native Anthropic tool (G9). OPTIONAL so pre-migration
+   * agent_trace.json still deserializes (G28). Consumers should use
+   * nullish-coalesce: `(event.provenance ?? 'live_anthropic') === 'stubbed_mcp'`.
+   */
+  provenance?: ProvenanceTag;
 }
 export interface TraceToolResult {
   kind: 'tool_result';
@@ -252,6 +344,8 @@ export interface TraceToolResult {
   tool_name: string;
   output_json: string;
   is_error: boolean;
+  /** Mirrors the matching TraceToolCall's provenance (G9). OPTIONAL per G28. */
+  provenance?: ProvenanceTag;
 }
 export interface TraceText {
   kind: 'text';

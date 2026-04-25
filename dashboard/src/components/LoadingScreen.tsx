@@ -29,20 +29,30 @@ export interface LoadingScreenProps {
   state: 'loading' | 'error';
   /** Error message when `state === 'error'`. */
   errorMsg?: string | null;
+  /**
+   * When true, render the loading overlay; when false, AnimatePresence drives
+   * the exit fade-out before the motion.div unmounts. Always-mount this
+   * component (do NOT conditionally render LoadingScreen at the parent
+   * boundary — AnimatePresence only fires exit animations when its OWN
+   * children unmount, not when AnimatePresence itself is removed from the
+   * tree). PR #7 Finding 1 fix.
+   */
+  visible: boolean;
 }
 
-export default function LoadingScreen({ state, errorMsg }: LoadingScreenProps) {
+export default function LoadingScreen({ state, errorMsg, visible }: LoadingScreenProps) {
   const [dotCount, setDotCount] = useState(0);
 
   // Cycle dots every 400ms — visible motion that the wait is intentional.
   useEffect(() => {
-    if (state !== 'loading') return;
+    if (state !== 'loading' || !visible) return;
     const id = window.setInterval(() => setDotCount((d) => (d + 1) % 4), 400);
     return () => window.clearInterval(id);
-  }, [state]);
+  }, [state, visible]);
 
   return (
     <AnimatePresence>
+      {visible && (
       <motion.div
         key="loading-overlay"
         role="status"
@@ -139,6 +149,7 @@ export default function LoadingScreen({ state, errorMsg }: LoadingScreenProps) {
           )}
         </div>
       </motion.div>
+      )}
     </AnimatePresence>
   );
 }

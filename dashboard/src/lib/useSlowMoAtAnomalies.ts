@@ -88,10 +88,22 @@ export function computePlaybackRate(
  *   (t=35.9s, 45.3s, 59.1s per PHASE_6_TEAM_LEAD_HANDOFF §2).
  * @param config optional slow-mo config override
  */
+// PR #7 Finding 2 fix: hoist default arguments to module scope so their
+// identity is stable across renders. Inline defaults `= [35_900, ...]` and
+// `= {}` allocate fresh array/object every render, causing the useEffect
+// dep array to see new identities and tear down + rebuild the rAF loop on
+// every render of the host component. Currently latent because HudView only
+// reads from the static context, but a future state-subscribed consumer
+// would silently kill demo-day FPS (CLAUDE.md React 30-FPS death-spiral
+// rule 1). Module-scope identity is the canonical fix and aligns with the
+// same pattern in HudView.tsx for SIDE_RAIL_ROW_KINDS.
+const DEFAULT_ANOMALY_TIMESTAMPS_MS: ReadonlyArray<number> = [35_900, 45_300, 59_100];
+const DEFAULT_CONFIG_PARAM: SlowMoConfig = {};
+
 export function useSlowMoAtAnomalies(
   videoRef: RefObject<HTMLVideoElement | null>,
-  anomalyTimestampsMs: ReadonlyArray<number> = [35_900, 45_300, 59_100],
-  config: SlowMoConfig = {},
+  anomalyTimestampsMs: ReadonlyArray<number> = DEFAULT_ANOMALY_TIMESTAMPS_MS,
+  config: SlowMoConfig = DEFAULT_CONFIG_PARAM,
 ): void {
   useEffect(() => {
     const video = videoRef.current;

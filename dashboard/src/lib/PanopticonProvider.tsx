@@ -326,10 +326,22 @@ export default function PanopticonProvider({
         {/* GOTCHA-030 — Vercel cold-boot 25 MB payload defense. LoadingScreen
          * overlays until match_data.json resolves; pointer-events:auto on the
          * inner panel blocks clicks to video controls. Unmounts with a 500 ms
-         * fade-out (PATTERN-068) so the dashboard doesn't pop in. */}
-        {loadState !== 'ready' && (
-          <LoadingScreen state={loadState} errorMsg={errorMsg} />
-        )}
+         * fade-out (PATTERN-068) so the dashboard doesn't pop in.
+         *
+         * PR #7 Finding 1 fix: ALWAYS mount LoadingScreen and gate the
+         * overlay via the `visible` prop. AnimatePresence's exit animation
+         * only fires when its OWN children unmount; if we conditionally
+         * unmount LoadingScreen here, AnimatePresence is destroyed along
+         * with the tree and the exit fade never runs. */}
+        <LoadingScreen
+          visible={loadState !== 'ready'}
+          state={loadState === 'ready' ? 'loading' : loadState}
+          errorMsg={errorMsg}
+        />
+        {/* When loadState='ready', `visible={false}` triggers the
+         * AnimatePresence exit fade. The `state` prop here is gated to
+         * 'loading' (the visual it renders during fade-out is irrelevant
+         * since the overlay is fading to opacity 0). */}
       </PanopticonStateContext.Provider>
     </PanopticonStaticContext.Provider>
   );

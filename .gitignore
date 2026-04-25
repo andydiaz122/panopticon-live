@@ -76,3 +76,6 @@ Thumbs.db
 research_sources/
 .vercel
 .claude/tmp/
+
+# Runtime lock files (PID-bearing, session-scoped — never commit)
+.claude/*.lock

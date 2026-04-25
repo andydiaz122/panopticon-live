@@ -185,6 +185,33 @@ Each entry tagged with deferral date + rationale + revisit-trigger.
 
 ---
 
+### IDEA-022 — Port red-blink anomaly visualization from `hackathon-demo-v1` branch
+**Deferred:** 2026-04-25 ~13:30 EDT (DECISION-023, recording block)
+**Reason:** The `hackathon-demo-v1` worktree branch has a red-blinking SignalBar visualization when `anomalies` events fire. Our current `hackathon-research` branch doesn't render this. Andrew asked whether to port it before recording B1 cold open. Two reasons we didn't:
+1. **Defensibility**: only 2 anomaly events in our 60s match_data, and our coach insights honestly say "first match window — no z-score baseline yet." A red blink labeled "ANOMALY DETECTED" with no defensible underlying z-score = a careful judge would ask "what triggered this?" and we'd have to admit it's a hardcoded display value. Contradicts the rigor narrative we just built via the ground-truth sync.
+2. **Architectural risk**: porting requires React code changes; team-lead VETOED React changes pre-submission; we just merged PR #7 to main and don't want to destabilize.
+**What it would be:** SignalBar component animates a red pulse (cyan → red → cyan, ~600ms cycle, 2-3 cycles) when an anomaly_event timestamp matches the current video time. Visually striking proof-of-detection.
+**Revisit:** 🚀 V2-PRODUCT — when we have multi-clip baselines (per IDEA-014) so anomalies are REAL z-score events with defensible causes ("crouch depth -2.4σ from his baseline established over 8 prior matches"), THEN the red blink is honest narrative + visual sizzle.
+
+### IDEA-023 — Install remaining 13 skills from Anthropic skills repo
+**Deferred:** 2026-04-25 ~13:30 EDT (post-Card-3-build)
+**Reason:** During Card 3 work we cloned `https://github.com/anthropics/skills` and installed 4 office skills (pptx, pdf, docx, xlsx). The repo has 13 OTHER skills we did NOT install due to time pressure + relevance scoping for hackathon demo. Each could be useful post-submission.
+**What it would be:** Copy each from `/tmp/anthropic-skills-repo/skills/<name>/` to `~/.claude/skills/<name>/`:
+- `algorithmic-art` — generative art via code
+- `brand-guidelines` — author brand-doc presentations
+- `canvas-design` — canvas-based design workflow
+- `claude-api` — Claude API patterns (we already have a similar local skill, but worth diffing)
+- `doc-coauthoring` — collaborative doc workflow
+- `frontend-design` — distinct frontend design (similar to our local frontend-design skill but Anthropic-flavored)
+- `internal-comms` — internal communications doc patterns
+- `mcp-builder` — MCP server scaffolding
+- `skill-creator` — meta-skill for authoring skills
+- `slack-gif-creator` — animated GIF generation
+- `theme-factory` — design system / theme generation
+- `web-artifacts-builder` — Claude artifacts for web
+- `webapp-testing` — web app testing patterns
+**Revisit:** ⏰ POST-SUBMISSION — install 1-2 at a time as needs arise, not bulk-install (skill-context bloat).
+
 ## Maintenance Notes
 
 - Append new entries with the same template (IDEA-NNN, deferred date, reason, what-it-is, revisit-trigger).

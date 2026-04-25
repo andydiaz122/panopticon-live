@@ -839,3 +839,38 @@ Skipping step 6 is the silent failure mode. The lessons learned tonight (PATTERN
 **Multi-agent panels are the closest LLM-era equivalent to peer review.** Solo LLM authoring + LLM self-review is the cheapest workflow but has a known blind spot: the LLM doesn't catch its own confident-sounding fabrications. Dispatching domain-expert reviewers IS the peer review — and parallel dispatch makes it close to single-agent latency (~5 min wall-clock for 4 reviewers at ~250K tokens combined). The cost is small; the credibility-preservation is enormous.
 
 **Save-not-trash is the right discipline for ideas during a deadline-constrained sprint.** Created `docs/deferred_ideas.md` to capture 21+ ideas we vetoed or deferred. Each tagged with revisit-trigger (POST-SUBMISSION / V2-PRODUCT / RESEARCH / NEEDS-DATA). The project will outlive the hackathon; these ideas are real value waiting to be unlocked when constraints loosen.
+
+## Phase 8 — Anthropic Skills Install + python-pptx (Sat 2026-04-25 ~13:30 EDT)
+
+### Tool: Anthropic skills repo (`https://github.com/anthropics/skills`)
+
+**Cost**: 30 seconds to clone, 5 seconds to copy 4 skills to `~/.claude/skills/`.
+**Output**: 4 office-document skills (pptx, pdf, docx, xlsx) immediately discoverable by Claude via the global skills listing. Each skill has SKILL.md + supporting scripts (e.g., `pptx/scripts/thumbnail.py`, `pptx/editing.md`, `pptx/pptxgenjs.md`).
+**ROI**: **HIGH** for any future document-generation work. Andrew had these on his Windows PC, didn't have them on Mac Mini — classic "cross-machine config drift" gap. Now closed.
+
+**Pattern established**: when Andrew mentions a tool/skill he had elsewhere, the FIRST diagnostic should be "do you have it here?" — many tools are environment-specific and assumptions are dangerous.
+
+**13 deferred skills** also available (algorithmic-art, brand-guidelines, canvas-design, doc-coauthoring, frontend-design, internal-comms, mcp-builder, skill-creator, slack-gif-creator, theme-factory, web-artifacts-builder, webapp-testing, claude-api). Logged for post-submission install in `docs/deferred_ideas.md`.
+
+### Tool: python-pptx 1.0.2 + Pillow 12.1.1
+
+**Cost**: One-time install (~30 sec via sibling-repo venv since PEP 668 blocks system pip on macOS Sonoma+).
+**Output**: Card 3 generator (`scripts/build_card_03_closing.py`) produces .pptx + .png in <1 second per run. Spec source-of-truth lives in code; byte-deterministic across runs.
+**ROI**: **EXTREME** for the Card 3 use case. Saved Andrew 5-10 min of Keynote UI fiddling AND eliminated the entire class of "color picker drift / kerning slider creep / Keynote font fallback" bugs. Single source of truth (the script) instead of two (script + Keynote file that drifts).
+
+**Pattern**: any time you need a ONE-TIME static asset with a TIGHT spec (colors, font, position, size), prefer programmatic generation over UI tools. The UI is a tax you pay for every iteration; the script is one-time.
+
+**Iteration story** (worth remembering):
+- v1 of the generator used `Fraunces-VariableFont_SOFT,WONK,opsz,wght.ttf` (the variable font) — Pillow defaulted to a heavy weight (700-900) instead of Regular (400), producing chunky-looking serifs
+- Fixed by pointing at static `Fraunces_72pt-Regular.ttf` (in the Downloads/Fraunces/static/ folder Andrew already had)
+- v1 vertical centering used `pt × 1.0` for text height — under-counted descenders by ~30%, group rendered in upper half
+- Fixed by using `font.getmetrics()` (returns ascent + descent) for true rendered height
+- These two iterations took ~5 min total — still wildly faster than two rounds of Keynote tweaking
+
+### Meta-learning Phase 8
+
+**The Anthropic skills repo is the LIBRARY equivalent of npm/PyPI for Claude Code.** Cross-machine config-drift gaps (skills installed on PC but not Mac Mini) are the FIRST thing to check when a user says "I had this somewhere else." Sniff diagnostic > install assumption.
+
+**Programmatic asset generation > UI asset creation** for any spec-tight one-time deliverable. The Pillow script approach for Card 3 is the canonical pattern: spec lives in code, render is deterministic, version-controllable, and re-runnable on spec changes. The Keynote alternative would have required Andrew to remember/re-execute every spec detail every time we adjusted anything — a recipe for drift.
+
+**Pillow variable-font defaults are a known gotcha.** Variable fonts loaded via `ImageFont.truetype(VARIABLE.ttf)` default to a non-Regular weight unless explicitly set. Use the static-weight TTF when precision matters; reach for the variable font only when intentionally animating across the weight axis.

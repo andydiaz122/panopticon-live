@@ -1598,3 +1598,48 @@ Saturday Execution Protocol per HANDOFF binding sequence:
 The dashboard now shows clinical-truth narrations + biomechanically-defensible coach insights aligned to the actual ground-truth events. The synced JSON deploys to Vercel + merges to main. The pre-prep is complete.
 
 Andrew's directive going in: *"do a world-class job, do a rigorous job, do an exhaustive job, push the envelope of our quality."* I think we hit it. The 1 CRITICAL fabrication caught + fixed before commit is the proof — without the multi-agent panel I would have shipped that error and the demo would have leaked credibility on the first careful judge inspection.
+
+## 2026-04-25 Saturday Afternoon — Recording Block Execution (~10:30–14:30 EDT)
+
+### Block 1 raw materials captured
+
+**Live typing intro** (`~/Documents/Panopticon_Captures/Intro_typing_v1.mov`, 116 MB):
+4-stage prompt evolution recorded in claude.ai dark mode. Naive "build me a predictive model" → "for tennis" → "model that predicts tennis matches from broadcast video" → final pivot "build me a tool that extracts biomechanical fatigue signals from tennis broadcast video — no hardware needed". MacBook mic captured authentic keyboard clacks. Will speed-ramp the typing portions ~1.4x in CapCut to compress 60s raw → 22s final.
+
+**Terminal precompute capture** (`~/Documents/Panopticon_Captures/terminal_precompute_v1.mov`, 471 MB):
+Ran `PANOPTICON_MATCH_ID=utr_01_demo_capture ./run_golden_data.sh --skip-agents --skip-scouting-committee` — pure CV pipeline (3-Pass DAG: ffmpeg → YOLO11m-Pose @ MPS → Kalman → state machine → signal extraction). Critical safety: used different MATCH_ID + skip-agents to avoid clobbering canonical synced JSON. Test run before recording confirmed cleanup works. Cleanup file (`utr_01_demo_capture.json`) deleted after recording. Canonical `utr_01_segment_a.json` untouched throughout.
+
+**Card 3 closing thesis** (`~/Documents/Panopticon_TitleCards/card_03_closing.png`, 28KB):
+Programmatic generation via `scripts/build_card_03_closing.py` (commit 527f161). Uses Anthropic pptx skill + python-pptx + Pillow. Andrew installed PowerPoint mid-session and asked to use Anthropic skills repo instead of Keynote UI fiddling. We cloned anthropics/skills (https://github.com/anthropics/skills/tree/main/skills) to /tmp, copied 4 office skills (pptx + pdf + docx + xlsx) to ~/.claude/skills/. Installed python-pptx 1.0.2 + lxml + xlsxwriter via the sibling-repo venv (PEP 668 blocks system pip on macOS). Script outputs both .pptx (editable in PowerPoint) and .png (drop-in for CapCut). One iteration to fix Pillow's variable-font weight default (loaded heavy 700-900; spec wants 400) by switching to static Fraunces_72pt-Regular.ttf + correct vertical centering via font.getmetrics(). Final render is editorial-quality.
+
+### Three architectural decisions made during recording block
+
+**DECISION-023 — DON'T port red anomaly visualization to current branch.**
+The other branch (`hackathon-demo-v1`) has a red-blinking SignalBar when anomaly events fire. Our current branch doesn't. Andrew asked whether to port. Two reasons we don't:
+1. Defensibility — only 2 anomalies in our 60s match_data, and coach insights honestly say "no z-score baseline yet." A red blink labeled "anomaly" with no defensible cause = a careful judge would ask "what triggered this?" and we'd have to admit hardcoded display value. Contradicts the rigor narrative we just built via ground-truth sync.
+2. Architectural risk — porting requires React code changes; team-lead VETOED React changes pre-submission; we just merged PR #7 to main and don't want to destabilize.
+
+The narrative lands WITHOUT the red blink: SignalBars updating + VO + coach insights = the proof. Sizzle without steak risk avoided. Logged as deferred idea (IDEA-022 in deferred_ideas.md) for V2-product when we have real baselines.
+
+**DECISION-024 — Record clean, freeze-frame in CapCut (NOT manual mouse pauses during OBS).**
+Andrew's instinct was to manually pause the dashboard video during recording to give judges time to read each tab/widget. Pro editor approach is the opposite: record uninterrupted footage, edit pacing entirely in post via CapCut freeze-frame (right-click → Freeze Frame → drag duration). Manual pause artifacts (cursor moving to controls, hover-revealed video chrome) look unprofessional. Freeze-frames in post look intentional + cinematic. Solves Andrew's overage problem (recording was extending past 2.5 min): record 50s clean (skipping first 10s of player-off-court) + add 3-4 freezes × 2.5s = 60s perceived content in 50s timeline budget.
+
+**DECISION-025 — Skip Anthropic computer-use install for OBS settings verification.**
+Andrew offered to use computer-use to verify OBS settings before recording. We chose 30-second manual checklist + first-take ffprobe spot-check instead. Computer-use install would take 15-30 min vs 2 min manual verify. Spot-check command for first OBS file: `ffprobe ~/Documents/Panopticon_OBS_Captures/obs_b1_anomaly.mp4 2>&1 | grep -E "Stream|Duration"` — should show 1920x1080 @ 60 fps, no audio stream.
+
+### Anthropic skills repo install — 4 office skills landed, 13 deferred
+
+Cloned `https://github.com/anthropics/skills/tree/main/skills`. Installed locally:
+- `pptx` (used for Card 3 generation)
+- `pdf` (future: investor one-pager, demo summary doc)
+- `docx` (future: written submission summary)
+- `xlsx` (future: signal data export workbook)
+
+13 other skills available but deferred to post-submission per save-not-trash discipline (logged in deferred_ideas.md): algorithmic-art, brand-guidelines, canvas-design, doc-coauthoring, frontend-design, internal-comms, mcp-builder, skill-creator, slack-gif-creator, theme-factory, web-artifacts-builder, webapp-testing, claude-api.
+
+### What's left this afternoon
+
+- **NOW**: Block 1 cont'd — record 4 OBS dashboard captures (~30-45 min): obs_b1_anomaly (30s), obs_b2_huddrop (60s recorded → 50s edited), obs_b3_secondmiss_tab2 (25s), obs_b4_scouting (35s)
+- **13:00 actually probably 14:30 now**: voice recording — 12 lines from voiceover_script.md in closet sound booth
+- **15:00 actually 16:00**: CapCut assembly per capcut_assembly_workflow.md
+- **Sunday**: final review, YouTube upload, CV submission by 17:00 EDT (lockout 19:55, deadline 20:00)

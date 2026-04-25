@@ -95,23 +95,62 @@ If ANY of these are missing, stop and produce them BEFORE opening CapCut. Workin
 
 ## OBS Capture Spec (the 4 silent MP4s Andrew records 11:00–13:00 EDT, AFTER intro + terminal captures)
 
-| File | Duration target | What it captures |
-|---|---|---|
-| `obs_b1_anomaly.mp4` | 30s | Tab 1 raw tennis playback. Skeleton snaps on. SignalBar pulses red on the anomaly frame (the "missed call" moment). Mouse stays out of frame. |
-| `obs_b2_huddrop.mp4` | 60s | Tab 1 sustained playback through one full point. ALL widgets visible — SignalBars, skeleton overlay, court diagram, tickertape. Slow deliberate scrubbing if needed. |
-| `obs_b3_secondmiss_tab2.mp4` | 25s | Mouse moves to "Tab 2 — Match Data". Click. Mouse moves to "Download Match Data (.csv)" button. Click. File-download chrome animation visible (browser saves CSV). 2-second hold on the downloaded file in browser bar. |
-| `obs_b4_scouting.mp4` | 35s | Click Tab 3. Multi-agent swarm trace begins replay. The 3 agents' messages appear in sequence (Analytics → Biomechanics → Strategy). Let the trace play through ONE point's reasoning chain. |
+| File | Raw record duration | On-timeline target | What it captures |
+|---|---|---|---|
+| `obs_b1_anomaly.mp4` | ~35s (record full anomaly window with 2-3s pad on each side) | 30s | Tab 1 raw tennis playback into the anomaly frame. Skeleton overlay snaps on. **No live React red blink** (that branch is not deployed) — visual hook is reconstructed in CapCut (see "B1 Visual-Hook Reconstruction" below). Mouse stays out of frame. |
+| `obs_b2_huddrop.mp4` | **Full 60s from clip 0:00 → 1:00** (per team-lead correction 2026-04-25 ~16:51 EDT) | ~50-53s after dead-time speed-ramp | Tab 1 sustained playback through one full point. **DO NOT skip 0:00-0:10** — the empty-court window shows the RecoveryLatencyBar initialize from 0, which IS our "first telemetry datapoint" data-moat moment. Speed-ramp the dead time in CapCut (see "B2 Dead-Time Speed-Ramp" below) to preserve the demonstration while reclaiming timeline budget. ALL widgets visible — SignalBars, skeleton overlay, court diagram, tickertape. |
+| `obs_b3_secondmiss_tab2.mp4` | 25s | 25s | Mouse moves to "Tab 2 — Match Data". Click. Mouse moves to "Download Match Data (.csv)" button. Click. File-download chrome animation visible (browser saves CSV). 2-second hold on the downloaded file in browser bar. |
+| `obs_b4_scouting.mp4` | 35s | 30-32s (trim 3-5s if needed to compensate for B2 expansion) | Click Tab 3. Multi-agent swarm trace begins replay. The 3 agents' messages appear in sequence (Analytics → Biomechanics → Strategy). Let the trace play through ONE point's reasoning chain. |
 
 **Record at 1920×1080 @ 60 FPS, H.264 CRF 18, NO AUDIO** (audio comes from VO recording separately).
 
 **Pre-flight before each OBS take:**
+- **Bump cursor size** (System Settings → Accessibility → Display → Pointer size, +1 to +2 notches above default) — M4 Mac Mini default cursor at 1080p is tiny and gets lost in YouTube compression
 - Close all Chrome tabs except `panopticon-live.vercel.app`
 - Hide bookmarks bar (Cmd+Shift+B)
 - Full-screen window (Cmd+Ctrl+F)
 - Notifications OFF (Do Not Disturb)
-- Mouse cursor: enabled (judges need to see the click), but move DELIBERATELY — like Anthropic's Chrome demo "cream-gloved cursor"
+- Mouse cursor: enabled (judges need to see the click), but move DELIBERATELY in smooth arcs — like Anthropic's Chrome demo "cream-gloved cursor"
 
 **Take 2-3 of each clip.** Pick the cleanest in CapCut.
+
+---
+
+## ⚠️ THREE EDITORIAL TRAPS (corrected per team-lead directive 2026-04-25 ~16:51 EDT)
+
+### Trap 1 — DO NOT use hard freeze-frames on dashboard captures
+
+**Why this kills the demo:** the React dashboard runs a continuous `requestAnimationFrame` loop that paints the canvas, ticks the tickertape, breathes the SignalBars. A hard CapCut freeze-frame stops the entire MP4, which means the canvas freezes mid-pixel. To an Anthropic engineering judge that looks like the React tree locked up or the tab crashed — exactly the opposite signal we want to send.
+
+**Use one of these instead at hero moments:**
+- **(Preferred) 20% slow-mo via CapCut Speed Curve** — the video gives judges 5x the time to read the coach panel, but the tickertape still slightly crawls and the canvas keeps painting. UI looks alive.
+- **Callout-paired hard freeze** — if you must hard-freeze, apply a distinct CapCut text callout or digital bounding box at the EXACT moment of the freeze. The post-production overlay tells the judge "the editor paused this to highlight the data," which excuses the frozen UI as editorial choice rather than browser crash.
+
+### Trap 2 — B2 Dead-Time Speed-Ramp (clip 0:00-0:10 in obs_b2_huddrop)
+
+**Why we record the full 60s and don't skip the empty-court opening:** the RecoveryLatencyBar visibly initializes during this window. That's the "first telemetry datapoint on the field" moment — a clean demonstration of telemetry initialization that judges will read as serious data-pipeline craft. Hard-cutting past it discards a unique data-moat showcase.
+
+**CapCut treatment:**
+1. Drop `obs_b2_huddrop.mp4` onto the timeline
+2. Select the 0:00-0:10 portion (empty court / Recovery Clock initializing)
+3. Right-click → Speed → Speed Curve → drag the curve to **3-5x speed** for that segment ONLY
+4. Result: the 10s dead time compresses to ~2-3s on the timeline; the recovery clock ticks UP rapidly which actually looks like a deliberate, technical UI feature
+5. Leave the remaining 50s (clip 0:10-1:00, the actual HUD walkthrough through the point) at **1x normal speed**
+
+Final on-timeline duration: ~52-53s. To compensate, trim B3+B4 segment by 2-3s — they have slack.
+
+### Trap 3 — B1 Visual-Hook Reconstruction (compensating for the missing live red blink)
+
+**Context:** the live React red-blink anomaly visualization exists on a different branch (`hackathon-demo-v1`) and was NOT ported to the deployed branch (architecturally correct decision — porting a Saturday-afternoon React change risks breaking the deployed dashboard 36 hours before deadline). But the cold-open beat needs a visual hook so judges see the "missed call" moment register, not just raw playback of a guy walking around the baseline.
+
+**CapCut reconstruction at the anomaly frame:**
+1. Identify the exact frame in `obs_b1_anomaly.mp4` where the anomaly fires (cross-reference with `coach_insights[k].timestamp_ms` in the synced match_data — anomalies fire at ~35.9s, ~45.3s, ~59.1s in the source clip)
+2. At that frame, layer **ONE** of these on top:
+   - **Subtle red border flash** (CapCut → Effects → Borders → red @ 60% opacity, 0.5s duration with quick fade-out) — most cinematic, recommended
+   - **Sleek post-production text callout** (CapCut → Text → "ANOMALY DETECTED" or similar, JetBrains Mono 24pt, cyan/red, 1.5s on-screen) — most forensic, least likely to read as gimmicky
+3. **DO NOT use digital zoom** (TL listed it as an option but it's vetoed elsewhere in this doc — at 1080p source, scaling crops fidelity AND distorts UI text, breaking the "live dashboard" illusion)
+
+The post-production overlay is acceptable editorial craft (judges expect editors to highlight key moments) — it's NOT pretending the live React did something it didn't.
 
 ---
 
@@ -159,9 +198,9 @@ Drag clips onto Track 4 in this exact sequence at these exact timecodes:
 | 0:00 | 0:22 | `intro_typing_raw.mov` (trimmed + speed-ramped to 1.4x on typing portions) | The 4-stage prompt evolution. Native audio (laptop-mic keystrokes) on its own audio sub-track. |
 | 0:22 | 0:27 | `terminal_precompute_raw.mov` (speed-ramped 20x or 50x) | The CV pipeline running in iTerm. Compressed scrolling logs ending on `Writing match_data.json... ✓`. NO audio. |
 | 0:27 | 0:30 | *(black hold + tiny "→" transition mark, OR optional 0.5s cross-fade)* | Visual breath separating "input" (typing + terminal) from "output" (dashboard). Hard cut into the dashboard reveal lands cleanly with this micro-pause. |
-| 0:30 | 1:00 | `obs_b1_anomaly.mp4` | Cold open on dashboard. Trim to 30s. **Beat 2 of demo storyboard.** |
-| 1:00 | 1:50 | `obs_b2_huddrop.mp4` | Tab 1 HUD walkthrough. Trim to 50s (down from 60s — recovered budget for the new opener). **Beat 3.** |
-| 1:50 | 2:45 | `obs_b3_secondmiss_tab2.mp4` + `obs_b4_scouting.mp4` (concatenated) | CSV download (~25s) + Tab 3 swarm replay (~30s). Total 55s. **Beat 4.** |
+| 0:30 | 1:00 | `obs_b1_anomaly.mp4` | Cold open on dashboard. Trim to 30s. **Layer post-production red border flash + text callout at the anomaly frame** (see Trap 3 above) to reconstruct the visual hook. **Beat 2 of demo storyboard.** |
+| 1:00 | ~1:53 | `obs_b2_huddrop.mp4` | Tab 1 HUD walkthrough — **record full 60s, speed-ramp 0:00-0:10 dead time 3-5x** (see Trap 2 above). On-timeline ≈ 52-53s. **Beat 3.** |
+| ~1:53 | 2:45 | `obs_b3_secondmiss_tab2.mp4` + `obs_b4_scouting.mp4` (concatenated) | CSV download (~25s) + Tab 3 swarm replay (~27-30s, trim to absorb B2's 2-3s overflow). Total 52-55s. **Beat 4.** |
 | 2:45 | 2:48 | *(black hold)* | Pure black — drag a black slide or use CapCut's built-in "background → solid black" — provides hard cut separation between dashboard footage and closing card. |
 | 2:48 | 3:00 | `card_03_closing.png` | Hold static for 12s. **Beat 5: closing thesis.** |
 

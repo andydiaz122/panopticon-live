@@ -23,8 +23,14 @@ import type { CoachInsight } from '@/lib/types';
  */
 
 const TYPEWRITER_STEP_MS = 18;
-/** Broadcast "hold" after typewriter completes before resuming the video. */
-const TELESTRATOR_HOLD_MS = 3500;
+// 2026-04-25 ~17:35 EDT — TELESTRATOR_HOLD_MS reduced 3500 → 1500. The
+// 3.5s hold compounded badly with anomaly slow-mo at 35-39s window (insight
+// #5 fires at 36s INSIDE that window): 4.7s typewriter + 3.5s hold = 8.2s
+// pause, then video resumed at 0.25x for ~13s — total 22s of non-normal
+// playback per coach insight. The new 1.5s hold gives judges 1.5s read time
+// after typewriter completes, which is enough for a forensic reader to
+// finish-and-process the last sentence before resume.
+const TELESTRATOR_HOLD_MS = 1500;
 
 export default function CoachPanel() {
   const { activeCoachInsight } = usePanopticonState();

@@ -124,9 +124,10 @@ NEW_DISPLAY_TRANSITIONS: list[tuple[int, str, str, str]] = [
         "ACTIVE_RALLY",
         "DEAD_TIME",
         "Point closes on a leave. Per ground-truth log: 35s = Player B's slice "
-        "down-the-line lands OUT; Player A reads it ~5ft behind the baseline "
-        "and lets it go. Court-awareness telemetry, not fatigue. Recovery "
-        "clock starts here.",
+        "down-the-line lands OUT; Player A steps ~1.5m INSIDE the baseline to "
+        "read it and lets it go (per Andrew's 2026-04-25 ~17:30 EDT correction "
+        "— prior wording 'behind the baseline' was incorrect). Court-awareness "
+        "telemetry, not fatigue. Recovery clock starts here.",
     ),
     (
         58_000,
@@ -271,8 +272,8 @@ NEW_COACH_INSIGHTS: list[tuple[int, str, str]] = [
     (
         36_000,
         "point_closes_on_leave",
-        "Point closes on a leave, not a winner. Player A reads Player B's "
-        "down-the-line slice from ~1.5m behind the baseline and lets the "
+        "Point closes on a leave, not a winner. Player A steps ~1.5m INSIDE "
+        "the baseline to read Player B's down-the-line slice and lets the "
         "ball clear the line. Court-awareness telemetry, not fatigue "
         "telemetry — leave-ratio and recovery-latency stay separated downstream.",
     ),

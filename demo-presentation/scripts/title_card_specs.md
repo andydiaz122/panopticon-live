@@ -98,6 +98,8 @@
 
 ## ✅ ACTIVE — Card 3 — The Closing Thesis (Beat 5, 2:48 – 3:00) — **THIS IS THE ONE TO BUILD**
 
+> 🤖 **Programmatic generator (preferred path):** Run `python3 scripts/build_card_03_closing.py` to produce both `card_03_closing.pptx` (editable in PowerPoint) and `card_03_closing.png` (drop-in for CapCut) at `~/Documents/Panopticon_TitleCards/`. The script encodes this entire spec — single source of truth, byte-deterministic output, no Keynote UI fiddling. Built using the Anthropic `pptx` skill (~/.claude/skills/pptx/) + python-pptx + Pillow. Generated 2026-04-25 ~14:00 EDT after team-lead pivot to PowerPoint workflow. Manual Keynote spec below preserved as fallback.
+
 **Filename:** `card_03_closing.png`
 
 ```

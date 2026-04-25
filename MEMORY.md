@@ -2058,6 +2058,29 @@ Decision: ship "Panopticon" for v1. Use **name-NEUTRAL custom domain `live.andre
 
 **Meta-pattern for time-boxed projects**: when a creative decision (naming, color palette, logo design) competes with critical-path execution work AND the existing choice is "good enough" (not broken, just suboptimal), defer the creative decision until post-deadline. The cost of imperfect-but-shipped >> cost of perfect-but-late.
 
+### DECISION-019 — Final product is the DATA-EXTRACTION PLATFORM, not the dashboard
+
+User clarification 2026-04-25 ~03:30 EDT (verbatim from Notion notes pasted into session): *"The final product is going to be some sort of downloadable data file, like a CSV file of some pre-recorded match video. The value proposition is we're building the platform that extracts biometric signals in those data files as well as qualitative match extracts."*
+
+This reframes the project's deliverable. Previously the dashboard was treated as the product. Under this clarification, the dashboard is a SHOWCASE of what the platform produces. The actual product is two downloadable artifacts:
+
+1. **Biometric signals CSV** — timestamp + 7 signal columns (recovery_latency_ms, serve_toss_variance_cm, ritual_entropy_delta, crouch_depth_degradation_deg, baseline_retreat_distance_m, lateral_work_rate, split_step_latency_ms). One row per match frame. Downloadable from Tab 2 (Raw Telemetry).
+2. **Qualitative match transcripts** — multi-agent swarm output (Analytics Specialist + Technical Coach + Tactical Strategist) producing structured tactical briefs. Currently rendered via Tab 3 swarm replay; this IS the second product, visible to demo viewer.
+
+**Closing thesis** (verbatim): *"capture the signal nobody else is reading. Use Managed Agents to break down complex real-time data feeds, automate the response, ship it. Similar to the Model Council feature from Perplexity, but for real-time data feeds."*
+
+**Implications for demo**:
+- B5 closing now needs TWO cards (per PATTERN-083 register-switch rule): existing brand card (cool-slate register) + NEW thesis card (pure void register, Fraunces serif "capture the signal nobody else is reading"). The register switch is what makes the second card LAND as a thesis rather than additional brand chrome.
+- Tab 2 needs visible "Download Match Data (.csv)" button — gives judges a tangible artifact they can point at as "the product"
+- Narration arc shifts from "explaining what the dashboard shows" to "demonstrating what the platform produces and why no one else has this data"
+- Tab 3 swarm replay's role elevates: it's not a "feature," it's the second downloadable product visualized
+
+**Why this matters more than it looks**: under the dashboard-as-product framing, judges might walk away thinking "cool HUD." Under the platform-as-product framing, judges walk away thinking "novel data product nobody else extracts from broadcast pixels — that's a moat." The latter is the actual unique value.
+
+**What's already aligned**: B0 personal-journey opener ("Hey Claude, is the world malleable?"), B4 swarm-replay climax, technical density of overlay text (specific signal values like Δ -11.69° prove the data's specificity).
+
+**What's NOT aligned and was added tonight**: Q1 download button, Q2 thesis card, narration script restructured to land closing on the platform thesis instead of the dashboard mechanics.
+
 ---
 
 ## DAY 5 LEARNINGS (Apr 26, 2026)

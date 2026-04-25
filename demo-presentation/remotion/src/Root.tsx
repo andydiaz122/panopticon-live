@@ -2,6 +2,7 @@ import { Composition } from 'remotion';
 
 import { B0Opener } from './compositions/B0Opener';
 import { B5Closing } from './compositions/B5Closing';
+import { B5Thesis } from './compositions/B5Thesis';
 import { GitGraphDemo } from './compositions/GitGraphDemo';
 import { SceneBreakB2, SceneBreakB3, SceneBreakB4 } from './compositions/SceneBreak';
 import { HelloWorld } from './HelloWorld';
@@ -51,6 +52,14 @@ export const RemotionRoot = () => {
         id="b5-closing"
         component={B5Closing}
         durationInFrames={300}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="b5-thesis"
+        component={B5Thesis}
+        durationInFrames={240}
         fps={60}
         width={1920}
         height={1080}

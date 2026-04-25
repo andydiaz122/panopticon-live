@@ -7,6 +7,7 @@ import { usePanopticonState } from '@/lib/PanopticonProvider';
 import { colors } from '@/lib/design-tokens';
 import { buildTimeline, fmtClock } from '@/lib/telemetry';
 
+import DownloadCsvButton from './DownloadCsvButton';
 import TelemetryLog from './TelemetryLog';
 
 /**
@@ -66,13 +67,17 @@ function FeedHeader({
           standard 2D broadcast pixels with zero hardware sensors.
         </p>
       </div>
-      <div className="mono flex flex-col items-end text-[10px] uppercase tracking-[0.14em]">
-        <span style={{ color: colors.textMuted }}>
-          {fmtClock(currentTimeMs)} / {fmtClock(60000)}
-        </span>
-        <span style={{ color: colors.playerA }}>
-          {total.toLocaleString()} events
-        </span>
+      <div className="flex items-end gap-4">
+        <div className="mono flex flex-col items-end text-[10px] uppercase tracking-[0.14em]">
+          <span style={{ color: colors.textMuted }}>
+            {fmtClock(currentTimeMs)} / {fmtClock(60000)}
+          </span>
+          <span style={{ color: colors.playerA }}>
+            {total.toLocaleString()} events
+          </span>
+        </div>
+        {/* DECISION-019: surface the data product. Click → biometric_signals.csv */}
+        <DownloadCsvButton />
       </div>
     </header>
   );

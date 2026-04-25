@@ -2081,6 +2081,85 @@ This reframes the project's deliverable. Previously the dashboard was treated as
 
 **What's NOT aligned and was added tonight**: Q1 download button, Q2 thesis card, narration script restructured to land closing on the platform thesis instead of the dashboard mechanics.
 
+### USER-CORRECTION-037 — Tonight's Remotion outputs are TOY-TIER; quality bar must reset to Anthropic-release-video standard
+
+User feedback 2026-04-25 ~04:30 EDT (verbatim): *"The Remotion MP4s look like toy projects from a kid. This is totally on the opposite end of the spectrum as far as world-class quality. This is why I said we need to start by copying Anthropic's work so we can get close to their quality so that we at least know how to produce decent quality work using Remotion. We have a lot of work to do here to get remotion mp4 quality to world-class well polished outputs, also the remotion videos are incredibly short, I was hoping we could tell a story in motion."*
+
+**The 6 specific failure modes of tonight's Remotion work** (DON'T REPEAT in v2):
+
+1. **Compositions too short to tell a story** — 1.5s scene-breaks, 5s closing card, 4s thesis card. Story arcs need 10-30s minimum to land. Anthropic's release-video chapters average 15-20s with multiple motion events per chapter.
+
+2. **Single-element frames** — one wordmark, one URL, one thesis line. Reads as PowerPoint slides, not cinematic frames. Anthropic frames have 3-5 layered elements, each animated independently with staggered timing.
+
+3. **Motion density too low** — 1 fade-in per second average. Anthropic averages 3-5 motion events per second (text reveals + element entrances + secondary animations + camera moves + transitions overlapping in time).
+
+4. **No music — no rhythmic anchor for the motion** — Without music, motion feels arbitrary. Music drives pacing decisions: cuts land on beats, holds land on sustains, builds align to crescendos. Anthropic videos use original-composed instrumentals at -28 LUFS with deliberate mix automation.
+
+5. **Typography choice without typography craft** — Adopting Fraunces serif is necessary but NOT sufficient. World-class requires letter-spacing animation (e.g., expand from -0.04em to -0.01em over 600ms), weight modulation (variable axis), staggered character reveal, italic emphasis as a separate beat. Tonight's Fraunces was rendered statically with one opacity ramp.
+
+6. **No chapter / narrative structure** — Tonight's compositions are isolated cards. Anthropic videos have explicit Chapter 1 / Chapter 2 / Chapter 3 progression with visual continuity (callbacks, recurring motifs, rising stakes). Our content currently reads as a ROUGH-CUT REEL, not a STORY.
+
+**What "Anthropic quality" actually means** (operationalized for v2):
+- Compositions ≥ 8s with multi-beat internal structure
+- 3+ animated elements per frame, staggered timing
+- Music bed with hard cuts on beats
+- Typography animations: kerning sweep, weight modulation, italic accent reveal as separate beat
+- Chapter structure with explicit progression markers
+- Camera moves WITHIN compositions (Numerai-style ~2% slow drift IS the floor; Anthropic adds slow zoom-ins, lateral pans, parallax layers)
+
+**The principal lesson** (must become a permanent standard): adopting an aesthetic surface (font choice, color palette, hard-cuts) is the START not the END of world-class craft. The work IS in the dense, layered, musically-aligned, chapter-structured execution.
+
+### PATTERN-085 — World-class product release video = Remotion intro + OBS dashboard walkthrough WITH motion graphics layered on top
+
+Validated by Anthropic's release-video playbook (per `demo-presentation/assets/references/anthropic_video_dna.md` analysis). The pattern:
+
+1. **Remotion-authored intro** (15-25s) — establishes brand, sets narrative arc, introduces visual vocabulary
+2. **OBS-recorded screen walkthrough** (45-90s) of the actual product — but WITH motion graphics layered on top: callout arrows, zoomed inserts, text overlays, transitions between sections, micro-zoom on key UI elements
+3. **Remotion-authored closing** (10-15s) — wordmark + thesis + URL with cinematic treatment
+
+The OBS footage is NEVER bare. Anthropic's Opus 4.6 release video: every screen recording moment has at least 2 motion-graphics elements layered (callouts, kinetic typography, transition wipes, color overlays). This is what gives the videos their "designed" feel rather than "screen-recorded" feel.
+
+**Implication for PANOPTICON**: tonight's plan was Remotion chrome → OBS captures → minimal text overlays. Per PATTERN-085, the right structure is Remotion chrome → OBS captures WITH MOTION GRAPHICS LAYER → Remotion closing. The motion graphics layer is currently UN-AUTHORED — Saturday work.
+
+### DECISION-020 — Quality bar reset; Tier 1 = bookend Remotion compositions reach Anthropic standard, Tier 2 = OBS motion graphics, Tier 3 = chapter restructure
+
+Given remaining time (~38 hours to deadline) and depth-of-craft required for Anthropic-quality:
+
+**TIER 1 (MUST HAVE — Saturday morning before recording)**:
+- Rebuild B0Opener: 30-45s with 4+ internal beats, music bed, typography animation, layered reveals
+- Rebuild B5 closing pair (B5Closing + B5Thesis): cinematic treatment, music sustain, multi-element frames
+
+**TIER 2 (NICE TO HAVE — Saturday morning if time, otherwise Sunday)**:
+- Author motion graphics overlay templates for OBS captures (callouts, zoom inserts, text reveals)
+- Replace SceneBreak primitives with richer interstitial compositions (chapter-marker treatment, not just title cards)
+
+**TIER 3 (STRETCH — Sunday only if Tier 1+2 cleanly delivered)**:
+- Full chapter restructure (Chapter 1: The Miss / Chapter 2: The Sensor / Chapter 3: The Recurrence / Chapter 4: The Brain / Chapter 5: The Vision) with visual continuity across chapters
+- Original instrumental music composition (otherwise royalty-free track from Epidemic Sound)
+
+The bookends (B0 + B5) are the highest-leverage targets — first and last frames the judge sees. Even if the middle stays as bare OBS footage with text overlays, ELEVATED bookends create a halo effect that lifts perception of the whole.
+
+### PROJECT-NOTE-2026-04-25 — Andrew authoring tennis-clip second-by-second ground-truth log
+
+Andrew committed to manually annotating the 1-min `utr_match_01_segment_a.mp4` clip with what's happening at each second (player phases, ball events, point structure). When this lands:
+- Sync the authored display_narrations + display_transitions to the ground-truth log
+- Update narrator_beats to match observed visual events
+- Verify SignalBar timings align with player kinematics (e.g., crouch deepens BEFORE the actual serve, recovery latency observable AFTER point ends)
+
+This is a critical correctness check — eliminates any "the storyboard says X but the video shows Y" drift before recording.
+
+### USER-DIRECTIVE-038 — Skills must be EXHAUSTIVE and orthogonal-yet-complementary
+
+User directive 2026-04-25 ~04:30 EDT (verbatim): *"try to use skills and create skills that are orthogonal to each other yet complementary to each other... Make sure you are continuing to update and/or create agent files and especially skills files for each highly custom task within our plans. We need our skills to be comprehensive and exhaustive and representative of world-class skills in whatever particular domain that skill specializes in."*
+
+**Operationalized**:
+- New skills must declare ORTHOGONAL OWNERSHIP (what they own vs delegate) up front
+- Each skill must include WORLD-CLASS REFERENCE STANDARDS (cite specific external practitioners, not generic "best practices")
+- Skills must include FAILURE MODES section ("what makes this look amateur" — like the 6 failure modes above)
+- Skills must reference the CANONICAL EXAMPLES in the project (not abstract patterns)
+
+Action: created `.claude/skills/remotion-cinematic-craft/SKILL.md` as the first skill following this exhaustive standard. Future skill creations must match or exceed its depth.
+
 ---
 
 ## DAY 5 LEARNINGS (Apr 26, 2026)

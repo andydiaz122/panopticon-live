@@ -459,7 +459,35 @@ This segment paints the vision without overclaiming. Reasoned from first princip
 | 22:45 | **Git-log extraction for Scene 2B gitgraph**: `git log --since="2026-04-21" --pretty=format:'%H|%ai|%s' > demo-presentation/assets/git_timeline.txt` | File saved |
 | 23:00 | Sleep. | — |
 
-### Saturday 2026-04-25 (build sprint — Detective Cut)
+### Saturday 2026-04-25 — REVISED ROADMAP (per DECISION-020 + USER-CORRECTION-037)
+
+> **What changed**: tonight's pre-dawn sprint (2026-04-24 evening → 2026-04-25 ~04:30) shipped A1 tickertape, A5 architecture diagram (in FigJam), A7 vision pass, Q1 Download CSV button, Q2 B5Thesis composition, prod deploy with Lighthouse 100/100/100, narration overlay script, submission summary draft. Andrew's USER-CORRECTION-037 reset the quality bar: tonight's Remotion outputs are TOY-TIER and need Anthropic-release-video-quality rebuild before recording. New Saturday plan reflects the rebuild + recording sequence.
+
+| Time | Block | Deliverable |
+|---|---|---|
+| **MORNING — Remotion Tier 1 World-Class Overhaul (claude executes; ~5 hours)** | | |
+| 08:00 | Andrew wakes; Claude resumes from compact; `/skill-create remotion-cinematic-craft` activates the new skill | Skill loaded into context |
+| 08:15 | **Reference study**: rewatch Anthropic Opus 4.6 release video (`dPn3GBI8lII`) for 3 min; cross-reference `assets/references/anthropic_video_dna.md` motion-density notes | Visual vocabulary calibrated |
+| 08:30 | **Build B0OpenerV2** — 30-45s, 4 internal beats (silent cursor → typed dialog → response → fade-out → git timeline w/ parallax → chapter card), music bed, kerning sweep on hero, italic-reveal on accent. Audit against remotion-cinematic-craft 6-failure-modes checklist. | `B0OpenerV2.tsx` + render + checklist pass |
+| 11:00 | **Build B5ClosingV2 + B5ThesisV2 (bookend pair)** — 12-18s + 8-10s respectively, multi-element frames, weight modulation, kerning sweep, ambient drift. Same chapter-marker treatment as B0V2. | Bookend pair rendered + checklist pass |
+| **AFTERNOON — Andrew OBS Recording (Andrew leads; Claude assists by being on-call for any UX issues)** | | |
+| 13:00 | **A9a YouTube DRY RUN**: upload throwaway 30-s tennis clip, check Restrictions pane for Content ID flags (Iter-4 critical) | Channel verified |
+| 13:30 | **A9b CV submission DRY RUN**: load form in browser, screenshot every field, DO NOT submit | Form fields captured |
+| 14:00 | **OBS take 1** — record the 4 dashboard captures from `davinci_composite_workflow.md` Phase 1: `obs_b1_anomaly`, `obs_b2_huddrop`, `obs_b3_secondmiss_tab2`, `obs_b4_scouting`. Silent (audio bed in DaVinci). 1920×1080 @ 60fps. | 4 take-1 OBS files in `~/Movies/panopticon_obs_takes/` |
+| 16:00 | **Andrew checkpoint**: review take 1 captures with Claude. If any look off (jitter, timing, mis-trigger), retake those specific scenes. | Take 1 acceptance OR specific retake list |
+| 16:30 | **OBS take 2** (only IF take 1 had issues) — re-record problem captures | Final OBS files locked |
+| **EVENING — DaVinci Composite (Andrew + Claude pairing)** | | |
+| 17:30 | Andrew opens DaVinci Resolve following `davinci_composite_workflow.md`. Claude available for real-time consultation on text-overlay timing, transitions, color choices. | Project setup + asset import |
+| 18:00 | Timeline assembly per workflow doc. Drop the 4 OBS captures + 6 Remotion MP4s (the V2 versions from morning) in order. | Rough cut on timeline |
+| 19:00 | Dinner + review (45 min break) | — |
+| 19:45 | Text overlays via Fusion macro (7 overlays from `narration_overlays.md`). Iterate timing during scrub. | Overlays in place |
+| 21:00 | First full-cut export at lower quality (preview only). Watch end-to-end. | `renders/preview_v1.mp4` |
+| 21:30 | End-of-Saturday log roll — update MEMORY.md / FORANDREW.md / TOOLS_IMPACT.md with Saturday learnings | Living docs current |
+| 22:00 | **A2b decision gate (REVISED)**: IF rough cut feels World-Class → save and sleep. IF cuts feel weak (motion graphics overlay missing on OBS captures, tier-2 work needed) → carve Sunday morning slot for OBS-overlay templates. | Decision locked |
+
+> **Saturday morning Remotion overhaul superseded the original §10 Saturday plan** (A1/A5/A7/A8 etc were completed pre-dawn during the night-of-04-24 sprint). The original schedule below this line is preserved for historical reference / audit trail but should not be executed.
+
+### Saturday 2026-04-25 — ORIGINAL PLAN (SUPERSEDED — DO NOT EXECUTE; preserved for audit)
 
 | Time | Block | Deliverable |
 |---|---|---|

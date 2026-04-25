@@ -44,7 +44,15 @@ export default function HudView() {
   // A2a slow-mo at the Detective Cut's anomaly beats (PHASE_6_TEAM_LEAD_HANDOFF §2).
   // Pure HTMLMediaElement API — zero canvas coordination. See
   // dashboard/src/lib/useSlowMoAtAnomalies.ts for the ramp/hold shape.
-  useSlowMoAtAnomalies(videoRef);
+  // 2026-04-25 ~18:45 EDT — DISABLED for OBS recording session per Andrew's
+  // call. Even after root-causing the t=35s replay illusion (coach insight
+  // #5 inside slow-mo window — fixed in 52b8294), Andrew chose the cleaner
+  // path: record straight-through and add editorial pacing (slow-mo, freeze
+  // callouts) in CapCut where the editor has full creative control. The
+  // slow-mo IS still good product behavior for the live URL — re-enable
+  // post-demo by uncommenting the next line.
+  // useSlowMoAtAnomalies(videoRef);
+  void videoRef; // suppress unused-ref warning while disabled
 
   return (
     <div className="flex min-h-[calc(100vh-72px)] flex-col bg-[var(--color-bg-0)] p-6 lg:p-10">

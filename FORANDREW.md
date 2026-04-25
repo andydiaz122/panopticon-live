@@ -1450,3 +1450,76 @@ DaVinci Resolve assembly Saturday morning takes these MP4s + the dashboard OBS c
 **`mcp__claude_ai_Figma__generate_diagram` is the right tool for architecture diagrams that need to LIVE somewhere collaborative + editable.** Not for one-off rendered assets (Mermaid CLI is faster). Not for design-system Figma files (use the design tools). For "PANOPTICON architecture lives in FigJam where Andrew can edit nodes / add team members / export PNGs as the demo evolves" — perfect tool fit. Cost: 0 calls against the 6-call MCP budget (generate_diagram is exempt per GOTCHA-043). One-shot Mermaid → FigJam in <30s.
 
 **The "one thing at a time, polished" rule scales to micro-sprints.** This evening's 8-item sprint (ALL ✅) followed the rule rigorously: each item rendered + visually verifiable before moving on. Compare to a hypothetical "code everything in parallel, render once at the end" approach — would have surfaced 3-4 cross-cutting bugs (sequence-frame remapping, font loading, transformOrigin pivot drift) all at the same time, with no clear root-cause isolation. Serial discipline costs 5-10 minutes per item in render-and-verify time, buys 30-60 minutes per item in not-debugging-superpositioned-failures time.
+
+---
+
+## 2026-04-25 Pre-Dawn — Vercel Production Deploy + Chrome-DevTools Install + DECISION-019 Reframing (~02:30-04:30 EDT)
+
+Continuous session through the night. User pushed forward with "we are not going to wait to have fresh eyes tomorrow." This block covers everything from the chrome-devtools-mcp install through to the DECISION-019 final-product reframing landing as commits + prod deploy.
+
+### chrome-devtools-mcp installed at user scope
+
+After research via Perplexity, identified `chrome-devtools-mcp` (by the Chrome DevTools team, not Microsoft's `@playwright/mcp`) as the canonical browser MCP for Claude Code. Install:
+```
+claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest
+```
+Hot-loaded into the running session within minutes — no Claude Code restart required. **Corrected an earlier misconception** (CORRECTION-002): the MCP daemon picks up new MCPs and propagates schemas into the deferred-tool list automatically. Don't waste a restart cycle.
+
+Exposes 30 tools — navigation (`new_page`, `navigate_page`), visual capture (`take_screenshot`, `take_snapshot` for accessibility tree), interaction (`click`, `hover`, `fill_form`), inspection (`list_console_messages`, `list_network_requests`), Lighthouse audits, performance traces, theme emulation. This is the single highest-leverage tool installed all week — it lets me verify production end-to-end without depending on Andrew's eyes.
+
+### Vercel deploy iteration story (4 fails + 2 successes in ~10 minutes)
+
+The first prod deploy ever for `panopticon-live`. Layered config issues each surfaced a new gotcha:
+
+1. **Deploy 4 fail**: "No Next.js detected" — Vercel framework auto-detection looked at root package.json (doesn't exist) instead of dashboard/. (GOTCHA-047 traced back to `vercel link --yes` auto-creating a stray `hackathon-research` project from the cwd dir name.)
+2. **Deploy 5 fail**: "cd dashboard && bun install" doubled to dashboard/dashboard. Project settings in Vercel cached the install command from a prior config; conflicting with the new rootDirectory.
+3. **Fix via mcp__vercel__updateProject**: set `rootDirectory: dashboard`, strip `cd dashboard` prefix from buildCommand/installCommand. Project settings now consistent with Vercel's framework detection.
+4. **Deploy 6 fail**: session cwd had drifted to dashboard/ from earlier compound bash (`cd dashboard && rm -rf .vercel`). Combined with `rootDirectory=dashboard` gave dashboard/dashboard again.
+5. **Deploy 6.5 SUCCESS**: explicit `--cwd /Users/andrew/Documents/Coding/hackathon-research` on the deploy command. Production READY in 35s.
+6. **Deploy 7 SUCCESS**: shipped Q1 (Download CSV button) using the now-stable pipeline.
+
+**Live at `https://panopticon-live.vercel.app`** — the unscoped Vercel-app subdomain that was 404 before any prod deploy, now auto-aliased and PUBLIC (no SSO redirect, despite `ssoProtection: all_except_custom_domains` — turns out the unscoped vercel.app alias counts as exempt too, only the team-scoped `*-dmg-decisions.vercel.app` URL stays SSO-gated).
+
+### Lighthouse 100/100/100 + 193ms LCP
+
+After A11y polish (textMuted color bump #64748B → #94A3B8 + `<main className="contents">` landmark wrap), Lighthouse on prod:
+- Accessibility: **100** (was 94)
+- Best Practices: **100**
+- SEO: **100**
+- 45/45 audits passed, 0 failed
+
+Performance trace via chrome-devtools:
+- **LCP: 193ms** (Good threshold = 2500ms — we're at 7.7% of limit)
+- **CLS: 0.00** (perfect — zero layout shift)
+- TTFB: 34ms (Vercel edge cache helping)
+- 0 render-blocking issues
+
+These are submission-grade numbers. Engineering judges who check Web Vitals will see this is genuinely production-ready, not a held-together-with-tape demo.
+
+### DECISION-019 — final product reframing
+
+Andrew dropped a major framing pivot via Notion notes update (~03:30 EDT): **"The final product is going to be some sort of downloadable data file, like a CSV file of some pre-recorded match video. The value proposition is we're building the platform that extracts biometric signals in those data files as well as qualitative match extracts."**
+
+The dashboard isn't the product — it's the SHOWCASE. The product is the data-extraction PLATFORM producing two artifacts:
+1. Biometric signals CSV (one row per timestamp + signal_name pair, 7 signals × 53 rows)
+2. Qualitative match transcripts (multi-agent swarm output via Tab 3)
+
+This drove three concrete additions tonight:
+- **Q1**: "Download Match Data (.csv)" button on Tab 2 — gives judges a tangible artifact they can point at as "the product." Verified end-to-end (prod button click → downloaded `utr_01_segment_a_biometric_signals.csv`, 3.8 KB, 53 rows).
+- **Q2**: New B5Thesis Remotion composition — pure #000 void, Fraunces serif "capture the signal nobody else is reading." Sequenced AFTER B5 brand card with hard cut between, register switch makes the thesis LAND (PATTERN-083). Rendered to MP4, ready for DaVinci.
+- **Narration script (`scripts/narration_overlays.md`)**: 6 timed text overlays for B1-B4 + DaVinci-ready timing tables. Overlay #5 explicitly calls out the Download CSV moment per the new framing.
+- **Submission summary (`scripts/submission_summary.md`)**: 187-word draft + 100-word variant + YouTube description + asset cross-check. Leads with data moat, reframes dashboard as showcase, echoes B5Thesis closing line.
+
+### Tab 3 Scouting Committee verified end-to-end on prod
+
+Clicked through to Tab 3, hit ▶ PLAY COMMITTEE at 4× speed, all 5 trace events played, 3 agents (Analytics → Technical → Tactical) marked COMPLETE, FINAL TACTICAL BRIEF rendered with H2 headings (Vulnerability / Exploit Pattern / Watch Window). The "wow" feature for the Opus 4.7 judging criterion (25%) works on production.
+
+**One open issue surfaced**: the captured trace contains the `[error: Analytics Specialist failed with APIConnectionError]` from earlier today's rate-limit burst (GOTCHA-041). It's now visible in the demo replay. Andrew was given the option to either (a) re-run precompute for a clean trace, OR (b) accept it as honest-real-world-resilience narrative. Pending decision (Task #64).
+
+### Meta-learning this session
+
+**Visual verification IS the prod-readiness gate.** Before chrome-devtools-mcp, my "verify the deploy" was just `vercel deploy && grep "Production:" log`. After install: navigate to URL, screenshot, snapshot accessibility tree, list console messages, list network requests, run Lighthouse, run performance trace. The gap between "build succeeded" and "demo will work for judges" is a UNIVERSE — and chrome-devtools is what closes it. This tool should have been installed week 1.
+
+**The "downloadable artifact" anchor is the strongest possible product-validity signal.** A judge who clicks "Download CSV" and opens the file in Excel/pandas has SEEN the product, not just heard about it. The Q1 implementation took ~30 minutes and changes the entire framing of what gets evaluated. Similarly, the B5Thesis card costs ~15 minutes and converts the closing from "brand wordmark" (ho-hum) to "thesis statement that judges will quote in their notes" (memorable).
+
+**Iteration-on-prod is fine when you have visual verification.** Six deploys in 10 minutes with full verification cycle each is faster + safer than three deploys in 30 minutes with deferred verification — because each iteration's failure mode is bounded by what chrome-devtools sees, not what we hope is true.

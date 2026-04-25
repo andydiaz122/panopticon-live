@@ -723,3 +723,65 @@ First post-STEP-3 golden run had an APIConnectionError on the Analytics Speciali
 6. **Document** the synthesis durably (PLAN.md + MEMORY.md + FORANDREW.md + TOOLS_IMPACT.md — ALL FOUR)
 
 Skipping step 6 is the silent failure mode. The lessons learned tonight (PATTERN-082, 083, 084, DECISION-017, GOTCHA-045) are worth more across future projects than the specific B5 closing card itself. Documenting durably is the leverage move.
+
+---
+
+## Phase 6 — Pre-Dawn Vercel Deploy + chrome-devtools-mcp Install (2026-04-25 ~02:30-04:30 EDT)
+
+### Tool: `chrome-devtools-mcp` (Chrome DevTools team, official)
+
+**Cost**: 1 install command (`claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest`). Hot-loads into running session within minutes. No restart needed. Auto-launches Chrome on first call.
+**Output**: 30 tools across 6 capability clusters (navigation, visual capture, interaction, inspection, performance, emulation).
+**ROI**: **CRITICAL FOR HACKATHON DEMO READINESS — 10x leverage tool**. Without this MCP, "verify the deploy" was just grepping the deploy log. With it, every deploy gets a full verification cycle: navigate → screenshot → snapshot accessibility tree → list console messages → list network requests → Lighthouse audit → performance trace. The gap between "build succeeded" and "demo works for judges" is closed by this tool.
+
+**Concrete wins tonight**:
+- Caught dangling `panopticon-live.vercel.app` alias 404 (would have been a Saturday-morning surprise)
+- Caught Vercel preview SSO gate (would have prevented sharing preview URLs)
+- Caught 2 Lighthouse a11y failures, fixed them, verified fix on prod (94 → 100)
+- Verified Tab 3 swarm replay end-to-end on prod
+- Confirmed CSV download flow works (button click → file in ~/Downloads)
+- Performance trace: 193ms LCP, 0.00 CLS, 34ms TTFB
+
+**When to repeat**: every major UI deploy. The "screenshot + console + network + lighthouse" combo is so standard now I should default-include it in every prod-deploy verification.
+
+**Anti-pattern caught**: my earlier "MCP install requires Claude Code restart" claim was WRONG (CORRECTION-002 in MEMORY.md). The daemon hot-loads new MCPs into the deferred tool list. Don't waste restart cycles.
+
+### Tool: `mcp__vercel__updateProject` (community Vercel MCP)
+
+**Cost**: 1 API call to update project settings.
+**Output**: Patches Vercel project's `rootDirectory`, `installCommand`, `buildCommand`, `outputDirectory`, `framework`. Returns full project config.
+**ROI**: **HIGH** for fixing the Vercel project misconfiguration that broke deploys 4-5 tonight. Without this MCP, the alternative was the Vercel dashboard UI (manual click work) or undocumented `vercel project --update` CLI commands that don't expose all fields.
+**Use case**: any time Vercel auto-detection produces wrong defaults, or project settings cached from a prior deploy block a new deploy. Fix via API once, persists across all future deploys.
+**Note**: also returns the project's `ssoProtection.deploymentType` config — useful for diagnosing preview SSO gates without inferring from a 302 redirect.
+
+### Tool: `vercel deploy --prod --yes --cwd <path>`
+
+**Cost**: 30-60s per deploy on Apple M4 Pro for the dashboard project (Next.js 16 + Tailwind + Bun toolchain).
+**Use this session**: 6 deploy attempts (4 fails + 2 successes). Each fail surfaced a layered config issue.
+**ROI**: **REQUIRED — but iteration discipline matters**. Each deploy was followed by chrome-devtools verification. Fast iteration with full verification beats slow iteration with deferred verification.
+**Patterns established**:
+- Always pass `--cwd` explicitly. Session cwd drift is real and silent (caused deploy 6 failure tonight).
+- After ANY Vercel project setting change via `mcp__vercel__updateProject`, the next deploy is your verification — re-deploy and verify, don't trust the API response alone.
+- `vercel link --yes` AUTO-CREATES a new project if no `.vercel/project.json` exists AND cwd dir name doesn't match an existing project. ALWAYS pass `--project <name>` explicitly. (GOTCHA-047)
+
+### Tool: Lighthouse audit via chrome-devtools-mcp
+
+**Cost**: ~5 seconds per audit on a small page.
+**Output**: A11y / Best Practices / SEO scores + 45+ audit results + JSON report.
+**ROI**: **HIGH for hackathon submission**. Engineering judges check Web Vitals. Going from 94 → 100 a11y took ~10 minutes (color-contrast + landmark fixes). The polished-product signal it sends to judges is disproportionate to the work.
+**When to repeat**: before every "this is the demo URL we're submitting" moment. Run on the actual public URL judges will hit.
+
+### Tool: Performance trace via chrome-devtools-mcp
+
+**Cost**: ~10s for autoStop pageload trace.
+**Output**: LCP, CLS, TTFB, render-blocking insights, network dependency tree, full call tree.
+**ROI**: **HIGH-MEDIUM**. Confirmed our Vercel-deployed Next.js dashboard hits 193ms LCP / 0.00 CLS — submission-grade numbers we can put in the YouTube description if we want. Caught zero issues, but the absence of issues IS the signal.
+**When to repeat**: pre-recording on Saturday. Slow page on the recording machine = jittery OBS capture. Trace + fix BEFORE the recording starts.
+
+### Meta-learning
+
+**The tool that closes the "build succeeded vs demo works" gap is the highest-ROI tool to install on a hackathon project.** Should have installed chrome-devtools-mcp on Day 1 instead of Day 5. Logged as PATTERN for future hackathons: install browser-control MCP BEFORE writing the first line of UI code.
+
+**Vercel iteration speed matters more than first-deploy success rate.** 6 deploys in 10 minutes (4 fails + 2 successes) was strictly faster than the alternative ("read the docs carefully, plan the perfect deploy, ship once") because each fail surfaced a NEW layer of config — no amount of pre-reading would have caught all four. Iteration with verification IS the strategy.
+
+**Documentation pass cost ~10 minutes for ~3 hours of durable lessons.** This update + the FORANDREW.md entry + DECISION-019 in MEMORY.md is the difference between "we did the thing" and "we did the thing AND know why it worked." The second compounds across projects.

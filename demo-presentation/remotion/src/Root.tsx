@@ -1,8 +1,11 @@
 import { Composition } from 'remotion';
 
 import { B0Opener } from './compositions/B0Opener';
+import { B0OpenerV2 } from './compositions/B0OpenerV2';
 import { B5Closing } from './compositions/B5Closing';
+import { B5ClosingV2 } from './compositions/B5ClosingV2';
 import { B5Thesis } from './compositions/B5Thesis';
+import { B5ThesisV2 } from './compositions/B5ThesisV2';
 import { GitGraphDemo } from './compositions/GitGraphDemo';
 import { SceneBreakB2, SceneBreakB3, SceneBreakB4 } from './compositions/SceneBreak';
 import { HelloWorld } from './HelloWorld';
@@ -41,6 +44,14 @@ export const RemotionRoot = () => {
         height={1080}
       />
       <Composition
+        id="b0-opener-v2"
+        component={B0OpenerV2}
+        durationInFrames={2160}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
         id="gitgraph-demo"
         component={GitGraphDemo}
         durationInFrames={720}
@@ -57,9 +68,25 @@ export const RemotionRoot = () => {
         height={1080}
       />
       <Composition
+        id="b5-closing-v2"
+        component={B5ClosingV2}
+        durationInFrames={720}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
         id="b5-thesis"
         component={B5Thesis}
         durationInFrames={240}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="b5-thesis-v2"
+        component={B5ThesisV2}
+        durationInFrames={480}
         fps={60}
         width={1920}
         height={1080}

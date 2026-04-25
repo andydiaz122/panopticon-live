@@ -2160,6 +2160,49 @@ User directive 2026-04-25 ~04:30 EDT (verbatim): *"try to use skills and create 
 
 Action: created `.claude/skills/remotion-cinematic-craft/SKILL.md` as the first skill following this exhaustive standard. Future skill creations must match or exceed its depth.
 
+### PATTERN-086 — Pseudo-tempo authoring + single-iteration audit discipline for Remotion (B0OpenerV2 case study)
+
+Two sub-patterns from the 2026-04-25 pre-dawn B0OpenerV2 build, captured together because they're co-discovered:
+
+**A) Pseudo-tempo authoring (music-bed-aware composition without an audio track loaded).**
+Compose to an explicit BPM grid even when music is added later in DaVinci. Pick 120 BPM = beat every 30 frames @ 60fps; bar = 240 frames = 4s. Place all hard cuts and hero-slot swaps on bar lines. B0OpenerV2's six beats land on 4s/12s/18s/27s/32s/36s — all bar-line aligned. When DaVinci adds the audio bed Saturday evening, cuts will already fall on downbeats automatically. **Without this discipline, retrofitting audio synchronization is hours of frame-nudging.**
+
+**B) Single-iteration visual-conflict discipline.**
+First-render audit will ALWAYS reveal a visual conflict that was invisible at design time. The B0OpenerV2 case: dialog dimmed to 18% opacity intended as "ambient context" actually competed with the GitGraph at the same y=540 line. The instinct to soft-fade for "memory layer" effect is wrong; Anthropic's hard-cut discipline (drop fully to 0) is correct. **Budget for ONE iteration per composition** — extract 9 frames at beat boundaries (10%/25%/50%/75%/99%), audit against the 10-item checklist in `remotion-cinematic-craft`, fix the highest-priority issue, re-render. Stop at one iteration unless a fundamental issue (missing layer, broken timing) remains. Two iterations means the design was wrong; redesign rather than patch.
+
+**Operationalization for B5ClosingV2 / B5ThesisV2** (still to build): use the same 120 BPM grid; budget one render + audit + one fix per composition; reuse ChapterMarker (chapterId="ch.05", theme="VISION") and AmbientGrid for visual continuity with B0OpenerV2.
+
+### DECISION-021 — Anthropic Minimalism over Motion Maximalism (team-lead pivot 2026-04-25 06:00 EDT)
+
+After the Tier 1 Remotion overhaul shipped (B0OpenerV2 + B5ClosingV2 + B5ThesisV2 all rendered + audited), the team lead course-corrected the entire presentation strategy. The pivot is documented in HANDOFF_2026-04-25.md "STRATEGIC PIVOT" section. Recording it here for cross-session memory:
+
+**The pivot:** abandon Remotion as the primary path → adopt Keynote (static title cards) + OBS Studio (silent dashboard captures) + iPhone Voice Memos (clinical disembodied VO) + CapCut Desktop (assembly).
+
+**The why (team-lead reasoning, distilled):**
+1. **LLM motion-graphics blindness.** Authoring motion graphics via LLMs requires a tight visual feedback loop — kerning curves, easing, tempo all need to be SEEN at speed. ffmpeg frame extracts catch static issues (B0V2 dialog ghost) but cannot fully audit motion pacing. Static cards have no motion to audit; their quality is binary (font + color + spacing correct or not). Under deadline, switching to a medium where LLM judgment scales linearly is correct.
+2. **Face-cam VETO.** A face overlay on the corner of the dashboard shifts framing from "Cinematic Enterprise Product Launch" (Palantir / Numerai / Apple register) to "Indie Hacker YouTube Tutorial." Anthropic's release videos NEVER use face-cams. The "ghost in the machine" disembodied-clinical voice IS the brand register.
+3. **Information density beats motion density at the bookends.** The dashboard ITSELF carries motion (skeleton tracks, SignalBars pulse, agent trace replays). Bookend title cards should be still typography that lets the product shine.
+4. **Toolchain simplicity = schedule insurance.** CapCut Desktop's drag-drop + auto-duck + Voice Enhancement filter handles 95% of what DaVinci Fairlight + Fusion macros would, in 10% of the learning time. Solo execution under deadline rewards the simplest possible stack.
+
+**Operational consequences:**
+- 3 new prep docs authored (`voiceover_script.md`, `title_card_specs.md`, `capcut_assembly_workflow.md`) — these are the binding deliverables for Saturday execution
+- HANDOFF_2026-04-25.md gains a "STRATEGIC PIVOT — READ FIRST" section above §1
+- V2 Remotion files retained on disk as fallback insurance ONLY (not primary)
+- Saturday timeline replaced: SLEEP 06–10 (mandatory deliverable), RAW MATERIALS 11–13 (Keynote + OBS), VOICE 13–14 (closet sound booth), ASSEMBLY 15–19 (CapCut)
+
+**Meta-lesson (PATTERN-087 candidate, but consolidating into this DECISION since it's the same insight):**
+
+> When working under deadline + with LLM execution + on creative-medium output, choose the medium where **LLM judgment scales linearly with effort**, not where it scales sub-linearly because the medium requires a feedback loop the LLM cannot close on its own.
+
+Static typography → linear (LLM can specify exact font/color/position; if rendered correctly, it's correct).
+Motion graphics → sub-linear (LLM can specify keyframes but cannot watch the result at 60fps to audit pacing).
+Code → linear (LLM can write + test + iterate via the test loop, which IS the feedback medium).
+Sketches / illustrations → sub-linear (no test loop; needs human visual judgment per iteration).
+
+This is a generalized version of the "LLMs are good at code because tests close the loop" maxim, applied to creative outputs. **Use it next time a creative deliverable lands on the critical path.**
+
+**The most painful part of the pivot:** ~3 hours of pre-dawn Tier 1 Remotion work is now FALLBACK only. The work was high-quality. The decision to pivot was strategically correct anyway. **Hackathons reward shipping, not optimizing.**
+
 ---
 
 ## DAY 5 LEARNINGS (Apr 26, 2026)

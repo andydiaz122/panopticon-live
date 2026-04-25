@@ -172,18 +172,52 @@ Before rendering any new world-class composition, audit against this list. If AN
 
 ## Canonical Examples in This Project (LIVING — update as we ship)
 
-**Toy-tier (do NOT use as reference)**:
-- `B0Opener.tsx` (current — 25s, simple typing + git timeline + bare title) — needs T1 rebuild
-- `B5Closing.tsx` (current — 5s, single wordmark + URL) — needs T1 rebuild
-- `B5Thesis.tsx` (current — 4s, single line) — needs T1 rebuild
+**World-class shipped (use as reference)**:
+- `B0OpenerV2.tsx` (LANDED 2026-04-25 pre-dawn) — 36s, 6 internal beats (void breath
+  → user types → claude responds → git timeline → ignition + wordmark → chapter card
+  hold), persistent ChapterMarker chrome ("ch.00 / ORIGIN" with cyan accent),
+  AmbientGrid L5 slow-drift, italic-reveal beats on three accent words ("malleable?",
+  "build" with cyan glow, "Live" with kerning sweep), 120 BPM pseudo-tempo with beat
+  boundaries on bar lines (4s/12s/18s/27s/32s/36s). All 5 anatomy layers active.
+  Audit pass on 9 extracted frames; one iteration to fix dialog-ghost over-overlap.
+- `B5ClosingV2.tsx` (LANDED 2026-04-25 pre-dawn) — 12s, 4 internal beats (chrome
+  arrival → wordmark ignition → URL per-char stagger + repo → attribution), shares
+  ChapterMarker + AmbientGrid with B0V2 (theme switched to "ch.05 / VISION"),
+  fontSize 168 hero wordmark (more dramatic than B0V2's 132 because it's the sole
+  hero), Pattern A+B+ignition on wordmark, Pattern C per-character stagger on URL.
+  CLEAN ON FIRST RENDER — no iteration needed.
+- `B5ThesisV2.tsx` (LANDED 2026-04-25 pre-dawn) — 8s, 4 internal beats (marker
+  arrival → thesis kerning sweep + drift → accent rule wipe → hold + exit), pure
+  #000 void register (PATTERN-083 register-switch from B5ClosingV2's slate),
+  AmbientGrid suppressed (register-switch discipline), only "ch.05 / VISION"
+  chrome retained, 280px cyan accent rule under thesis creates visual rhyme with
+  chapter marker's cyan underline (top-right ↔ bottom-center). CLEAN ON FIRST
+  RENDER. Bookend with B5ClosingV2.
+- New primitives shipped: `ChapterMarker.tsx` (4-corner framing chrome) +
+  `AmbientGrid.tsx` (L5 slow-drifting faint grid). Both reusable across V2 family.
+
+**Toy-tier (do NOT use as reference — kept for 1 week as anti-pattern)**:
+- `B0Opener.tsx` (V1 — 25s, simple typing + git timeline + bare title) — superseded
+  by B0OpenerV2; delete after Sunday submission unless needed for comparison
+- `B5Closing.tsx` (V1 — 5s, single wordmark + URL) — superseded by B5ClosingV2
+- `B5Thesis.tsx` (V1 — 4s, single line) — superseded by B5ThesisV2
 - `SceneBreak.tsx` (current — 1.5s, simple title) — needs T2 rebuild
 
-**World-class targets (Saturday morning rebuild)**:
-- `B0OpenerV2.tsx` — 30-45s, 4 internal beats, music bed, kerning sweep on hero, italic reveal on accent, layered git timeline with parallax dots, chapter-marker bottom-right
-- `B5ClosingV2.tsx` — 12-18s, multi-frame: brand wordmark with weight modulation → tagline reveal → URL with kerning sweep → attribution per-char stagger
-- `B5ThesisV2.tsx` — 8-10s, multi-element thesis frame: chapter marker + thesis line with kerning sweep + accent rule + ambient drift on background
+**World-class targets (still to build, Saturday)**:
+- SceneBreak T2 rebuild: 6-8s interstitial cards with mini chapter markers
+  (ch.02/THE SENSOR, ch.03/THE RECURRENCE, ch.04/THE BRAIN), shared visual
+  vocabulary with B0V2/B5ClosingV2.
+- (Stretch) OBS-overlay templates for the dashboard walkthrough segments —
+  callout arrow, zoom-insert frame, kinetic-typography text card.
 
-When the V2 versions land, REPLACE this section's entries (keep the toy versions as anti-pattern reference for 1 week, then delete).
+The V2 family's visual continuity is the chrome (ChapterMarker style), the ambient
+field (AmbientGrid drift cycle when in HUD register), and the typography animation
+language (kerning sweep + italic reveal beat). The chapter ID changes (ch.00 →
+ch.02 → ch.03 → ch.04 → ch.05) and the theme labels change (ORIGIN → THE SENSOR →
+THE RECURRENCE → THE BRAIN → VISION), but the mechanics stay constant.
+**Continuity IS the chapter identity.** Register-switch (HUD slate ↔ pure void) is
+the closing structural device per PATTERN-083, used ONLY at the bookend boundary
+between B5ClosingV2 and B5ThesisV2.
 
 ## Anti-Pattern Cross-Reference
 

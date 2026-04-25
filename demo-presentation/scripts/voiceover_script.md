@@ -10,6 +10,13 @@ clinical disembodied VO + pristine OBS captures, assembled in CapCut Desktop).
 breathe — ~2:23 of the 3:00 video is product footage carrying its own weight,
 which is the Anthropic-release-video discipline).
 
+> ⚠️ **TIMING SHIFT 2026-04-25 ~10:45 EDT** — the opener was changed from
+> static title cards (15s) to a live typing intro + terminal precompute capture
+> (30s). **All L1-L12 timings shift forward by +15s** vs the table below.
+> Use the updated timing table at the end of this doc when placing VO clips
+> in CapCut. The line content + cadence + tone is unchanged — only the
+> on-timeline POSITION shifts.
+
 ---
 
 ## Tone & Performance Notes (read these BEFORE the first take)
@@ -196,3 +203,42 @@ Do NOT add these by default. Silence is the strongest editorial choice.
 
 **Author this voice with calm authority. The product is brilliant. Let your
 voice tell the judges you know it.**
+
+---
+
+## 📍 UPDATED Timeline Positions (post-2026-04-25 opener pivot)
+
+The new opener (live typing 22s + terminal precompute 5s + visual breath 3s
+= 30s total) replaces the old static-card opener (15s). **VO lines shift
+forward by ~15s.** Beat 3 (HUD walkthrough) compressed from 60s → 50s; Beat 4
+compressed from 60s → 55s. Use these positions in CapCut, not the old
+timestamps in the script body above.
+
+| Line | OLD timestamp (pre-pivot) | NEW timestamp (use this in CapCut) | Beat |
+|---|---|---|---|
+| L1 | 0:18 – 0:21 | **0:33 – 0:36** | Beat 2 cold open |
+| L2 | 0:24 – 0:28 | **0:39 – 0:43** | Beat 2 |
+| L3 | 0:32 – 0:37 | **0:47 – 0:52** | Beat 2 |
+| L4 | 0:48 – 0:52 | **1:03 – 1:07** | Beat 3 HUD walkthrough |
+| L5 | 0:58 – 1:01 | **1:11 – 1:14** | Beat 3 |
+| L6 | 1:08 – 1:13 | **1:21 – 1:26** | Beat 3 |
+| L7 | 1:22 – 1:28 | **1:35 – 1:41** | Beat 3 (closing flourish) |
+| L8 | 1:48 – 1:52 | **1:55 – 1:59** | Beat 4 CSV download |
+| L9 | 1:56 – 2:00 | **2:03 – 2:07** | Beat 4 |
+| L10 | 2:10 – 2:16 | **2:18 – 2:24** | Beat 4 swarm reveal |
+| L11 | 2:22 – 2:29 | **2:30 – 2:37** | Beat 4 |
+| L12 | 2:35 – 2:39 | **2:40 – 2:44** | Beat 4 (close) |
+
+**Visual landing notes** (for fine-tuning during CapCut assembly):
+- L1-L3 land during the cold-open OBS B1 capture (anomaly pulse)
+- L4-L7 land during the OBS B2 huddrop capture (HUD walkthrough)
+- L8-L9 land at/around the CSV download click (OBS B3)
+- L10-L12 land during the Tab 3 swarm replay (OBS B4)
+- The 2:45-2:48 black hold + 2:48-3:00 closing card play in **silence** —
+  no VO from L12 onward. The closing thesis card "speaks for itself" per
+  Anthropic-Minimalism doctrine.
+
+If your recorded VO lines drift slightly from these targets (you might speak
+faster or slower than the 165 wpm assumed pace), adjust positions in CapCut
+to land each line on a thematically relevant visual moment, not on the exact
+millisecond.

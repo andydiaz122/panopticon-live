@@ -31,9 +31,17 @@ CapCut wins on speed-to-ship. Use it.
 Confirm all assets exist on disk:
 
 ```bash
-# Title cards (3 PNGs from Keynote — see title_card_specs.md)
+# Live typing intro (QuickTime screen-record — see intro_typing_script.md)
+ls ~/Documents/Panopticon_Captures/intro_typing_raw.mov
+# Recorded ~60s raw; trimmed to 22s in CapCut
+
+# Terminal precompute screen-record (QuickTime — see "Terminal Precompute Capture Spec" below)
+ls ~/Documents/Panopticon_Captures/terminal_precompute_raw.mov
+# Recorded full pipeline run; speed-ramped 20x in CapCut to ~5s
+
+# Title cards (now 1 PNG from Keynote — Cards 1+2 RETIRED, see title_card_specs.md)
 ls ~/Documents/Panopticon_TitleCards/
-# Expected: card_01_question.png  card_02_answer.png  card_03_closing.png
+# Expected: card_03_closing.png  (only Card 3 — closing thesis — remains)
 
 # OBS dashboard captures (4 MP4s — see "OBS Capture Spec" section below)
 ls ~/Documents/Panopticon_OBS_Captures/
@@ -43,16 +51,49 @@ ls ~/Documents/Panopticon_OBS_Captures/
 ls ~/Documents/Panopticon_Audio/
 # Expected: vo_master.m4a (or vo_master.wav)
 
-# Optional: keyboard SFX + music bed
+# Optional: music bed (no keyboard SFX needed — live typing intro captures real keystrokes via laptop mic)
 ls ~/Documents/Panopticon_Audio/
-# Expected (if present): keyboard_typing.mp3  music_bed_instrumental.mp3
+# Expected (if present): music_bed_instrumental.mp3
 ```
 
 If ANY of these are missing, stop and produce them BEFORE opening CapCut. Working sequentially in CapCut while assets arrive is how cuts drift out of sync.
 
 ---
 
-## OBS Capture Spec (the 4 silent MP4s Andrew records 11:00–13:00 EDT)
+## Live Typing Intro Capture Spec (NEW opener — record FIRST at 11:00 EDT)
+
+**Full spec lives in `demo-presentation/scripts/intro_typing_script.md`.** Quick summary here:
+
+- **Tool:** QuickTime Player → New Screen Recording → "Record Selected Portion" around the Claude UI window
+- **URL:** `https://claude.ai/new` (fresh chat thread, dark mode, full-screen Chrome)
+- **Microphone:** **ON** (MacBook Pro mic) — captures authentic keyboard clack sound, NOT stock SFX. Per team-lead directive.
+- **Take:** Record ~60 seconds raw. Andrew types the 4-stage prompt evolution (naive predictor → tennis-specific → broadcast-video → biomechanical-extraction). Backspaces and typos stay in — that's authenticity. Hits ENTER once at the end. Captures first 1-2s of Claude's response, then stops recording.
+- **Output:** `~/Documents/Panopticon_Captures/intro_typing_raw.mov`
+- **CapCut treatment:** speed-ramp typing portions to ~1.4x, preserve natural pause beats; trim to **22 seconds** final.
+
+## Terminal Precompute Capture Spec (NEW — record SECOND at 11:00 EDT)
+
+- **Tool:** QuickTime Player → New Screen Recording → "Record Selected Portion" around the iTerm2/Terminal window
+- **Setup:**
+  - Open iTerm2 (or Terminal). Dark theme. Cmd+Plus to bump font size to ~16-18pt for visual clarity in 1080p capture
+  - `cd ~/Documents/Coding/hackathon-research`
+  - Clear scrollback (`Cmd+K` in iTerm2)
+  - Pre-stage the command in your shell history so you can up-arrow to it
+- **Recording:**
+  - Hit record
+  - Up-arrow + ENTER to run: `python -m backend.precompute utr_match_01_segment_a` (or whatever the actual precompute command is — confirm with `ls scripts/` or `make` recipes)
+  - Let the pipeline run end-to-end. Will scroll lots of output: "Loading YOLO11m-Pose...", "Processing frame 100/1800...", "Extracting biomechanical signals...", "Writing match_data.json... ✓"
+  - When the final ✓ line appears, give it a 1-second hold, then stop the recording
+  - Total raw recording duration: 30 seconds to 5 minutes depending on how fast precompute runs
+- **Microphone:** **OFF** (no value in capturing fan noise + keyboard clacks of you idle-watching the terminal). The visual is enough.
+- **Output:** `~/Documents/Panopticon_Captures/terminal_precompute_raw.mov`
+- **CapCut treatment:** **SPEED-RAMP TO 20x or 50x** — the entire pipeline run compresses to **3-5 seconds final** (logs blur past, ending cleanly on `Writing match_data.json... ✓`). Per team-lead directive: "It is literal tech-porn for engineering judges."
+
+**Why speed-ramp vs trim:** trimming would jump from "starting" to "done" — feels fake. Speed-ramping shows the FULL pipeline running but in compressed time — feels honest AND fast. The motion blur of scrolling text is its own visual signature.
+
+---
+
+## OBS Capture Spec (the 4 silent MP4s Andrew records 11:00–13:00 EDT, AFTER intro + terminal captures)
 
 | File | Duration target | What it captures |
 |---|---|---|
@@ -88,10 +129,11 @@ If ANY of these are missing, stop and produce them BEFORE opening CapCut. Workin
 
 ## Asset Import Sequence
 
-1. **Drag the 3 title-card PNGs** into the Media bin (left panel)
-2. **Drag the 4 OBS captures** into the Media bin
-3. **Drag the VO file (`vo_master.m4a`)** into the Media bin
-4. *(Optional)* Drag keyboard SFX and music bed if you have them
+1. **Drag the 1 title-card PNG** (Card 3 only — Cards 1+2 retired) into the Media bin (left panel)
+2. **Drag the 2 QuickTime intro captures** (`intro_typing_raw.mov`, `terminal_precompute_raw.mov`)
+3. **Drag the 4 OBS dashboard captures** into the Media bin
+4. **Drag the VO file (`vo_master.m4a`)** into the Media bin
+5. *(Optional)* Drag music bed if you have it (no keyboard SFX needed — typing audio is in `intro_typing_raw.mov`'s native audio track)
 
 CapCut auto-thumbnails everything. Confirm all assets appear.
 
@@ -114,24 +156,29 @@ Drag clips onto Track 4 in this exact sequence at these exact timecodes:
 
 | Start | End | Clip | Notes |
 |---|---|---|---|
-| 0:00 | 0:08 | `card_01_question.png` | Hold static for 8s; the typing SFX will play under it |
-| 0:08 | 0:09 | *(crossfade)* | 1-second cross-fade between Card 1 and Card 2 |
-| 0:09 | 0:15 | `card_02_answer.png` | Hold static for 6s |
-| 0:15 | 0:45 | `obs_b1_anomaly.mp4` | Trim if needed to fit 30s |
-| 0:45 | 1:45 | `obs_b2_huddrop.mp4` | Trim to fit 60s |
-| 1:45 | 2:30 | `obs_b3_secondmiss_tab2.mp4` | Trim if needed; this is the CSV download moment |
-| 2:30 | 2:45 | `obs_b4_scouting.mp4` | Trim to ~15s — capture just the most readable agent exchange |
-| 2:45 | 2:48 | *(black hold)* | Pure black — drag a black slide or use CapCut's built-in "background → solid black" — provides hard cut separation between dashboard footage and closing card |
-| 2:48 | 3:00 | `card_03_closing.png` | Hold static for 12s |
+| 0:00 | 0:22 | `intro_typing_raw.mov` (trimmed + speed-ramped to 1.4x on typing portions) | The 4-stage prompt evolution. Native audio (laptop-mic keystrokes) on its own audio sub-track. |
+| 0:22 | 0:27 | `terminal_precompute_raw.mov` (speed-ramped 20x or 50x) | The CV pipeline running in iTerm. Compressed scrolling logs ending on `Writing match_data.json... ✓`. NO audio. |
+| 0:27 | 0:30 | *(black hold + tiny "→" transition mark, OR optional 0.5s cross-fade)* | Visual breath separating "input" (typing + terminal) from "output" (dashboard). Hard cut into the dashboard reveal lands cleanly with this micro-pause. |
+| 0:30 | 1:00 | `obs_b1_anomaly.mp4` | Cold open on dashboard. Trim to 30s. **Beat 2 of demo storyboard.** |
+| 1:00 | 1:50 | `obs_b2_huddrop.mp4` | Tab 1 HUD walkthrough. Trim to 50s (down from 60s — recovered budget for the new opener). **Beat 3.** |
+| 1:50 | 2:45 | `obs_b3_secondmiss_tab2.mp4` + `obs_b4_scouting.mp4` (concatenated) | CSV download (~25s) + Tab 3 swarm replay (~30s). Total 55s. **Beat 4.** |
+| 2:45 | 2:48 | *(black hold)* | Pure black — drag a black slide or use CapCut's built-in "background → solid black" — provides hard cut separation between dashboard footage and closing card. |
+| 2:48 | 3:00 | `card_03_closing.png` | Hold static for 12s. **Beat 5: closing thesis.** |
 
 **Total runtime: exactly 3:00.**
 
-**Transition rule:** ALL cuts between OBS clips and between OBS→card are HARD CUTS. The only crossfade in the entire video is the 1-second Card1→Card2 crossfade in Beat 1. This matches Anthropic's "hard cut + occasional scale-pop + typewriter" vocabulary.
+**Transition rule:** Almost everything is a HARD CUT. Two soft transitions allowed:
+1. The 0.5s cross-fade (or pure black hold) at 0:27-0:30 between terminal capture and dashboard reveal — visual breath between input and output.
+2. The black hold at 2:45-2:48 before the closing card — hard cut separation between footage and editorial closing.
+
+Anthropic's vocabulary: "hard cut + occasional scale-pop + typewriter." Don't add additional crossfades. Don't add Ken Burns zooms. Don't add anything to the OBS captures (digital zoom on UI distorts text — team-lead VETO).
 
 ### Step 2 — Voiceover track
 
+> **Timing shift:** the new typing+terminal opener is 30s vs the old static-card 15s opener. **All VO line timings shift forward by +15s** vs `voiceover_script.md`. See the updated timing table at the bottom of `voiceover_script.md` for the new positions.
+
 If you recorded all 12 lines as separate clips: drag each onto Track 3 at the
-exact timecode from `voiceover_script.md` (e.g., L1 → 0:18, L2 → 0:24, ...).
+exact (shifted) timecode from `voiceover_script.md` (e.g., new L1 → 0:33, new L2 → 0:39, ...).
 
 If you recorded it as one long take: import the single file, slice between
 each line using the **Split** tool (S key in CapCut), then drag each piece

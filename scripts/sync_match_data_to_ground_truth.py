@@ -270,7 +270,17 @@ NEW_COACH_INSIGHTS: list[tuple[int, str, str]] = [
         "pro-tour baseline game.",
     ),
     (
-        36_000,
+        # 2026-04-25 ~18:15 EDT — moved from 36000ms to 37500ms after
+        # chrome-devtools-mcp instrumentation revealed perceptual "replay"
+        # bug: original 36000ms timestamp fell INSIDE the anomaly slow-mo
+        # window (35.6-37.1s @ 0.5x). Sequence was slow-mo (0.4 video-sec)
+        # → 6.2s freeze → slow-mo continuation (1.1 video-sec), which made
+        # the player-running-off-court action appear to play twice (paused
+        # mid-motion, then resumed-in-slow-mo from same frame). The 37500ms
+        # placement fires the past-tense commentary AFTER slow-mo ends, so
+        # the editorial sequence is: action → slow-mo replay → analytical
+        # commentary → next phase. Clean sequential beats, no overlap.
+        37_500,
         "point_closes_on_leave",
         "Point closes on a leave, not a winner. Player A steps ~1.5m INSIDE "
         "the baseline to read Player B's down-the-line slice and lets the "

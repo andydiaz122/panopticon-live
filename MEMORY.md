@@ -2203,6 +2203,40 @@ This is a generalized version of the "LLMs are good at code because tests close 
 
 **The most painful part of the pivot:** ~3 hours of pre-dawn Tier 1 Remotion work is now FALLBACK only. The work was high-quality. The decision to pivot was strategically correct anyway. **Hackathons reward shipping, not optimizing.**
 
+### DECISION-022 — Ground-truth sync executed (Sat 2026-04-25 ~09:00–10:00 EDT)
+
+After Andrew delivered a second-by-second ground-truth log of the 60-second clip, discovery revealed **MAJOR drift** between authored display data and what the clip actually shows. The authored data described a fictional sequence (BREAK POINT framing, "Toss is up" at 11s when actually no toss until 19s, narrator beats describing lateral sprints at 40-50s when Player A was off-camera). Sync executed via Python script with multi-agent review.
+
+**Execution path (per team-lead architectural guardrails):**
+- **NOT** a direct LLM-edit of the 549 KB JSON (LLMs lose closing brackets on big JSON; team-lead fix #3)
+- Python script (`scripts/sync_match_data_to_ground_truth.py`) loads JSON → mutates 5 arrays + 1 profile field → atomic write via `.tmp` + `os.replace()`
+- **NOT** new state-machine strings (team-lead architectural VETO #2). Mapped Andrew's 12 ground-truth phases STRICTLY into the existing RallyMicroPhase enum vocabulary (UNKNOWN, PRE_SERVE_RITUAL, SERVE, ACTIVE_RALLY, DEAD_TIME). Forensic detail (informal-bouncing, off-court running, returning) lives in the TEXT of narrations + insights, NOT in the state enum.
+- **NOT** new HUD widgets (zero React code changes). Used the existing widget catalog (PlayerNameplate, SignalBar, TossTracer); varied which signal each SignalBar foregrounds per phase.
+- Backup of original JSON moved OUT of `dashboard/public/` to `data/match_data_backups/` so Vercel doesn't deploy the pre-sync file as a static asset.
+
+**Multi-agent review panel** (4 orthogonal lenses, parallel dispatch):
+- `data-integrity-guard` → PASS (0 critical / 0 high / 0 medium / 4 low)
+- `biomech-signal-architect` → PASS WITH FIXES (1 critical: fabricated "0.6m behind baseline" was off by 14x from actual 0.04m; 1 high: 17s recovery interval math was wrong, should be 20s; 2 medium tone-softening)
+- `demo-director` → PASS WITH FIXES (3 high: display_narrations + narrator_beats were 90% redundant → collapsed narrations to phase labels; "five baseline biometric signals" → "seven" matches pitch; "5ft" → "1.5m" unit consistency)
+- `python-reviewer` → PASS WITH FIXES (3 high: non-atomic write, `assert` silenced under -O, profile_meta.note non-idempotent; 2 medium: `re` shadows stdlib, ID uniqueness check missing)
+
+ALL CRITICAL + HIGH + MEDIUM findings addressed in one consolidated patch. Re-ran script. MD5 idempotent across two consecutive runs (`6414b6ef6ba6cbc97e7e64a57fc49f94` → `6414b6ef6ba6cbc97e7e64a57fc49f94`). Dashboard renders new data; no console errors; TSC clean; full Next.js build succeeds.
+
+**Key lesson — PATTERN-087 candidate (LLM authoring needs cross-reference loops):**
+
+> When an LLM authors content that makes specific quantitative claims, those claims will be FABRICATED unless the LLM explicitly cross-references the underlying data. The "0.6m behind baseline" insight read fluently and biomechanically defensible — it was off by 14x because I never queried the actual `baseline_retreat_distance_m` value at t=22s. Multi-agent review with a domain-expert agent (here: `biomech-signal-architect`) catches this; LLM self-review does not.
+
+**Operational consequence for future content authoring:**
+1. NEVER cite specific numbers without grepping the underlying data first
+2. ALWAYS dispatch a domain-expert reviewer agent for any content with quantitative claims
+3. Self-review is necessary but not sufficient
+
+**Files committed:**
+- `scripts/sync_match_data_to_ground_truth.py` (~480 lines, fully self-validating, atomic writes, idempotent)
+- `dashboard/public/match_data/utr_01_segment_a.json` (rewritten in place, 532 KB compact JSON, 14 KB smaller than original because eliminated unused tool_call traces)
+- `data/match_data_backups/utr_01_segment_a.json.bak.pre-ground-truth-sync` (preserved pre-sync original)
+- `demo-presentation/scripts/ground_truth_sync_plan.md` (the plan document with 3 decisions resolved)
+
 ---
 
 ## DAY 5 LEARNINGS (Apr 26, 2026)

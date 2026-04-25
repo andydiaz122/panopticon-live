@@ -1872,6 +1872,194 @@ This entire 2026-04-24 Late Evening section + the cross-session memory updates a
 
 ---
 
+## 2026-04-24 Late-Late Evening — Vimeo/Numerai DNA Synthesis + Friday Pull-Forward Sprint Complete (~19:30-22:00 EST)
+
+User identified the Vimeo 205032211 reference video late evening; deconstruction agent returned with full DNA file at `demo-presentation/assets/references/vimeo_205032211_dna.md`. Video identified as Numerai's *Introducing Numeraire* (Feb 2017, 2:04). Synthesis produced 3 new patterns + 1 decision + 1 workflow log, all applied to B5Closing.tsx + GitGraph.tsx that same evening, all 5 chrome compositions re-rendered to MP4.
+
+### PATTERN-082 — Logo ignition (brightness + glow curve), NOT scale-pop, for the "live data powering on" semantic
+
+When a wordmark / sigil / icon is supposed to read as a piece of telemetry equipment "switching on" (broadcast HUD, live-data dashboard, neon sign), use a brightness + glow ignition curve instead of a scale-pop spring.
+
+**Mechanic**:
+```ts
+const ignitionProgress = interpolate(frame, [START, START+30], [0, 1], { ...clamp });
+const brightness = interpolate(ignitionProgress, [0, 1], [0.55, 1.0]);
+const glowBlur = interpolate(ignitionProgress, [0, 1], [0, 18]);
+// On the element:
+filter: `brightness(${brightness}) drop-shadow(0 0 ${glowBlur}px rgba(0,229,255,0.35))`;
+```
+
+**Why it's better than scale-pop for this register**: scale-pop says "this is editorial typography appearing." Brightness-and-glow says "this is a neon sign powering on." For broadcast-HUD context where cyan = LIVE TELEMETRY, ignition is semantically truer to the register.
+
+**Why use `filter: drop-shadow` and not `text-shadow`**: drop-shadow respects the rendered alpha shape of the entire element (including any inner spans with different colors), so a white "Panopticon" with a cyan-italic "Live" inner span gets a unified cyan halo around the whole composite. text-shadow would only affect text glyphs, breaking on the inner span's color override.
+
+**WCAG note**: keep brightness ≥ 0.55 minimum so the wordmark never disappears below readability threshold during the ignition ramp. Bottom of the curve is "dimmed but visible," not "invisible then visible."
+
+**Applied in**: `demo-presentation/remotion/src/compositions/B5Closing.tsx` — wordmark ignites frames 18-48 (0.3-0.8s).
+
+**Source**: Vimeo 205032211 DNA file §3 ("Motion primitives observed → Logo ignition") and §10.4 ("Closing-card formula").
+
+### PATTERN-083 — Two-card-split is a structural device only when there's a VISUAL REGISTER SWITCH between cards
+
+Numerai's closing uses a two-card sequence (cinematic-plate-with-sigil → typographic-void-with-URL) connected by hard cut. The structural magic is the VISUAL REGISTER SWITCH between cards (cinematic register → editorial register), not the card count.
+
+**Anti-pattern to avoid**: copying the two-card structure when both cards live in the same visual register. That's just longer dwell time without the magic — it doesn't produce the Numerai effect.
+
+**Decision rule**: before splitting a closing into N cards, ask: "Does each card live in a DIFFERENT visual register (cinematic plate vs. typographic void vs. data-rich infographic vs. handheld interview)?"
+- If YES (e.g., cinematic plate → typographic void): the split adds craft.
+- If NO (both cards are typographic void): collapse to ONE card and apply surgical wins (ignition curve, whispered body copy, slow drift) within it.
+
+**Applied in**: `B5Closing.tsx` — chose ONE card with surgical Numerai wins instead of two cards in the same typographic register. Documented the rejection rationale in the file's docstring.
+
+**Source**: derived during 2026-04-24 ~20:00 EST B5 refit decision. Listed as PATTERN-083 to give it a stable handle for future projects.
+
+### PATTERN-084 — Slow ~2-3% scale drift on cinematic plates ("camera alive" cue without Ken Burns aggression)
+
+Numerai applies a continuous slow zoom or lateral drift to every cinematic plate to keep the camera subliminally "alive." The drift rate is ~2-3% over the full duration of the shot — slow enough that no individual frame differs visibly from its neighbor, but the viewer's eye knows the camera isn't dead.
+
+**Mechanic**:
+```ts
+const driftScale = interpolate(frame, [0, durationFrames], [1.0, 1.02], { ...clamp });
+// On outer element:
+transform: `scale(${driftScale})`;
+transformOrigin: 'center center';  // critical — pivots from top-left otherwise create lateral shift
+```
+
+**Anti-pattern to avoid**: Ken Burns aggression (5-10% zoom over a few seconds reads as History-Channel slideshow). Numerai's discipline is restraint — 2% over 5-11 seconds.
+
+**Where to apply**: any composition that holds for >3 seconds and would otherwise feel statically dead. Closing cards (5s held) and timelapse sequences (11s GitGraph) are prime candidates. Scene-break cards (1.5s) are too short — the drift would not register and adds a bug-vector for no gain.
+
+**Where NOT to apply**: any HUD overlay or data widget. Slow drift on live data reads as "broken HUD," not "camera alive."
+
+**Applied in**:
+- `B5Closing.tsx` — `transform: scale(${1.0→1.02})` over 300 frames, anchored center-center.
+- `GitGraph.tsx` — new optional `driftDurationFrames` prop (default 660 = 11s @ 60fps).
+
+**Source**: Vimeo 205032211 DNA file §3 ("Motion primitives observed → Slow camera drift inside cinematic plates") + §10.5.
+
+### DECISION-017 — Vimeo/Numerai synthesis: surgical wins, reject register-shift moves
+
+Vimeo 205032211 (Numerai 2017) is a fundamentally DIFFERENT register than PANOPTICON LIVE — Numerai is cinematic-plate / interview-portrait / CGI-tableau register-braiding, PANOPTICON is broadcast-HUD register. We do NOT inherit Numerai's structural moves; we adopt surgical craft wins that compose within OUR existing register.
+
+**Adopted (3 surgical wins)**:
+- Logo ignition curve (PATTERN-082) — applied to B5 wordmark
+- Whispered body copy at #B8B8B8 instead of pure white (Numerai principle within PATTERN-082) — applied to B5 URL line
+- Slow ~2% drift on cinematic plates (PATTERN-084) — applied to B5 + GitGraph
+
+**Rejected (5 register-shift moves)**:
+- Single-family typography — we keep Fraunces serif + JetBrains Mono pairing
+- 2.39:1 cinematic letterbox — we need full 1080p HUD real estate
+- Buried-lede branding — judges need clear identification throughout
+- CGI maximalism / chrome busts / glitch storms — clinical-detective tone preserved
+- Chromatic aberration / RGB-shift glitch frames — try-hard digital aesthetic, conflicts with Detective Cut
+
+**Considered and rejected (1)**:
+- Two-card closing formula (PATTERN-083) — both cards would live in same register, magic doesn't transfer
+
+**Universal craft rule** (refines PATTERN-077 from earlier in this section): when sampling external design references, distinguish between **register-bearing structural moves** (don't transfer across registers) and **surgical craft wins** (transfer if the underlying mechanic is general). Numerai's logo ignition is general (works on any "live data" element). Numerai's letterbox is register-bearing (ties to cinematic A-roll, doesn't transfer to broadcast HUD).
+
+### WORKFLOW-010 — Friday-night pull-forward sprint complete (~21:00-22:00 EST)
+
+User reversed the "fresh eyes Saturday" plan: *"We are not going to wait to have fresh eyes tomorrow; we are going to work through tonight."* All 8 sprint items completed:
+
+1. ✅ Re-apply Fraunces serif to B0 title card
+2. ✅ Build B5 closing card (Anthropic editorial layout + cyan)
+3. ✅ Build SceneBreak primitive (B2/B3/B4 instances)
+4. ✅ Vimeo deconstruction + synthesis (this section)
+5. ✅ Architecture diagram via Figma MCP `generate_diagram` (FigJam at `figma.com/board/1McYlYT0isbmTOJshc9ip9`)
+6. ✅ B5 ignition curve + slow-drift refit (Numerai DNA application)
+7. ✅ GitGraph slow-drift overlay
+8. ✅ Re-render B0 + B5 + scene-breaks → 5 MP4s in `remotion/out/` (3.2MB DaVinci-ready)
+
+**Saturday morning surface area**: DaVinci composite (cuts B-beats together with 3 SceneBreak transitions + B0 opener + B5 closer + dashboard OBS captures), architecture-diagram PNG export from Figma, recording the OBS captures on the Vercel prod URL.
+
+### GOTCHA-045 — `mcp__claude_ai_Figma__generate_diagram` outputs an S3-signed thumbnail URL that expires in 7 days
+
+The diagram-creation MCP returns an `imageUrl` field that is an S3 pre-signed URL with an expiry (`expiresAt`: `2026-05-01T23:59:56Z` for our diagram generated 2026-04-24). For demo asset use, the diagram MUST be exported via `get_screenshot` tool (rate-limited, costs 1 of 5 monthly reads on starter plan, GOTCHA-043) OR opened in FigJam and exported manually as PNG before the expiry.
+
+**Action item**: Saturday morning, export the Architecture diagram PNG from FigJam (`figma.com/board/1McYlYT0isbmTOJshc9ip9`) and save to `demo-presentation/assets/architecture-diagram.png`. Do NOT rely on the imageUrl after 2026-05-01.
+
+---
+
+## 2026-04-25 Pre-Dawn — Chrome-DevTools MCP Install + Vercel Production Deploy Sprint
+
+Pulled forward Saturday's Vercel production deploy (per PLAN.md §10 the prod deploy was scheduled for 16:30 Saturday). Discovery sequence: installed chrome-devtools-mcp → smoke-tested production URL via browser → discovered 3 separable critical defects → began remediation.
+
+### CORRECTION-002 — MCP install does NOT require a session restart (overrides earlier claim)
+
+I incorrectly stated earlier that "the agent's tool registry is frozen at session start; new MCPs require Claude Code restart to expose their tools." This was wrong. After running `claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest`, the Claude Code daemon hot-loaded the new MCP's 30 tool schemas into the deferred-tool list within minutes — no restart needed. Verified by successfully calling `new_page`, `take_screenshot`, `list_console_messages`, `list_network_requests`, `navigate_page` in the same session as the install.
+
+**Why the misconception**: stale mental model from earlier MCP versions where tool registry was indeed session-scoped. Modern Claude Code daemon supports hot-reload.
+
+**How to apply**: after any `claude mcp add` or `claude mcp authenticate`, ALWAYS try `ToolSearch +<mcp-prefix>` first to see if the tools are immediately available. Only restart if hot-load doesn't fire.
+
+### GOTCHA-046 — `chrome-devtools-mcp` install command + capability inventory
+
+```
+claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest
+```
+
+Always `--scope user` (anti-pattern #26 — browser MCP is useful across all projects, not just one).
+
+Exposes 30 tools, organized by capability cluster:
+- **Navigation**: `new_page`, `navigate_page`, `select_page`, `close_page`, `list_pages`
+- **Visual capture**: `take_screenshot` (PNG/JPEG/WebP, viewport or fullPage), `take_snapshot` (DOM/accessibility tree — critical for "behavior, not just pixels" verification)
+- **Interaction**: `click`, `hover`, `drag`, `fill`, `fill_form`, `type_text`, `press_key`, `upload_file`, `handle_dialog`
+- **Inspection**: `list_console_messages` (filter by level), `list_network_requests` (filter by resource type), `get_console_message`, `get_network_request`
+- **Code execution**: `evaluate_script` (run arbitrary JS in page context)
+- **Performance**: `lighthouse_audit`, `performance_start_trace` / `performance_stop_trace` / `performance_analyze_insight`, `take_memory_snapshot`
+- **Emulation**: `emulate` (theme switching, device, network throttle), `resize_page`, `wait_for`
+
+Auto-launches Chrome on first call. macOS may prompt for screen recording / accessibility permission on first screenshot — grant via System Settings > Privacy & Security.
+
+**Why this is high-leverage for hackathon**: combines screenshot (visual proof) + take_snapshot (semantic proof) + lighthouse_audit (perf proof) + list_console_messages (no JS errors proof) + list_network_requests (all assets loaded proof) into a single verification pass. Replaces 4 separate manual checks per dashboard scene.
+
+### GOTCHA-047 — `vercel link --yes` AUTO-CREATES a new project if no .vercel/project.json exists AND the cwd directory name doesn't match an existing project
+
+When the repo has no `.vercel/project.json` and you run `vercel link --yes`, Vercel CLI uses the cwd directory name as the new project name and creates it without prompting. Discovered tonight: ran `vercel link --yes` from `/Users/andrew/Documents/Coding/hackathon-research/` → Vercel auto-created a new project called `hackathon-research` instead of linking to the existing `panopticon-live` project.
+
+**Fix**: always pass `--project <existing-project-name>`:
+```
+vercel link --project panopticon-live --yes
+```
+
+The auto-created stray project remains in the team's project list (no Production URL, idle). Cleanup post-submission via `vercel project rm hackathon-research` (destructive, requires confirmation).
+
+### GOTCHA-048 — Team-scoped Vercel projects CANNOT claim unscoped `<project>.vercel.app` aliases; reserved for Hobby (personal) projects
+
+Discovered when smoke-testing `https://panopticon-live.vercel.app` returned `404 DEPLOYMENT_NOT_FOUND` despite the `panopticon-live` project existing in the `dmg-decisions` team. The unscoped subdomain `panopticon-live.vercel.app` is reserved for Vercel Hobby (personal-account) projects only. For team-scoped projects, the canonical alias is `<project>-<team>.vercel.app` — in our case `panopticon-live-dmg-decisions.vercel.app`.
+
+**Implication for the demo**: any URL hardcoded in B5Closing.tsx, README, GitHub repo description, or YouTube description that references `<project>.vercel.app` for a team-scoped project will 404 forever.
+
+**Fix options**:
+1. Use the team-scoped alias `<project>-<team>.vercel.app` (functional, ugly)
+2. Add a custom domain (e.g., `panopticon.andrewdiaz.io` or name-neutral `live.andrewdiaz.io`)
+3. Move the project to a personal Vercel account (administrative — not viable mid-hackathon)
+
+For PANOPTICON LIVE we adopted option 2 with a name-neutral subdomain (`live.andrewdiaz.io`) so the URL survives any future project rename without reconfiguration.
+
+### GOTCHA-049 — Vercel preview deployments default-require Vercel SSO authentication on Pro teams (judges can't view them)
+
+The latest preview URL `https://panopticon-live-1fqx9c4iz-dmg-decisions.vercel.app` redirected to `vercel.com/login?next=...sso-api...` — Vercel's "Deployment Protection" feature is enabled by default on Pro teams for preview environments. Anyone visiting a preview URL without an active Vercel session for the team will see the login page, NOT the dashboard.
+
+**Implication**: cannot use a preview URL for demo recording or share with judges. Production deployments are public by default (deployment protection NOT enabled in production unless explicitly toggled).
+
+**Fix**: deploy to production (`vercel deploy --prod --yes`) and use the production URL or a custom domain pointed at production.
+
+### DECISION-018 — Ship "Panopticon" name for v1 submission; reserve renaming for post-submission v2
+
+Andrew surfaced unease with the "Panopticon" name late evening 2026-04-24. Cost analysis:
+- **Rename mid-Saturday**: ~3-4 hours (50+ files, 5 rendered MP4s, all docs, repo name, GitHub URL printed in B5 card, dashboard wordmark, OBS scenes if recorded). Eats recording time. HIGH submission risk.
+- **Rename post-submission**: ~3 hours, no deadline pressure, GitHub auto-redirects preserve printed repo URL. LOW risk.
+
+Decision: ship "Panopticon" for v1. Use **name-NEUTRAL custom domain `live.andrewdiaz.io`** so URL survives any v2 rename without reconfiguration. Generated 10 alternative names (Argus, Atlas, Hermes, Topspin, Crosscourt, Deuce, Sentinel, Beacon, Citadel, Vector) for Andrew to consider post-submission.
+
+**Why this works**: "Panopticon" is an actual word with surveillance/biometric narrative resonance. Judges won't penalize. Citadel (the firm) is built on the same observation metaphor. The demo's narrative ("we see what the broadcast doesn't") IS the panopticon concept literalized.
+
+**Meta-pattern for time-boxed projects**: when a creative decision (naming, color palette, logo design) competes with critical-path execution work AND the existing choice is "good enough" (not broken, just suboptimal), defer the creative decision until post-deadline. The cost of imperfect-but-shipped >> cost of perfect-but-late.
+
+---
+
 ## DAY 5 LEARNINGS (Apr 26, 2026)
 
 (To be populated)

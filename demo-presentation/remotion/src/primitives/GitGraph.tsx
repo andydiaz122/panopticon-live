@@ -31,6 +31,12 @@ export interface GitGraphProps {
   staggerFrames?: number;
   width?: number;
   y?: number;
+  /**
+   * Frame count over which the slow ~2% scale drift completes.
+   * Numerai cinematic-plate "camera alive" cue (PATTERN-084).
+   * Default 660 = 11s @ 60 fps, matching the B0 GitGraph sequence window.
+   */
+  driftDurationFrames?: number;
 }
 
 // Restored cyan-on-blue palette (2026-04-24 evening) — matches dashboard's
@@ -50,6 +56,7 @@ export const GitGraph = ({
   staggerFrames = 36, // 0.6 s at 60 fps
   width = 1400,
   y = 540,
+  driftDurationFrames = 660, // 11s @ 60fps — Numerai slow-drift window (PATTERN-084)
 }: GitGraphProps) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -60,6 +67,16 @@ export const GitGraph = ({
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
+
+  // Slow ~2% drift across the full sequence — Numerai DNA section 10.5.
+  // Subliminal "camera alive" cue. NOT Ken Burns. Scale interpolates
+  // 1.00 → 1.02 over driftDurationFrames, anchored to SVG center.
+  const driftScale = interpolate(
+    localFrame,
+    [0, driftDurationFrames],
+    [1.0, 1.02],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+  );
 
   // Centered on 1920-wide canvas
   const canvasWidth = 1920;
@@ -77,7 +94,13 @@ export const GitGraph = ({
     <svg
       width={canvasWidth}
       height={1080}
-      style={{ position: 'absolute', top: 0, left: 0 }}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        transform: `scale(${driftScale})`,
+        transformOrigin: '50% 50%',
+      }}
     >
       {/* Background line (full) */}
       <line
@@ -114,7 +137,11 @@ export const GitGraph = ({
 
       {/* Anchors — dots + labels */}
       {anchors.map((anchor, i) => {
-        const popFrame = anchorPopFrames[i];
+        // anchorPopFrames + anchorXs are .map()'d from anchors so always have
+        // the same length — non-null assertion is safe here. Suppresses the
+        // TS18048 noise from noUncheckedIndexedAccess.
+        const popFrame = anchorPopFrames[i]!;
+        const x = anchorXs[i]!;
         const isLanding = i === anchors.length - 1;
         const popProgress = spring({
           frame: localFrame - popFrame,
@@ -132,8 +159,6 @@ export const GitGraph = ({
           [0, 1],
           { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
         );
-        const x = anchorXs[i];
-
         return (
           <g key={i}>
             {/* Pulse ring for the landing anchor */}

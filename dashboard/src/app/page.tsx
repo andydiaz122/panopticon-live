@@ -24,29 +24,35 @@ export default function Home() {
       videoSrc="/clips/utr_match_01_segment_a.mp4"
       matchDataSrc="/match_data/utr_01_segment_a.json"
     >
-      <TabShell
-        initialTabId="hud"
-        tabs={[
-          {
-            id: 'hud',
-            label: 'Live HUD',
-            sublabel: 'Broadcast overlay',
-            content: <HudView />,
-          },
-          {
-            id: 'telemetry',
-            label: 'Raw Telemetry',
-            sublabel: 'Signal feed',
-            content: <SignalFeed />,
-          },
-          {
-            id: 'scouting',
-            label: 'Scouting Committee',
-            sublabel: '3-agent swarm',
-            content: <OrchestrationConsoleTab />,
-          },
-        ]}
-      />
+      {/* <main> landmark — Lighthouse landmark-one-main / WCAG 2.1 a11y. GOTCHA-050.
+          className="contents" contributes the WCAG landmark without inserting
+          a box into the layout algorithm — preserves TabShell's min-h-screen
+          resolution against the viewport. */}
+      <main className="contents">
+        <TabShell
+          initialTabId="hud"
+          tabs={[
+            {
+              id: 'hud',
+              label: 'Live HUD',
+              sublabel: 'Broadcast overlay',
+              content: <HudView />,
+            },
+            {
+              id: 'telemetry',
+              label: 'Raw Telemetry',
+              sublabel: 'Signal feed',
+              content: <SignalFeed />,
+            },
+            {
+              id: 'scouting',
+              label: 'Scouting Committee',
+              sublabel: '3-agent swarm',
+              content: <OrchestrationConsoleTab />,
+            },
+          ]}
+        />
+      </main>
     </PanopticonProvider>
   );
 }

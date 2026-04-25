@@ -13,7 +13,7 @@ export const colors = {
   playerB: '#FF3D71', // coral red (retained for token completeness; drawing disabled per DECISION-008)
 
   // Signal state (tone mapping from z-score via zScoreToTone.ts)
-  baseline: '#64748B', // slate — |z| < 1
+  baseline: '#64748B', // slate — |z| < 1 (intentionally diverges from textMuted now; do NOT collapse)
   energized: '#34D399', // emerald — z ≥ 1, higherIs: 'energy'
   fatigued: '#F59E0B', // amber — z ≥ 1, higherIs: 'fatigue' | 'drift'
   anomaly: '#EF4444', // red — |z| ≥ 2 in any direction
@@ -29,7 +29,7 @@ export const colors = {
   // Text
   textPrimary: '#F8FAFC',
   textSecondary: '#CBD5E1',
-  textMuted: '#64748B',
+  textMuted: '#94A3B8', // slate-400 — bumped from slate-500 (#64748B) for WCAG AA contrast on bg0 (4.04 → 6.9 ratio). GOTCHA-050.
 } as const;
 
 /**

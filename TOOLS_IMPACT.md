@@ -666,3 +666,60 @@ First post-STEP-3 golden run had an APIConnectionError on the Analytics Speciali
 **Sibling worktrees are read-only context libraries, not work surfaces.** The sibling `hackathon-demo-v1/` has been consolidated into this branch's `demo-presentation/`. It lives on disk but is no longer a work surface. This disambiguates future "where do I edit?" questions — the answer is always "here, in `hackathon-research/`".
 
 **Adaptive thinking is a prompt-engineering problem.** Opus 4.7 won't emit thinking blocks for "analyze these signals" — the model judges that single-step. It WILL emit for "consider this alternative hypothesis and explicitly reject it with evidence" — that's a genuine 2-step reasoning task. The STEP 3 nudge is the prompt-design equivalent of "always wire the multi-hypothesis structure explicitly." Captured as GOTCHA-040.
+
+---
+
+## Phase 6 — Late-Late Evening Vimeo/Numerai Sprint (2026-04-24 ~19:30-22:00 EST)
+
+### Tool: Custom local agent — Vimeo deconstruction
+
+**Cost**: 1 background agent dispatch, ~7 minutes wall-clock, ~175K tokens, 55 tool uses.
+**Output**: 4.1MB DNA file at `demo-presentation/assets/references/vimeo_205032211_dna.md` with 11 numbered sections, hex-confirmed palette tables, scene-by-scene log.
+**ROI**: **HIGH**. Three direct wins:
+1. Identified the source as Numerai's *Introducing Numeraire* — gave us proper context, not just "some cool video."
+2. Section "What's UNIQUE to Numerai" + "Cross-reference with Anthropic — CONVERGENT" provided a structured ADOPT-vs-REJECT framework that prevented copy-paste mistakes (letterbox, single-family typography, two-card-split would all have been wrong inheritances).
+3. Section §10 ("Five-to-Seven Concrete Remotion Principles") gave us 7 transferable surgical mechanics, of which 3 (logo ignition, whispered body copy, slow drift) landed in code that same evening.
+**When to repeat**: any time a design reference video / film / motion piece comes in cold. Spend the 7 minutes on background analysis BEFORE the synthesis attempt. The agent's structured "convergent vs unique vs anti-pattern" framing is what makes the synthesis tractable.
+**Anti-pattern caught**: would have inherited Numerai's letterbox + two-card-split + single-family typography wholesale without the agent's "register-bearing vs surgical-mechanic" distinction. Captured as DECISION-017 in MEMORY.md.
+
+### Tool: `mcp__claude_ai_Figma__generate_diagram` (Figma MCP)
+
+**Cost**: 1 tool call. EXEMPT from the 6-call/month MCP budget (GOTCHA-043). ~20 seconds wall-clock from Mermaid syntax → FigJam diagram with shareable URL.
+**Output**: PANOPTICON LIVE pipeline architecture diagram in FigJam at `figma.com/board/1McYlYT0isbmTOJshc9ip9`. 9 nodes (ffmpeg → YOLO → Kalman → 3-Pass DAG → 7 Signals → DuckDB → Server Action → Opus 4.7 → 2K HUD) + dotted feedback edge from Opus to HUD.
+**ROI**: **HIGH for our specific use case**. The diagram needs to LIVE somewhere collaborative + editable + exportable as PNG for the demo. Mermaid CLI would render a static PNG faster but couldn't be edited, embedded in Figma branding, or shared with team members. The Figma MCP fits the "architecture-as-living-document" use case exactly.
+**Caveats**:
+- Returns an `imageUrl` that's S3-signed with a 7-day expiry. Don't reference that URL in deliverables — re-export to local PNG before expiry. Captured as GOTCHA-045.
+- The tool generates ONE diagram per call. Don't attempt to compose multi-diagram boards in a single call.
+- Saving to a `planKey` (Andrew's team key from `whoami`) keeps the diagram in his account so it's not lost when the conversation ends.
+- Cannot move/style individual shapes after generation — all visual customization happens at the Mermaid syntax level. For richer post-generation editing, open in FigJam.
+**When to repeat**: any time a project needs an architecture diagram, decision tree, sequence diagram, or state diagram that lives in a shareable surface. Don't use for: data visualizations, design-system layouts, interactive prototypes.
+
+### Tool: ToolSearch (deferred-tool loader)
+
+**Cost**: 1-2 tool calls per session to load deferred tool schemas. Negligible token cost (one tool's schema is ~500 tokens).
+**Use case this session**: loaded `mcp__claude_ai_Figma__generate_diagram`, `TaskUpdate`, `TaskCreate` schemas on demand. The schema-on-demand pattern (vs. all tools loaded upfront) keeps the global tool list short and the system reminder small.
+**ROI**: **MEDIUM**. Mainly invisible — saves ~5-10K tokens per session by deferring rarely-used tool schemas. The visible benefit is "I forgot how to call this tool" → ToolSearch with a name → schema loads → done. Better than guessing parameters and getting InputValidationError.
+**Anti-pattern caught**: tried to call `mcp__claude_ai_Figma__generate_diagram` directly without loading its schema → would have failed with InputValidationError. ToolSearch + name resolves cleanly.
+**When to use**: any time a tool name appears in the deferred-tools list at session start but isn't in the active tool list. Don't keyword-search if you know the name — use the `select:NAME` form for an exact match.
+
+### Tool: Remotion render (`./node_modules/.bin/remotion render <id>`)
+
+**Cost**: ~2-5 seconds per second of output video on M4 Pro. b0-opener (25s) renders in ~50s; 5s closing card in ~10s; 1.5s scene break in ~5s.
+**Use this session**: rendered 5 compositions (b0-opener, b5-closing, scene-break-b2/b3/b4) in a single batch. Used `run_in_background: true` for the 4-composition batch (~70s total) so the main session could continue writing docs.
+**ROI**: **EXTREMELY HIGH for this project**. Programmatic Remotion + frame-driven animations + batch rendering = full DaVinci-ready chrome library in ~2 minutes after each Remotion code change. Compare to After Effects manual render farm: ~30+ minutes per pass.
+**Patterns established**:
+- ALWAYS use `./node_modules/.bin/remotion` (full path) instead of `bunx remotion` — avoids cwd drift bugs.
+- Batch background renders log to `/tmp/render-batch.log` so progress can be tailed without interrupting the main session.
+- Render each composition individually rather than chained — clearer error isolation when one breaks.
+
+### Meta-learning this micro-sprint
+
+**Tool selection cascade for design references**: when a user drops a design reference, the optimal pipeline is:
+1. **ToolSearch** to confirm tool availability (cheap)
+2. **Custom local agent** (background) for deep deconstruction (~7 min, finds patterns that take humans hours)
+3. **Synthesize structured ADOPT-vs-REJECT** in main session while agent runs
+4. **Apply** as surgical code edits (Edit tool, not Write — preserves git diff readability)
+5. **Render** to verify visually (Remotion + background batch)
+6. **Document** the synthesis durably (PLAN.md + MEMORY.md + FORANDREW.md + TOOLS_IMPACT.md — ALL FOUR)
+
+Skipping step 6 is the silent failure mode. The lessons learned tonight (PATTERN-082, 083, 084, DECISION-017, GOTCHA-045) are worth more across future projects than the specific B5 closing card itself. Documenting durably is the leverage move.

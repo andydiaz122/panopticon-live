@@ -1,27 +1,32 @@
 import { loadFont as loadFraunces } from '@remotion/google-fonts/Fraunces';
-import { AbsoluteFill, useCurrentFrame, interpolate, spring, useVideoConfig } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, interpolate } from 'remotion';
 
 /**
- * B5 — Closing card (PLAN.md §6 A6, §5.6 Anthropic-workflow-minus-palette).
+ * B5 — Closing card (PLAN.md §6 A6, §5.6 / §5.7 Vimeo-Numerai influence).
  *
- * Anthropic editorial layout pattern (frame-sampled from Opus 4.6 + Chrome films):
- *   - small caption above (kicker)
- *   - big wordmark below — Fraunces serif, italic emphasis on accent term
- *   - URL / repo line
- *   - "Built with Claude Opus 4.7" attribution
- *   - All lines centered, generous vertical air
- *   - Hard cut entry, ~3-5 second hold (Anthropic closing convention)
+ * Layered influence:
+ *   - Anthropic editorial layout (kicker → hero wordmark → URL → attribution)
+ *   - Vimeo 205032211 / Numerai craft moves (PATTERN-082, PATTERN-084):
+ *       1. Wordmark IGNITION via brightness + glow curve (NOT scale-pop).
+ *          Numerai's "logo-ignition" reads as neon-tube voltage; matches our
+ *          broadcast-HUD register where cyan = "live telemetry powering on."
+ *       2. URL line softened from #F8FAFC to #B8B8B8 — Numerai's "whispered
+ *          70-75% gray" rule. Kicker/attribution stay at #5A6678 (already
+ *          softer than the Numerai recommendation; no change needed).
+ *          Hero wordmark stays bright (#F8FAFC) — it IS the logo.
+ *       3. Slow ~2% drift across full 5s composition. Camera-alive cue
+ *          (Numerai cinematic plates) without Ken Burns aggression.
  *
  * Cyan palette retained per USER-CORRECTION-036 — broadcast HUD context where
  * cyan is the native data color. Fraunces + italic emphasis is the typography
- * upgrade that survives the palette decision (PATTERN-078 / 5.6.1).
+ * upgrade that survives the palette decision (PATTERN-078).
  *
- * Motion vocabulary (PATTERN-078 — restraint IS the brand):
- *   - kicker fades in 0-0.5s
- *   - wordmark spring-pops 0.3-0.8s (scale 0.9 -> 1.0, mild overshoot)
- *   - URL + attribution fade in 1.0-1.5s
- *   - everything HOLDS for ~3.5s
- *   - subtle exit fade (or hard cut to black in DaVinci composite)
+ * Why ONE card and not Numerai's two-card (sigil-monument → URL-void):
+ *   The structural magic of Numerai's two-card is the VISUAL REGISTER SWITCH
+ *   between cinematic plate and typographic void. Our composition has only
+ *   ONE register (typographic void on cool slate). Splitting one register
+ *   into two cards is just longer dwell time without the magic. We adopt
+ *   the smaller surgical wins instead. See PATTERN-083.
  *
  * Total duration: 5 seconds = 300 frames at 60 fps.
  */
@@ -29,14 +34,14 @@ import { AbsoluteFill, useCurrentFrame, interpolate, spring, useVideoConfig } fr
 const { fontFamily: FRAUNCES_FAMILY } = loadFraunces();
 
 const BG = '#05080F';
-const INK_PRIMARY = '#F8FAFC';
-const INK_MUTED = '#5A6678';
+const INK_PRIMARY = '#F8FAFC';        // hero wordmark — bright (it IS the logo)
+const INK_URL = '#B8B8B8';            // URL line — Numerai 70-75% gray "whispered, not shouted" (PATTERN-082)
+const INK_MUTED = '#5A6678';          // kicker, repo, attribution — already softer than Numerai recommends
 const ACCENT_CYAN = '#00E5FF';
 const FONT_MONO = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
 
 export const B5Closing = () => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
 
   // Kicker fades in 0-0.5s (frames 0-30)
   const kickerOpacity = interpolate(frame, [0, 30], [0, 1], {
@@ -44,20 +49,24 @@ export const B5Closing = () => {
     extrapolateRight: 'clamp',
   });
 
-  // Wordmark spring-pop at frame 18 (0.3s)
-  const wordmarkSpring = spring({
-    frame: Math.max(0, frame - 18),
-    fps,
-    config: { damping: 14, stiffness: 160 },
+  // Wordmark IGNITION 0.3-0.8s (frames 18-48) — brightness + glow curve.
+  // Replaces prior scale-pop spring per PATTERN-082 ("logo ignition vs scale-pop").
+  const ignitionProgress = interpolate(frame, [18, 48], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
   });
-  const wordmarkScale = interpolate(wordmarkSpring, [0, 1], [0.92, 1]);
-  const wordmarkOpacity = interpolate(frame, [18, 48], [0, 1], {
+  const wordmarkBrightness = interpolate(ignitionProgress, [0, 1], [0.55, 1.0]);
+  const wordmarkGlowBlur = interpolate(ignitionProgress, [0, 1], [0, 18]);
+  const wordmarkOpacity = ignitionProgress;
+
+  // URL + attribution fade in 1.0-1.5s (frames 60-90)
+  const metaOpacity = interpolate(frame, [60, 90], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
 
-  // URL + attribution fade in 1.0-1.5s (frames 60-90)
-  const metaOpacity = interpolate(frame, [60, 90], [0, 1], {
+  // Slow ~2% drift across full 5s — Numerai cinematic-plate "camera alive" cue.
+  const driftScale = interpolate(frame, [0, 300], [1.0, 1.02], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
@@ -77,7 +86,13 @@ export const B5Closing = () => {
         opacity: exitOpacity,
       }}
     >
-      <div style={{ textAlign: 'center' }}>
+      <div
+        style={{
+          textAlign: 'center',
+          transform: `scale(${driftScale})`,
+          transformOrigin: 'center center',
+        }}
+      >
         {/* Kicker — small label above the wordmark, mono caps */}
         <div
           style={{
@@ -93,7 +108,11 @@ export const B5Closing = () => {
           biomechanical fatigue telemetry · from 2d broadcast pixels
         </div>
 
-        {/* Hero wordmark — Fraunces serif, italic "Live" in cyan accent */}
+        {/* Hero wordmark — Fraunces serif, italic "Live" in cyan accent.
+            IGNITION via brightness + cyan-glow drop-shadow (Numerai DNA, PATTERN-082).
+            Replaces prior scale-pop spring. The cyan halo on the white "Panopticon"
+            text is the "neon-tube voltage" effect; the white text reads as the
+            tube's filament, the cyan halo as the gas glow. */}
         <div
           style={{
             fontFamily: FRAUNCES_FAMILY,
@@ -104,20 +123,21 @@ export const B5Closing = () => {
             whiteSpace: 'nowrap',
             lineHeight: 0.95,
             fontFeatureSettings: '"ss01" 1, "ss02" 1',
-            transform: `scale(${wordmarkScale})`,
+            filter: `brightness(${wordmarkBrightness}) drop-shadow(0 0 ${wordmarkGlowBlur}px rgba(0, 229, 255, 0.35))`,
             opacity: wordmarkOpacity,
           }}
         >
           Panopticon <span style={{ color: ACCENT_CYAN, fontStyle: 'italic' }}>Live</span>
         </div>
 
-        {/* URL + repo */}
+        {/* URL line — softened to #B8B8B8 per Numerai's "whispered" body-copy rule
+            (PATTERN-082). Still WCAG AAA contrast on #05080F (~7.5:1). */}
         <div
           style={{
             fontFamily: FONT_MONO,
             fontSize: 18,
             letterSpacing: '0.06em',
-            color: INK_PRIMARY,
+            color: INK_URL,
             marginTop: 56,
             opacity: metaOpacity,
           }}

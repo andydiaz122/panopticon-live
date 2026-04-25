@@ -74,3 +74,5 @@ Thumbs.db
 
 # External research PDFs (copyrighted third-party reference material only)
 research_sources/
+.vercel
+.claude/tmp/

@@ -1400,3 +1400,53 @@ The Saturday physical-presence items from PLAN.md §10 (08:30 env prep, 09:00 A1
 **Opus 4.7's adaptive thinking is a prompt-design problem, not a configuration problem.** You can't flip a switch to "make it think more." You have to DESIGN the task so that multi-hypothesis consideration is integral to correctness. The STEP 3 dual-hypothesis nudge works because the model genuinely can't produce a good bullet WITHOUT thinking through the alternative. Captured as GOTCHA-040.
 
 **Sibling-worktree handoff docs have an intrinsic half-life.** The sibling's `PHASE_6_TEAM_LEAD_HANDOFF.md` was authored 2026-04-24 AM; by 2026-04-24 PM (when we consolidated it), the polish sprint had already rendered parts of it (`actions.ts:145` directive) non-applicable on this branch. The right pattern is to copy the handoff verbatim AS a frozen point-in-time artifact, then append an "Update since handoff" footer rather than edit the body. Preserves institutional memory + gives future readers a clean diff.
+
+---
+
+## 2026-04-24 Late-Late Evening — Vimeo/Numerai DNA Synthesis + Friday Sprint Final Push (~19:30-22:00 EST)
+
+User dropped a second design reference (`https://vimeo.com/205032211`) late evening with the directive: *"Don't use Anthropic colors, but use everything else from their workflow. Also research and reverse-engineer this Vimeo. We are not going to wait to have fresh eyes tomorrow; we are going to work through tonight."*
+
+A deconstruction agent ran in the background while I built B5Closing + SceneBreak primitives + generated the architecture diagram. Agent returned ~20:00 EST identifying the video as **Numerai's *Introducing Numeraire*** (Feb 2017, 2:04). Synthesis was applied directly into the codebase the same evening, then all chrome compositions re-rendered.
+
+### What landed in code
+
+- **B5Closing.tsx** — replaced Anthropic-style scale-pop spring on the wordmark with a **brightness + cyan-glow ignition curve** (PATTERN-082). The white "Panopticon" with its inner cyan-italic "Live" gets a unified soft cyan halo that ramps up from 0 → 18px blur over 0.5s, while brightness ramps 0.55 → 1.0. Reads as a neon sign powering on, not as editorial typography appearing — semantically truer to the broadcast-HUD register.
+- **B5Closing.tsx** — softened the URL line color from `#F8FAFC` to `#B8B8B8` ("whispered, not shouted"). Hero wordmark stays bright (`#F8FAFC`) — it IS the logo, must read loud.
+- **B5Closing.tsx** — added 1.0 → 1.02 slow drift across the full 5s composition, anchored center-center. Numerai's "camera alive on cinematic plates" cue without Ken Burns aggression.
+- **GitGraph.tsx** — added optional `driftDurationFrames` prop (default 660 = 11s) applying the same ~2% drift to the SVG outer transform during the 11-second journey timelapse.
+
+### What was rejected (and why)
+
+The Numerai pattern is fundamentally a different REGISTER (cinematic plate / interview portrait / CGI tableau register-braiding) than PANOPTICON (broadcast HUD register). Inheriting Numerai's structural moves wholesale would erase our existing register. Specifically rejected:
+
+- **Single-family typography** (Maven Pro Light or Source Sans 3 Light, no serif/sans pair) — we deliberately use Fraunces serif + JetBrains Mono pair from Anthropic. The pair IS our differentiator. Going single-family would lose both signatures.
+- **2.39:1 cinematic letterbox** — we need full 1080p HUD real estate.
+- **Buried-lede branding** — judges need PANOPTICON LIVE identification throughout.
+- **Two-card closing formula** (sigil-monument plate → URL on void) — the structural magic is the visual REGISTER SWITCH between cards, not the card count. Our composition has only one register; splitting it into two cards would just be longer dwell time without the magic. Documented as PATTERN-083.
+- **CGI maximalism / chromatic aberration** — clinical-detective tone preserved.
+
+### Architecture diagram (A5)
+
+Generated via `mcp__claude_ai_Figma__generate_diagram` (Mermaid LR flowchart → FigJam). Lives at `figma.com/board/1McYlYT0isbmTOJshc9ip9` in Andrew's drafts. Saturday morning task: open in FigJam, export as PNG to `demo-presentation/assets/architecture-diagram.png` (the `imageUrl` returned in the API response is an S3-signed URL with a 7-day expiry, captured as GOTCHA-045).
+
+### Renders complete
+
+5 MP4s in `demo-presentation/remotion/out/` totaling 3.2MB:
+- `b0-opener.mp4` (1.8MB / 25s) — with new GitGraph slow-drift
+- `b5-closing.mp4` (816KB / 5s) — with ignition curve + slow-drift + softened URL
+- `scene-break-b2.mp4` (169KB / 1.5s)
+- `scene-break-b3.mp4` (192KB / 1.5s)
+- `scene-break-b4.mp4` (234KB / 1.5s)
+
+DaVinci Resolve assembly Saturday morning takes these MP4s + the dashboard OBS captures + the architecture-diagram PNG and cuts the master 3-min film.
+
+### Meta-learning this micro-sprint
+
+**Register-bearing moves don't transfer; surgical mechanics do.** When sampling external design references, the durable distinction is between **register-bearing structural moves** (letterbox, two-card splits, single-family typography — these tie to the source's register and don't transfer cleanly) and **surgical craft mechanics** (logo ignition curve, whispered body copy, slow drift — these are register-agnostic mechanics that compose within ANY register). The first category is a trap; the second is the actual win.
+
+**The Vimeo deconstruction agent paid for itself by saying NO three times.** Without the agent's analysis I would have copied the two-card closing structure (it looked obviously right), the letterbox (it felt cinematic), and possibly the single-family typography. The agent's section "What's UNIQUE to Numerai (NOT in the Anthropic Playbook)" + "Cross-reference with Anthropic — what's CONVERGENT" gave me a structured way to separate the ADOPT pile from the REJECT pile. The synthesis took ~20 minutes; the agent's research took ~7 minutes in background — net ~27 minutes for what could have been hours of trial-and-error visual experimentation OR a copy-paste mistake that lost the broadcast-HUD register entirely.
+
+**`mcp__claude_ai_Figma__generate_diagram` is the right tool for architecture diagrams that need to LIVE somewhere collaborative + editable.** Not for one-off rendered assets (Mermaid CLI is faster). Not for design-system Figma files (use the design tools). For "PANOPTICON architecture lives in FigJam where Andrew can edit nodes / add team members / export PNGs as the demo evolves" — perfect tool fit. Cost: 0 calls against the 6-call MCP budget (generate_diagram is exempt per GOTCHA-043). One-shot Mermaid → FigJam in <30s.
+
+**The "one thing at a time, polished" rule scales to micro-sprints.** This evening's 8-item sprint (ALL ✅) followed the rule rigorously: each item rendered + visually verifiable before moving on. Compare to a hypothetical "code everything in parallel, render once at the end" approach — would have surfaced 3-4 cross-cutting bugs (sequence-frame remapping, font loading, transformOrigin pivot drift) all at the same time, with no clear root-cause isolation. Serial discipline costs 5-10 minutes per item in render-and-verify time, buys 30-60 minutes per item in not-debugging-superpositioned-failures time.

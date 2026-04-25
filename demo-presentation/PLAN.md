@@ -192,24 +192,54 @@ After the warm-clay palette experiment was reverted (USER-CORRECTION-036 in MEMO
 - Anthropic Spark coral accent (`#D97757`)
 - Reason: PANOPTICON LIVE is sports-broadcast register, not editorial-paper register. Cyan-on-cool-blue is the native domain convention (ESPN, Hawk-Eye, Sportradar). See MEMORY.md USER-CORRECTION-036 for full rationale.
 
-### Vimeo 205032211 — second design reference (analysis pending)
+### Vimeo 205032211 — second design reference (SYNTHESIS LANDED 2026-04-24 ~20:00 EST)
 
-Andrew's note: *"This is the best looking demo I've seen so far in addition to the Anthropic product release videos."* A research agent has been dispatched to deconstruct it via the same yt-dlp + frame-sampling methodology that worked for the Anthropic videos. Output target: `demo-presentation/assets/references/vimeo_205032211_dna.md`. Cross-reference with Anthropic findings to identify CONVERGENT patterns (universal craft) vs UNIQUE-TO-VIMEO patterns (additional moves we can borrow on top of the Anthropic playbook).
+Andrew's note: *"This is the best looking demo I've seen so far in addition to the Anthropic product release videos."* The deconstruction agent identified the video as **Numerai's *Introducing Numeraire*** (Feb 2017, 2:04, 1080p25) — the famous crypto-token launch film featuring on-camera VC interviews intercut with full-CGI vaporwave dystopia, B&W founder portraits over color-coded particulate starfields, and golden-hour cinematic A-roll. Full DNA file at `demo-presentation/assets/references/vimeo_205032211_dna.md` (10 numbered sections, hex-confirmed palette tables, scene-by-scene log).
 
-When the agent returns, this section will be revised with the synthesis + concrete edits to B5 / scene-breaks / pacing.
+#### What we ADOPT from Numerai (compatible with broadcast-HUD register)
 
-### Tonight's accelerated build sprint (Andrew's 21:00 directive)
+1. **Logo ignition curve, NOT scale-pop** (PATTERN-082): Numerai's closing N-sigil "switches on" via a +brightness curve + faint cyan glow bloom over ~500ms — neon-tube voltage, not editorial pop-in. Applied to B5Closing.tsx (`B5Closing` wordmark): `filter: brightness(${0.55→1.0}) drop-shadow(0 0 ${0→18}px rgba(0,229,255,0.35))` over frames 18-48. Replaces the prior Anthropic-style scale-pop spring on the wordmark. Reads as "live telemetry powering on" — semantically truer to our register than scale-pop.
 
-Andrew explicitly reversed the "fresh eyes Saturday" plan: *"We are not going to wait to have fresh eyes tomorrow; we are going to work through tonight."* Sequence:
+2. **Whispered-not-shouted body copy** (PATTERN-082, second clause): Numerai holds body copy at ~70-75% gray (`#B8B8B8`) on true black. Pure-white-on-pure-black always feels louder than the content warrants. Applied to B5 URL line (`panopticon-live.vercel.app`): softened from `#F8FAFC` → `#B8B8B8` (still WCAG AAA contrast on `#05080F`). Hero wordmark stays bright (`#F8FAFC`) — it IS the logo and must be loud. Kicker / repo / attribution stay at `#5A6678` (already softer than Numerai's recommendation).
+
+3. **Slow ~2-3% drift on cinematic plates** (PATTERN-084): Numerai applies a continuous slow zoom or lateral drift to every cinematic plate to keep the camera "alive" without Ken Burns aggression. Applied to:
+   - B5Closing entire composition: `transform: scale(${1.0→1.02})` over 300 frames, anchored center-center.
+   - GitGraph primitive: optional `driftDurationFrames` prop (default 660 = 11s @ 60fps), applies same drift to the SVG outer transform.
+
+4. **Hard cuts only** (already convergent with Anthropic, PATTERN-078). 95%+ of Numerai's cuts are hard cuts. Crossfades not used. We're already aligned.
+
+#### What we REJECT from Numerai (broadcast-HUD-incompatible)
+
+| Numerai pattern | Why we reject |
+|---|---|
+| Single-family typography (Maven Pro Light / Source Sans 3 Light, no serif/sans pair) | We deliberately adopted Fraunces serif + JetBrains Mono pairing from Anthropic. The serif/sans pair IS our typographic differentiator. Going single-family loses both the editorial signature AND the broadcast register. |
+| 2.39:1 cinematic letterbox on all plates | We need full 1080p vertical real estate for the HUD. Letterbox would consume 12% of the canvas where SignalBars + CoachPanel live. |
+| Buried-lede branding (logo withheld until final 8 seconds) | Judges need clear PANOPTICON LIVE identification throughout — we have 3 minutes, not 2:04, and a competition narrative requires earlier brand placement. |
+| CGI maximalism (chrome busts, glitch storms, vaporwave gradients) | Reads as 2017-crypto-bro. PANOPTICON's value is forensic clarity, not sensory chaos. Conflicts with the Detective Cut clinical tone. |
+| Chromatic aberration / RGB-shift glitch frames | Try-hard digital aesthetics. Conflicts with the clinical-detective tone. |
+
+#### What was CONSIDERED but REJECTED (with reasoning)
+
+**Two-card closing formula** (Numerai's "sigil-monument plate → URL on void" hard cut): rejected per PATTERN-083. The structural magic of Numerai's two-card is the VISUAL REGISTER SWITCH between cinematic plate and typographic void. Our B5 has only ONE register (typographic void on cool slate). Splitting one register into two cards is just longer dwell time without the magic. We adopt the smaller surgical wins (ignition curve, whispered URL, slow drift) instead — these compose within ONE card and produce the Numerai feel without the additional composition file.
+
+#### Architecture diagram (A5) — generated 2026-04-24 ~20:00 EST
+
+Pipeline flowchart created via `mcp__claude_ai_Figma__generate_diagram` (Mermaid LR flowchart, Numerai-style register-switch from typographic to architectural register). FigJam location: `figma.com/board/1McYlYT0isbmTOJshc9ip9`. Edges: `ffmpeg → YOLO11m-Pose → Kalman → 3-Pass DAG → 7 Signal Extractors → DuckDB → Server Action → Opus 4.7 Scouting Committee → 2K-Sports HUD`, plus a dotted "trace replay" loopback from Opus to HUD. Saved to Andrew's team plan (`team::1606985436627625568`). Will be exported as PNG for a B5-architecture beat (or potentially a 4-frame Architecture register-switch card in DaVinci) Saturday morning.
+
+### Tonight's accelerated build sprint (Andrew's 21:00 directive) — STATUS
+
+Andrew explicitly reversed the "fresh eyes Saturday" plan: *"We are not going to wait to have fresh eyes tomorrow; we are going to work through tonight."*
 
 1. ✅ Re-apply Fraunces serif to B0 title card (cyan + serif validation)
-2. ⏳ Build B5 closing card (Anthropic editorial layout + cyan palette)
-3. ⏳ Build SceneBreak primitive (between-beat hard-cut transitions)
-4. ⏳ Vimeo 205032211 deconstruction agent returns → synthesize learnings
-5. ⏳ A5 architecture diagram via `mcp__claude_ai_Figma__generate_diagram` (Mermaid → FigJam)
-6. ⏳ Re-render full B0 + B5 + scene-breaks → DaVinci-ready assets
+2. ✅ Build B5 closing card (Anthropic editorial layout + cyan palette)
+3. ✅ Build SceneBreak primitive (between-beat hard-cut transitions, 3 instances B2/B3/B4)
+4. ✅ Vimeo 205032211 deconstruction agent returns → synthesize learnings (this section)
+5. ✅ A5 architecture diagram via `mcp__claude_ai_Figma__generate_diagram` (Mermaid → FigJam)
+6. ✅ B5 ignition curve + slow-drift refit (Numerai DNA application)
+7. ✅ GitGraph slow-drift overlay (Numerai DNA application)
+8. ✅ Re-render full B0 + B5 + scene-breaks → DaVinci-ready assets (5 MP4s in `remotion/out/`, 3.2MB total)
 
-One thing at a time, polished, with each step rendered + visually confirmed before moving to the next.
+Sprint complete. One thing at a time, polished, each step rendered + visually verifiable. Saturday morning surface area: DaVinci composite (cuts B-beats together with 3 SceneBreak transitions + B0 opener + B5 closer + dashboard OBS captures), architecture-diagram PNG export from Figma, recording the OBS captures on the Vercel prod URL.
 
 ---
 

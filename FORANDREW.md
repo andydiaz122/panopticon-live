@@ -1523,3 +1523,78 @@ Clicked through to Tab 3, hit ▶ PLAY COMMITTEE at 4× speed, all 5 trace event
 **The "downloadable artifact" anchor is the strongest possible product-validity signal.** A judge who clicks "Download CSV" and opens the file in Excel/pandas has SEEN the product, not just heard about it. The Q1 implementation took ~30 minutes and changes the entire framing of what gets evaluated. Similarly, the B5Thesis card costs ~15 minutes and converts the closing from "brand wordmark" (ho-hum) to "thesis statement that judges will quote in their notes" (memorable).
 
 **Iteration-on-prod is fine when you have visual verification.** Six deploys in 10 minutes with full verification cycle each is faster + safer than three deploys in 30 minutes with deferred verification — because each iteration's failure mode is bounded by what chrome-devtools sees, not what we hope is true.
+## 2026-04-25 Saturday Morning — Anthropic Minimalism Pivot + Ground-Truth Sync (~05:30–10:30 EDT)
+
+### Where we started Saturday
+
+Friday-into-Saturday pre-dawn shipped 3 world-class Remotion V2 compositions (B0OpenerV2, B5ClosingV2, B5ThesisV2) responding to USER-CORRECTION-037 ("toy projects from a kid"). Those landed clean — full skill team built, multi-beat structure, kerning sweep + italic reveal beats + cyan-glow ignition curves, persistent ChapterMarker chrome, AmbientGrid L5 motion, all 6 failure modes from the new `remotion-cinematic-craft` skill cleared.
+
+Then the team lead course-corrected at ~06:00 EDT to **Anthropic Minimalism**: kill Remotion as primary path, use Apple Keynote for static title cards + iPhone Voice Memos for clinical disembodied VO + OBS for pristine dashboard captures + CapCut Desktop for assembly. Rationale: LLMs lack the visual feedback loop to fine-tune motion graphics under deadline; static cards + product-driven demos are the Anthropic register; face-cams shift framing from "Cinematic Enterprise" to "Indie Hacker YouTube." V2 Remotion files retained as fallback insurance only.
+
+Three new prep documents authored to operationalize the pivot: `voiceover_script.md` (12 clinical lines + closet-as-sound-booth setup + recording technique), `title_card_specs.md` (3 Keynote cards with exact font/color/position specs + Option B fallback to V2 mp4s), `capcut_assembly_workflow.md` (full step-by-step assembly + export + YouTube + CV submission). HANDOFF doc patched with the binding Saturday Execution Protocol (SLEEP 06–10, RAW MATERIALS 11–13, VOICE 13–14, ASSEMBLY 15–19).
+
+### Then Andrew delivered the ground-truth log
+
+At ~06:15 EDT Andrew sent a verbatim second-by-second breakdown of all 60 seconds of `utr_match_01_segment_a.mp4`. Discovery against `dashboard/public/match_data/utr_01_segment_a.json` revealed **MAJOR drift** between authored display data and what the clip actually shows:
+- State machine put SERVE at 11.2s; ground-truth says 17s (6-second drift)
+- All `display_narrations` used a fictional "BREAK POINT" framing that doesn't exist in the clip
+- Coach insight at 20.1s said "Short rally, clean exit" — rally just BEGAN at 20s
+- Coach insight at 27.2s said "5.07-second rally just closed" — rally was still ongoing
+- Narrator beat at 40s said "feet blur sideways at sprint" — Player A was WALKING OFF COURT
+- Narrator beat at 50s said "lateral shuffle" — Player A was COMPLETELY OFF CAMERA
+
+I wrote a comprehensive 4,200-word plan with 10 phases + 3 execution-tier options + 3 decisions for Andrew. Andrew + team-lead resolved the decisions: **RETIRE the BREAK POINT framing; coach-narration-only for the bounce showcase + leg-flexion showcase (no React widgets, no zoom).** Andrew explicitly OVERRODE the team-lead's "speed up execution" suggestion: *"there is absolutely no rush. Take your time and do a world-class job, do a rigorous job, do an exhaustive job, push the envelope of our quality."*
+
+### How the sync was executed (per architectural guardrails)
+
+Three constraints from the team lead held throughout:
+1. **NOT a direct LLM-edit of the 549 KB JSON.** LLMs lose closing brackets on big JSON files. Wrote a Python script (`scripts/sync_match_data_to_ground_truth.py`, ~480 lines) that loads → mutates → atomically writes via `.tmp` + `os.replace()`. Ships idempotent (MD5 byte-identical across two consecutive runs).
+2. **NOT new state-machine strings.** Mapped Andrew's 12 ground-truth phases STRICTLY into the existing 5-value RallyMicroPhase enum. Forensic detail (informal-bouncing, off-court running, returning, off-camera) lives in the TEXT of narrations + insights, NEVER in the state enum. (If I'd added new strings like `WALKING_TO_BASELINE`, the React frontend types would crash at deploy — types.ts uses Literal unions.)
+3. **NOT new React widgets.** Used the existing widget catalog only (PlayerNameplate, SignalBar, TossTracer). Phase variation comes from changing WHICH SignalBar gets foregrounded per phase.
+
+### The multi-agent review panel saved my ass
+
+Dispatched 4 orthogonal-lens agents in parallel: `data-integrity-guard` (Pydantic v2 schema), `biomech-signal-architect` (claim defensibility), `demo-director` (narrative coherence + Anthropic-Minimalism alignment), `python-reviewer` (script idempotency + atomic-write safety).
+
+Findings consolidated:
+- **biomech CRITICAL**: I had FABRICATED "~0.6m behind the baseline" in coach_insights[3]. Actual signal value at t=21933 is 0.0412m. **Off by ~14x.** The insight read fluently and biomechanically defensible — the agent caught it because they actually queried the signal data, which I never did when authoring.
+- **biomech HIGH**: "Off-court interval ≈ 17 seconds" math was wrong. 35→55=20, not 17. Self-contradictory.
+- **demo-director HIGH**: display_narrations + narrator_beats were 90% redundant. Collapsed narrations to phase labels (3-7 words); beats carry the prose. Two channels, distinct registers.
+- **demo-director HIGH**: coach_insights[0] said "five baseline biometric signals" while the pitch promises seven. Inconsistency.
+- **demo-director HIGH**: coach_insights[5] used "5ft" while everything else uses meters. Unit drift.
+- **python-reviewer HIGH x3**: non-atomic write (Ctrl-C corrupts JSON), `assert` silenced under `python3 -O`, profile_meta.note appends on re-run breaking idempotency.
+- **MEDIUM**: superlatives unfalsifiable on n=1, causation overstated, methodology disclaimers competing with visual reveal, `re` variable shadowing stdlib module.
+
+ALL fixes applied in one consolidated patch. Re-ran script. MD5 idempotent (`6414b6ef6ba6cbc97e7e64a57fc49f94` → `6414b6ef6ba6cbc97e7e64a57fc49f94`). Schema clean. TSC clean. Full Next.js build clean (10s, 4 pages). chrome-devtools-mcp visual scrub: dashboard renders synced data with zero console errors. Backup of original moved OUT of `dashboard/public/` to `data/match_data_backups/` so Vercel won't deploy the pre-sync file as a static asset.
+
+### What was NOT touched (architectural guardrails honored)
+
+- Live FSM in `transitions` field (CV-pipeline output, byte-identical to backup)
+- `keypoints` (1800 frames, byte-identical)
+- `signals` (53 entries, byte-identical)
+- `anomalies` (byte-identical)
+- React component code (zero changes)
+- TypeScript types (no schema changes)
+- HUD widget catalog (no new widgets)
+
+The visible "PRE-SERVE RITUAL" nameplate at t=0 (from live FSM calibration drift) remains unchanged — the dashboard's dual-layer architecture means the broadcast overlay + coach panel + voiceover carry the corrected narrative while the nameplate reflects the live FSM. Acceptable trade-off given the team-lead's "no risky elements" directive.
+
+### What this taught me (the durable lesson)
+
+**LLM authoring of content with quantitative claims will fabricate numbers unless explicitly cross-referenced against source data.** I wrote "~0.6m behind the baseline" because it sounded right and biomechanically plausible. I never queried the actual signal. The biomech-signal-architect agent did query it (4.1cm vs my 60cm — 14x error). LLM self-review CANNOT catch this; only domain-expert review with data-grounding tools catches it. **Operational consequence**: never cite specific numbers in authored content without grepping the underlying data first; ALWAYS dispatch a domain-expert reviewer for any quantitative claims; self-review is necessary but not sufficient.
+
+### Saved-not-trashed ideas
+
+Created `docs/deferred_ideas.md` capturing 21+ ideas from this journey that we VETOED or DEFERRED but want to revisit (BounceCounter widget, pose-overlay knee annotation, digital zoom, React-side state-machine extension, CV pipeline recalibration, SceneBreak T2 Remotion rebuilds, multi-clip baseline establishment, predictive modeling layers, two-player widgets, alternative project names, custom domain CNAME, per-character-stagger primitive, kerning-sweep primitive, etc.). Each entry tagged with deferral date + rationale + revisit-trigger (POST-SUBMISSION / V2-PRODUCT / RESEARCH / NEEDS-DATA). Save-not-trash is the right discipline — the project will outlive the hackathon, these ideas are real.
+
+### Going into Saturday afternoon
+
+Saturday Execution Protocol per HANDOFF binding sequence:
+- 11:00–13:00 — Andrew: Keynote title cards (3 cards per `title_card_specs.md`) + OBS dashboard captures (4 silent run-throughs per `capcut_assembly_workflow.md`)
+- 13:00–14:00 — Andrew: Voice recording per `voiceover_script.md` (closet sound booth, 12 lines × 3 takes)
+- 15:00–19:00 — Andrew + Claude on-call: CapCut assembly per `capcut_assembly_workflow.md`
+- Sunday: final review, YouTube upload, CV submission by 17:00 EDT soft target, hard lockout 19:55 EDT
+
+The dashboard now shows clinical-truth narrations + biomechanically-defensible coach insights aligned to the actual ground-truth events. The synced JSON deploys to Vercel + merges to main. The pre-prep is complete.
+
+Andrew's directive going in: *"do a world-class job, do a rigorous job, do an exhaustive job, push the envelope of our quality."* I think we hit it. The 1 CRITICAL fabrication caught + fixed before commit is the proof — without the multi-agent panel I would have shipped that error and the demo would have leaked credibility on the first careful judge inspection.

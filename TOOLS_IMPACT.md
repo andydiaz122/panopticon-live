@@ -785,3 +785,57 @@ Skipping step 6 is the silent failure mode. The lessons learned tonight (PATTERN
 **Vercel iteration speed matters more than first-deploy success rate.** 6 deploys in 10 minutes (4 fails + 2 successes) was strictly faster than the alternative ("read the docs carefully, plan the perfect deploy, ship once") because each fail surfaced a NEW layer of config — no amount of pre-reading would have caught all four. Iteration with verification IS the strategy.
 
 **Documentation pass cost ~10 minutes for ~3 hours of durable lessons.** This update + the FORANDREW.md entry + DECISION-019 in MEMORY.md is the difference between "we did the thing" and "we did the thing AND know why it worked." The second compounds across projects.
+
+## Phase 7 — Ground-Truth Sync (Sat 2026-04-25 ~09:00–10:30 EDT)
+
+### Tool: Multi-agent orthogonal review panel (4 parallel agents)
+
+**Cost**: ~5 minutes wall-clock (parallel), ~250K total tokens across 4 agents.
+**Output**: 4 severity-graded markdown reports in `/tmp/<agent>-review.md` + 200-token summary per agent in chat.
+**Composition** (per CLAUDE.md "Orthogonality Over Quantity"):
+- `data-integrity-guard` — Pydantic v2 schema + invariant verification → PASS (0 critical, 4 low)
+- `biomech-signal-architect` — claim defensibility + math → PASS WITH FIXES (1 CRITICAL, 1 HIGH, 2 MEDIUM)
+- `demo-director` — narrative coherence + Anthropic-Minimalism alignment → PASS WITH FIXES (3 HIGH, 4 MEDIUM)
+- `python-reviewer` — script idempotency + atomic-write safety → PASS WITH FIXES (3 HIGH, 2 MEDIUM)
+
+**ROI**: **EXTREME — caught 1 CRITICAL fabrication that LLM self-review missed.** I had written "~0.6m behind the baseline" in a coach_insight; actual signal value was 0.0412m (14x error). The insight read fluently. Self-review cannot catch this kind of fabrication because the LLM doesn't query its own cited numbers. The `biomech-signal-architect` agent did query the underlying `baseline_retreat_distance_m` time series and caught the order-of-magnitude error. **Without this panel, the demo would have shipped with a fabricated number that any careful judge inspecting the data could surface — destroying credibility.**
+
+**Pattern established (PATTERN-087 candidate)**: any time content makes specific quantitative claims, dispatch a domain-expert reviewer agent with explicit instructions to cross-reference the source data. Don't trust LLM self-review for fact claims.
+
+**When to repeat**: every time we author content (narrations, insights, transcripts, coach commentary) for a deliverable that judges/customers will scrutinize. Cost is ~5 minutes; ROI is preserving credibility on every numerical claim.
+
+### Tool: Python sync script (vs LLM direct-edit of large JSON)
+
+**Cost**: ~30 minutes to author the script; ~0.5 seconds to run; ~480 lines of code (mostly inline content tables).
+**Output**: Surgical mutation of 5 arrays + 1 profile field in a 549 KB JSON; preserves invariant fields byte-identical; idempotent (MD5 stable across runs); atomic write via `.tmp` + `os.replace()`.
+**ROI**: **HIGH — avoided LLM-JSON-truncation risk entirely.** Team lead's directive: "LLMs notoriously struggle to rewrite massive JSON files directly without dropping a closing bracket or truncating the output (yielding an Unexpected token EOF in JSON error). Instruct Claude to write a Python script to load the JSON, mutate the specific arrays, and dump it back to disk safely." This was the right call — even with 1M context, asking the LLM to emit a 549 KB JSON verbatim with edits introduces non-trivial risk of truncation or formatting drift.
+
+**Patterns**:
+- Backup OUTSIDE the deployment dir (`data/match_data_backups/` not `dashboard/public/`) so Vercel doesn't deploy the pre-sync file as a static asset.
+- Compact JSON format (`separators=(",", ":")`) — `indent=2` would balloon a 549KB file to 1.5MB (+200%) and ALL of that ships to every dashboard mount over the wire.
+- Atomic write via `.tmp` + `os.replace()` — Ctrl-C mid-write would otherwise corrupt the JSON.
+- `raise ValueError(...)` instead of `assert ...` — assertions are silenced under `python3 -O`.
+- ID uniqueness check in the validator — silent duplicate IDs are a corruption class the type checker can't catch.
+- Preserve original schema fields (`visible_action_ref`, `tool_calls`, `input_tokens`, etc.) even when their values are vestigial — React layer may consume them.
+
+**When to repeat**: any time we need to mutate a large JSON/YAML/binary file with surgical changes. Always prefer scripted edits over LLM string-rewrite for files >50KB.
+
+### Tool: chrome-devtools-mcp `evaluate_script` + `list_console_messages`
+
+**Cost**: ~3 seconds to load page, ~1 second to query.
+**Output**: Console messages filtered by type + JS execution result.
+**Use this session**: Confirmed `localhost:3000` rendered the synced data with zero console errors. Dashboard's dual-layer (live FSM + authored display) both visible: nameplate showed live state ("PRE-SERVE RITUAL"), broadcast overlay showed authored state ("Between points · recovery clock active"). No runtime errors despite the schema-tight TypeScript types.
+**ROI**: **HIGH for "build green ≠ runtime green" delta.** TSC + Next.js build both passed; visual scrub confirmed RUNTIME was also green. Cheaper than full E2E test but catches a class of issues that pure-static-analysis misses.
+
+### Tool: `gh pr` family (planned for Saturday)
+
+**Use case**: check PR #7 (or whatever PR is currently open) for any review comments left while we were heads-down on the sync. Per Andrew's directive: "look for any comments" specifically meant PR comments.
+**Pattern**: `gh pr list --state open` → identify open PRs → `gh pr view <num> --comments` for inline + general comments.
+
+### Meta-learning Phase 7
+
+**The "no rush, do it right" framing dramatically changes outcome quality.** Earlier in Phase 6 (Tier 1 Remotion overhaul), I budgeted single-iteration audits (per PATTERN-086). For the ground-truth sync, Andrew explicitly overrode the team-lead's "speed up execution" suggestion with "take your time, push the envelope of our quality." Result: I dispatched a 4-agent panel that caught a CRITICAL fabrication. If I'd executed the team-lead's "Tier 1.5 Surgical Sync" speed-up version, that fabrication would have shipped to Vercel.
+
+**Multi-agent panels are the closest LLM-era equivalent to peer review.** Solo LLM authoring + LLM self-review is the cheapest workflow but has a known blind spot: the LLM doesn't catch its own confident-sounding fabrications. Dispatching domain-expert reviewers IS the peer review — and parallel dispatch makes it close to single-agent latency (~5 min wall-clock for 4 reviewers at ~250K tokens combined). The cost is small; the credibility-preservation is enormous.
+
+**Save-not-trash is the right discipline for ideas during a deadline-constrained sprint.** Created `docs/deferred_ideas.md` to capture 21+ ideas we vetoed or deferred. Each tagged with revisit-trigger (POST-SUBMISSION / V2-PRODUCT / RESEARCH / NEEDS-DATA). The project will outlive the hackathon; these ideas are real value waiting to be unlocked when constraints loosen.

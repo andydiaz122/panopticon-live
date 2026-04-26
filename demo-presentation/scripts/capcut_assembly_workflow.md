@@ -103,6 +103,16 @@ If ANY of these are missing, stop and produce them BEFORE opening CapCut. Workin
 
 ## OBS Capture Spec (the 4 silent MP4s Andrew records 11:00–13:00 EDT, AFTER intro + terminal captures)
 
+> **2026-04-26 OVERNIGHT UPDATE — RECORDING-TOOL CHANGE**: do NOT use OBS for these
+> captures. The forensic investigation in `docs/RECORDING_LAG_RECIPE.md` showed that
+> OBS x264 software encode contends with Chrome's main thread and amplifies the
+> dashboard's existing per-rAF forced reflow into visible 100ms+ stutters. Use
+> **macOS QuickTime via Cmd+Shift+5 → Record Selected Portion** instead. It uses
+> hardware VideoToolbox H.264 encoding and runs as a system process, leaving Chrome's
+> 144Hz rAF loop unburdened. The 4 capture filenames + scene specs below stay the
+> same; ONLY the recording tool changes. If for some reason QuickTime is unavailable,
+> the OBS-with-VideoToolbox-encoder fallback is documented in §2 of that recipe doc.
+
 | File | Raw record duration | On-timeline target | What it captures |
 |---|---|---|---|
 | `obs_b1_anomaly.mp4` | ~35s (record full anomaly window with 2-3s pad on each side) | 30s | Tab 1 raw tennis playback into the anomaly frame. Skeleton overlay snaps on. **No live React red blink** (that branch is not deployed) — visual hook is reconstructed in CapCut (see "B1 Visual-Hook Reconstruction" below). Mouse stays out of frame. |

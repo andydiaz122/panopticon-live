@@ -10,12 +10,27 @@
 ## ⚡ THE FIRST 15 MINUTES OF YOUR DAY (do these in order)
 
 1. **Coffee.** Don't skip.
-2. **Open `OVERNIGHT_REPORT.md`** at the project root (or `/tmp/obs_overnight_agent_report.md`) — the overnight agent's findings on the OBS lag investigation. This tells you whether you have a "v2 with pauses" recording option.
+2. **Read `docs/RECORDING_LAG_RECIPE.md`** (in repo) — the overnight agent's findings on the OBS lag investigation. **TL;DR: GOOD NEWS** — OBS was the amplifier of a real React perf bug. Use macOS QuickTime via `Cmd+Shift+5` instead of OBS; re-enable the slow-mo + coach pauses you loved; re-record Tab 1 with the explosive pacing back. Agent could NOT pre-produce the clean recording (chrome-devtools-mcp screencast was flag-gated), so this is your first concrete morning task.
 3. **Open `CAPCUT_TUTORIAL.html`** (project root) in your browser. Skim — don't deeply read. ~5 min.
 4. **Open this document on a second monitor** (or print it). Reference throughout the day.
 5. **Open CapCut** with the project from last night.
 
 You should now be in execution mode by ~07:30 EDT.
+
+## 🎬 NEW FIRST TASK (added 2026-04-26 ~04:00 EDT after agent's finding)
+
+**Re-record Tab 1 with pauses RE-ENABLED + QuickTime instead of OBS.** ~30 minutes. This unlocks the "explosive" demo you loved.
+
+1. Edit `dashboard/src/components/Hud/HudView.tsx` line 57: uncomment `useSlowMoAtAnomalies(videoRef)` (delete the `//` prefix on the active line, NOT the comment context above it)
+2. Edit `dashboard/src/components/Broadcast/CoachPanel.tsx` lines ~94, ~110, ~122: uncomment the three `video?.pause()` / `video?.play()` lines (delete `//` prefix)
+3. Build + deploy: `cd dashboard && bun run build && cd .. && vercel deploy --prod --yes --cwd /Users/andrew/Documents/Coding/hackathon-research`
+4. Hard refresh `panopticon-live.vercel.app` (Cmd+Shift+R) — confirm pauses are back during normal browser playback
+5. Open Cmd+Shift+5 → "Record Selected Portion" → frame around your Chrome window's video area
+6. Do a **10-second test recording first** — play the dashboard for 10s, stop QuickTime, watch back. Confirm: NO lag, NO replay glitches, smooth slow-mo at anomaly moments
+7. If clean → record full ~150s take (the with-pauses version is longer because of slow-mo + typewriter pauses). Save to `~/Documents/Panopticon_Captures/full_tab1_with_pauses_v2_QUICKTIME.mov`
+8. Import to CapCut. Now you have BOTH versions in your bin: A/B them when assembling and pick the one that feels more explosive
+
+If the QuickTime recording STILL has lag (unexpected per the recipe), revert to your existing `full_tab1_run_NO_pauses.mov` and ship the no-pauses cut. Don't burn more than 30 minutes on this.
 
 ---
 

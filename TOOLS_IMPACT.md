@@ -982,3 +982,54 @@ HTMLMediaElement.prototype.pause = function() { window.__vlog.push({ev:'pause', 
 **Save-not-trash discipline scales to commented-out code paths.** The `useSlowMoAtAnomalies` + `CoachPanel` pause/play disable is a commented-out save (with `// V2: re-enable, see IDEA-026` markers in the code), not a deletion. Same discipline as `deferred_ideas.md` — preserving "we considered this and chose otherwise" is institutional memory; deleting is amnesia.
 
 **Audio-pivot late-in-cycle is sometimes the right call.** The voiceover_script + sound-booth setup (~3 hours of Saturday afternoon) didn't get USED in v1 — but the work CONSERVES for V2. Hackathons reward shipping a clean v1, not utilizing every prepped asset. The `IDEA-024` entry preserves the V2 reactivation path.
+
+---
+
+## Phase 10 — Overnight OBS-Lag Investigation (2026-04-26 ~02:30-04:00 EDT)
+
+### Tool: chrome-devtools-mcp `evaluate_script` + `performance_start_trace` + `performance_analyze_insight`
+
+**Cost**: ~5 seconds per `evaluate_script`, ~1 second per perf trace start/stop, instant per insight analysis.
+
+**Output (this session)**:
+- 3 instrumented playthroughs of the 60-second clip (clean baseline, simulated-load with pauses enabled, simulated-load with pauses disabled). Captured FPS distributions, long-task counts, RAF-gap histograms, pause/play event timelines with stack traces.
+- 1 `performance_analyze_insight` call returned the smoking gun: `ForcedReflow` at `PanopticonEngine.useEffect.tick` line 108-109 (162ms reflow cost from `canvas.clientWidth/Height` reads per rAF tick).
+- 1 saved trace at `/tmp/perf_traces/load_simulated_obs.json` for future re-analysis.
+
+**ROI**: **EXTREME — this is the third independent session where chrome-devtools-mcp was the difference between speculation and proof.** Without it I'd have written a recommendation based on the first plausible hypothesis ("OBS is slow"). With it, the 3-test factorial revealed the precise causal structure: dashboard already has 107 long tasks at idle, OBS amplifies the tail, pauses are a 25-50% contributor not the dominant cause, the root inefficiency is the per-rAF reflow. **Time spent: ~1.5h of test runs. Time saved: 3-5h of wrong-direction debugging + a wrong fix landing in the demo.**
+
+**Pattern (PATTERN-090, new this session)**: when investigating "X causes Y" performance claims, run THREE tests minimum: (a) baseline without X and without the suspect feature, (b) suspect feature + X, (c) suspect feature without X. The 2x3 factorial reveals whether X is the cause, the amplifier, or innocent. Single-test "confirmed" is selection bias.
+
+### Tool: chrome-devtools-mcp `screencast_start` / `screencast_stop` (BLOCKED)
+
+**Cost**: would have been ~0 (just call the tool, get an mp4 back).
+**Output**: NONE — tool not available because gated behind `--experimentalScreencast` MCP flag.
+
+**ROI**: **LOW with documentation** — couldn't use it, but discovered the flag and documented it. Logged as PATTERN-089. One-line config change in `~/.claude.json` would unlock a high-quality contention-free recording path for any future agent that needs to capture a page programmatically. **Action item for global recommend**: enable this flag globally; the cost is zero, the upside is a recording capability that doesn't currently exist for agents.
+
+**Pattern**: when looking for a tool that "should" exist, INSPECT the MCP server's source (`~/.npm/_npx/<hash>/node_modules/<server>/build/src/`) to see what's gated. Conditions like `experimentalScreencast`, `experimentalMemory`, `experimentalVision`, `experimentalInteropTools`, `experimentalWebmcp` are documented as flags in `index.js`. If the capability exists in source but not at runtime, it's almost always a missing CLI flag — surface that to the user instead of silently failing (anti-pattern #35).
+
+### Tool: ffmpeg + Apple VideoToolbox
+
+**Cost**: built into macOS / homebrew — already installed.
+**Output**: identified as the right encoder path for QuickTime (already used by macOS Cmd+Shift+5) and as the OBS-fallback encoder if QuickTime is unavailable.
+
+**ROI**: **HIGH** — every minute of x264 software encode burns 35-60% of a CPU core, fighting Chrome for the same cores; VideoToolbox offloads to Apple's media engine and frees those cores for the dashboard's main thread. The decision recommended in `RECORDING_LAG_RECIPE.md` to use QuickTime instead of OBS is grounded in this hardware-encoder asymmetry. Pattern: ALWAYS prefer hardware-encoder paths on Apple Silicon — they're faster, lower-power, AND lower-CPU-contention.
+
+### SKILLS NOT USED THIS OVERNIGHT SESSION (and why)
+
+- **`security-reviewer` agent / `security-review` skill** — investigation is read-only against local dev; no code merged or shipped. Re-enabled then reverted both files. No security surface touched.
+- **`vercel-react-best-practices` skill** — would be the right call if I were AUTHORING the per-rAF reflow fix. I am NOT writing that fix tonight (it's a post-hackathon item). When Andrew or a future agent does write the fix, this skill should be invoked to validate the canvas-size-cache + ResizeObserver pattern is idiomatic React 19.
+- **`react-30fps-canvas-architecture` skill** — same reason. The skill is the right authority for the fix design, but the fix isn't being written tonight. Documented in the recipe doc as the post-hackathon follow-up.
+- **`code-reviewer` agent** — the only edits to source were temporary uncomment-and-revert pairs. Net source diff is zero. No review needed.
+- **`hackathon-demo-director` skill** — could have inspected the recording-spec details against the demo storyboard. **Why not**: the recording-tool change (OBS → QuickTime) is mechanical; the storyboard, scene specs, and timeline are unchanged. The skill would have agreed and added no information. If the question were "should we restructure the demo's scene order around the new recording reality," that would be the right skill — but that question is not on the table.
+
+**Anti-pattern #18 defense**: each skill-skip above is logged with REASONING. The default for "did we use the right tool?" is to log the answer even when "no, here's why."
+
+### Meta-learning Phase 10
+
+**chrome-devtools-mcp continues to be the highest-ROI tool on this project.** Phase 9 used it for visual scrubbing (Tab 3 swarm validation). Phase 10 used it for performance forensic investigation. Different use-cases, same tool, both EXTREME ROI. The instrumentation pattern (`feedback_chrome_devtools_mcp_video_instrumentation.md`) generalizes beyond `<video>` to any DOM element with timing-sensitive behavior — wrap getters/setters, install event listeners, dump to a window-global ring buffer, retrieve at the end. **This pattern should be promoted from project-feedback to a global skill if a 3rd use-case appears.**
+
+**The "3-test factorial" discipline (PATTERN-090) is the important durable learning of this session.** It generalizes beyond perf debugging to ANY "X causes Y" claim. Run baseline-without-X-and-without-Y, with-Y-and-X, with-Y-without-X. Without all three, you'll attribute causation incorrectly. Without the second and third, you can't separate cause from amplifier from innocent bystander. The cost is one extra test run; the upside is the difference between a precise fix and a superstitious one.
+
+**Inspecting MCP server source code for gated capabilities is a high-leverage move.** I found `screencast_start` was real-but-gated by reading `node_modules/chrome-devtools-mcp/build/src/tools/screencast.js`. The same exercise would reveal other capabilities I might be assuming don't exist. **Pattern**: before concluding "the tool doesn't have feature X," check the source. The cost is 30 seconds; the upside is unlocking entire workflow paths.

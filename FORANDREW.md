@@ -12,7 +12,7 @@ You went to bed Saturday ~11 PM after scaffolding the demo + asking me to invest
 
 2. **`CAPCUT_TUTORIAL.html`** (project root) — open in your browser. 10-minute tutorial covering ONLY the CapCut operations you need, anchored to YOUR specific demo (countdown vision, serve apex, walkthrough, closing). Has "if stuck" troubleshooting per section.
 
-3. **Overnight OBS investigation** — a background agent investigated WHY the dashboard lagged when OBS was recording. Look for `/tmp/obs_overnight_agent_report.md`. The agent's hypothesis: OBS adds CPU load via ScreenCaptureKit + H.264 encoding that starves the rAF loop. Fix: use QuickTime native (Cmd+Shift+5) instead of OBS. The agent may have produced a clean v2 with-pauses recording at `~/Documents/Panopticon_Captures/full_tab1_with_pauses_v2_clean.mp4` — check.
+3. **Overnight OBS investigation — COMPLETE, GOOD NEWS.** Read **`docs/RECORDING_LAG_RECIPE.md`** (in repo, more durable than /tmp). Forensic finding: OBS is the AMPLIFIER, not the cause. The dashboard has a pre-existing per-rAF forced reflow at `PanopticonEngine.tsx:108-109` (canvas.clientWidth/Height reads on every tick at 144Hz — 162ms total reflow per clip). OBS x264 software encode contends with Chrome's main thread and amplifies that into visible 100ms+ stutters. **Fix: use macOS QuickTime via Cmd+Shift+5 instead of OBS** (VideoToolbox hardware encode + system-process capture = zero contention). With QuickTime as the recording tool, **you can RE-ENABLE the pauses + slow-mo you loved** (the "explosive" demo) — they're great UX, the only reason they failed was OBS. Do a 10s test recording first to confirm. Agent could NOT pre-produce a clean v2 (chrome-devtools-mcp screencast tool is gated behind a `--experimentalScreencast` flag that needs `~/.claude.json` config change), so morning task #1 is to re-record fresh with QuickTime. See SUNDAY_PLAN's "🎬 NEW FIRST TASK" section for step-by-step.
 
 4. **Memory + log updates** — all 4 living docs (this one, MEMORY.md, TOOLS_IMPACT.md, deferred_ideas.md) have new Saturday-evening entries from documentation-librarian. The overnight agent will append further OBS findings.
 
@@ -1749,3 +1749,40 @@ NOTE on numbering: the Saturday-afternoon FORANDREW section already used DECISIO
 - CV submission by 17:00 EDT soft target / 19:55 EDT hard lockout / 20:00 EDT deadline
 
 The dashboard is rock-solid. The raw materials are captured. The Tab 3 swarm is world-class. The audio plan is simplified. Sunday is purely a CapCut + upload + submit day. We're in the position we wanted to be in 24 hours out.
+
+### Overnight investigation finding (CV/perf-engineering agent, 2026-04-26 ~02:30-04:00 EDT)
+
+**Mission**: root-cause the OBS-recording lag that forced disabling the slow-mo + coach-pause behaviors you loved.
+
+**Hypothesis tested**: OBS adds CPU contention that starves the rAF loop. Confirmed PARTIALLY — the lag is real, but OBS is the AMPLIFIER, not the cause.
+
+**Forensic data (3 chrome-devtools-mcp instrumented test runs of the 60s clip)**:
+
+| Test | Pauses | Synthetic CPU load | FPS p10 | Long tasks | Severe RAF drops (>100ms) |
+|---|---|---|---|---|---|
+| A | enabled | none | 119 | 107 (7.7s) | **0** |
+| B | enabled | 4 workers + main-thread burn | 122 | 96 (6.6s) | **4** |
+| C | DISABLED | same load as B | 122 | 79 (5.3s) | 1 |
+
+**Root cause**: `chrome-devtools-mcp.performance_analyze_insight` flagged `ForcedReflow` and identified `PanopticonEngine.tick @ PanopticonEngine.tsx:108-109` — `canvas.clientWidth/clientHeight` are read on EVERY rAF tick (144Hz on M4 Pro), forcing a layout flush 144 times per second. Total 162ms of forced reflow per clip even at idle. Under OBS-class CPU contention, each reflow takes longer and stacks into 100ms+ long tasks visible as stutter in the recording.
+
+**The dashboard already has 107 long tasks even at idle**. Pauses contribute ~25-50% under load. OBS adds the SEVERE tail (4 vs 0 drops >100ms). Disabling pauses removes the most visible symptom (4 → 1 severe drops) but doesn't fix the root inefficiency.
+
+**Recommendation for Sunday's recording**:
+1. Use **macOS QuickTime via Cmd+Shift+5 → Record Selected Portion** (NOT OBS). It uses VideoToolbox hardware H.264 encoding and runs as a system process. Zero contention with Chrome's main thread.
+2. **Re-enable** `useSlowMoAtAnomalies(videoRef)` (HudView.tsx:54) and the 3 `video.pause()`/`video.play()` calls (CoachPanel.tsx lines 91, 106, 117) — the behaviors are great UX once the recording tool isn't OBS.
+3. Do a 10s test recording with QuickTime to confirm clean playback, THEN do the full 90s take.
+4. If still stuttering: revert to disabled state (current code), accept the no-pauses cut, ship.
+
+**Permanent fix (post-hackathon)**: 30-line PR caching `canvas.clientWidth/Height` in a ref updated by ResizeObserver instead of reading per-frame. Eliminates the forced reflow. Dashboard becomes buttery-smooth even under OBS load.
+
+**OBS fallback (if QuickTime unavailable)**: OBS with `Apple VT H264 Hardware Encoder` (NOT x264 software) + Display Capture source (NOT Browser Source — Browser Source spawns a sibling Chromium that competes for cores).
+
+**Source files left in DISABLED state.** I uncommented the 4 lines for the test, then reverted them. `git status` should show no changes to those two files. The investigation files I produced:
+- `docs/RECORDING_LAG_RECIPE.md` — full recipe document with QuickTime step-by-step
+- `/tmp/obs_lag_investigation_2026-04-26.md` — raw forensic data
+- `/tmp/perf_traces/load_simulated_obs.json` — chrome-devtools-mcp performance trace
+
+**Blocker encountered**: chrome-devtools-mcp ships a `screencast_start`/`screencast_stop` tool that would have given me a clean Chromium-internal recording (no OBS, no QuickTime needed). It's gated behind `--experimentalScreencast` which is NOT set in your `~/.claude.json`. To enable for future agents: change `args: ["chrome-devtools-mcp@latest"]` to `args: ["chrome-devtools-mcp@latest", "--experimentalScreencast"]` and restart Claude Code. Logged as PATTERN-089 in MEMORY.md. The CDP-screencast `clean.mp4` referenced in the agent brief was NOT produced — record fresh with QuickTime in the morning.
+
+**Logged learnings**: GOTCHA-051 (OBS lag root cause), PATTERN-089 (chrome-devtools-mcp screencast flag), PATTERN-090 (3-test factorial discipline for "X causes lag" claims) added to MEMORY.md. Plus a new feedback file at `~/.claude/projects/.../memory/feedback_obs_recording_starves_raf.md` for cross-project recall.

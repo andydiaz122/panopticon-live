@@ -2364,4 +2364,31 @@ ALL CRITICAL + HIGH + MEDIUM findings addressed in one consolidated patch. Re-ra
 
 ## DAY 5 LEARNINGS (Apr 26, 2026)
 
-(To be populated)
+### GOTCHA-051 — OBS x264 software encode contends with Chrome and amplifies dashboard's per-rAF forced reflow into visible 100ms+ stutters
+- **Type**: Gotcha
+- **Context**: Saturday evening 2026-04-25 ~18:45 EDT, Andrew disabled `useSlowMoAtAnomalies` (HudView.tsx:54) + 3 `video.pause()/play()` calls in CoachPanel.tsx (lines 91/106/117) because OBS recordings of the dashboard showed perceptual stutter and frame hitches. The disable produced clean OBS takes, but Andrew loved the original behavior on the live URL ("sped the demo up when it needed to be sped up and then it slowed it down at the right times, highlighting the right moments, making it feel explosive"). Overnight investigation 2026-04-26 by CV/perf agent root-caused the lag.
+- **Lesson**: The dashboard already has 107 long tasks per 60s clip even at idle (ForcedReflow on `PanopticonEngine.tick` line 108 — `canvas.clientWidth/Height` reads on every rAF tick force layout flush at 144Hz). OBS x264 software encode contends with Chrome's main thread and amplifies the existing inefficiency from "imperceptible" to "4 severe RAF drops >100ms per minute." Simulated-load tests proved: with pauses ENABLED + load → 4 severe drops; with pauses DISABLED + load → 1 severe drop; without load → 0 severe drops regardless of pauses.
+  - **Permanent fix**: cache `canvas.clientWidth/Height` in a ref updated by ResizeObserver instead of reading every frame. Single 30-line PR. Eliminates 162ms of forced reflow per clip. (Post-hackathon.)
+  - **Recording fix today**: use macOS QuickTime via `Cmd+Shift+5 → Record Selected Portion` instead of OBS. QuickTime uses VideoToolbox hardware H.264 encoding (offloaded to Apple's media engine) and runs as a system process — no contention with Chrome. Re-enable slow-mo + pauses for the live URL once recording is done.
+  - **OBS fallback**: if QuickTime unavailable, OBS with `Apple VT H264 Hardware Encoder` (NOT x264) + Display Capture (NOT Browser Source) is acceptable. Browser Source spawns a sibling Chromium that competes for cores.
+- **Severity**: HIGH (cost ~3h of UX-disable workaround + risked degraded demo recording quality)
+- **Source**: Overnight investigation 2026-04-26 by CV/perf-engineering agent. Full forensic data in `docs/RECORDING_LAG_RECIPE.md` and `/tmp/obs_lag_investigation_2026-04-26.md`.
+- **See also**: PATTERN-087 (chrome-devtools-mcp video instrumentation — used to prove this); PATTERN-089 below (next entry).
+
+### PATTERN-089 — chrome-devtools-mcp `screencast_start`/`screencast_stop` exists but is gated behind `--experimentalScreencast`
+- **Type**: Pattern (config-discovery)
+- **Context**: Investigating alternative recording tools for OBS replacement (overnight 2026-04-26). Found in `~/.npm/_npx/15c61037b1978c83/node_modules/chrome-devtools-mcp/build/src/tools/screencast.js` that the MCP DOES ship a screencast tool using Puppeteer's `page.screencast()` (CDP-driven, ffmpeg-based). It would have given a clean Chromium-internal recording with zero userland CPU contention. But it's gated by `tool.annotations.conditions: ['screencast']` which is only enabled when MCP is started with `--experimentalScreencast`.
+- **Lesson**: The current `~/.claude.json` MCP config is `args: ["chrome-devtools-mcp@latest"]` with no flags. To enable in-Chromium recording for future agents, change to `args: ["chrome-devtools-mcp@latest", "--experimentalScreencast"]` and restart Claude Code. This unlocks a high-quality, contention-free recording path for any agent that needs to capture a page programmatically. Worth doing globally — costs nothing if unused.
+  - Also: Chrome runs with `--remote-debugging-pipe` (not TCP), so a sibling Puppeteer cannot attach to the existing browser. Without the MCP screencast flag, agents have NO way to record pages programmatically without launching a separate headless Chromium (which won't match the user's actual screen rendering — different DPI, color profile, font fallbacks).
+- **Severity**: MEDIUM (capability blind-spot; one config change unlocks it)
+- **Source**: Overnight investigation 2026-04-26.
+- **See also**: GOTCHA-051; anti-pattern #35 (surface tool-call failures — this one was a "tool not registered" gap that I traced to its root and documented for the next agent).
+
+### PATTERN-090 — Run THREE perf tests, not one, when isolating "user did X and the lag started" claims
+- **Type**: Pattern (debugging discipline)
+- **Context**: When a user says "X causes the lag" (here: "OBS causes the lag"), the temptation is to run ONE test confirming the lag exists with X and ship a fix. But the right protocol is THREE tests: (a) baseline without X and without the suspect feature, (b) suspect feature WITH the alleged trigger, (c) suspect feature WITHOUT the alleged trigger. The 2x2 (or 2x3) factorial reveals whether X is the cause, the amplifier, or innocent.
+- **Lesson**: Applied to this investigation: ran (A) pauses enabled + no load = clean baseline, (B) pauses enabled + simulated OBS-class load = 4 severe RAF drops, (C) pauses disabled + same load = 1 severe drop. Conclusion: pauses contribute, load amplifies, but the dominant 79 long tasks come from PanopticonEngine's per-rAF reflow. Without test (C), would have wrongly concluded "the pauses are the cause." Without test (A), would have wrongly concluded "OBS is the cause." With all three, the precise causal structure is visible.
+- **Severity**: HIGH (saves wrong-direction fixes; this is the "validation discipline" pattern at perf-debugging scale)
+- **Source**: Overnight investigation 2026-04-26.
+- **See also**: PATTERN-087 (instrument first); USER-CORRECTION-038 (validation-tool discipline).
+

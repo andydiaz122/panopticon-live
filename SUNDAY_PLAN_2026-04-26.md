@@ -17,20 +17,58 @@
 
 You should now be in execution mode by ~07:30 EDT.
 
-## 🎬 NEW FIRST TASK (added 2026-04-26 ~04:00 EDT after agent's finding)
+## 🎬 NEW FIRST TASK (UPDATED 2026-04-26 ~04:30 EDT after team-lead review)
 
-**Re-record Tab 1 with pauses RE-ENABLED + QuickTime instead of OBS.** ~30 minutes. This unlocks the "explosive" demo you loved.
+**Re-record Tab 1 with pauses RE-ENABLED + QuickTime against LOCALHOST.** ~30 minutes. This unlocks the "explosive" demo you loved.
 
-1. Edit `dashboard/src/components/Hud/HudView.tsx` line 57: uncomment `useSlowMoAtAnomalies(videoRef)` (delete the `//` prefix on the active line, NOT the comment context above it)
-2. Edit `dashboard/src/components/Broadcast/CoachPanel.tsx` lines ~94, ~110, ~122: uncomment the three `video?.pause()` / `video?.play()` lines (delete `//` prefix)
-3. Build + deploy: `cd dashboard && bun run build && cd .. && vercel deploy --prod --yes --cwd /Users/andrew/Documents/Coding/hackathon-research`
-4. Hard refresh `panopticon-live.vercel.app` (Cmd+Shift+R) — confirm pauses are back during normal browser playback
-5. Open Cmd+Shift+5 → "Record Selected Portion" → frame around your Chrome window's video area
-6. Do a **10-second test recording first** — play the dashboard for 10s, stop QuickTime, watch back. Confirm: NO lag, NO replay glitches, smooth slow-mo at anomaly moments
-7. If clean → record full ~150s take (the with-pauses version is longer because of slow-mo + typewriter pauses). Save to `~/Documents/Panopticon_Captures/full_tab1_with_pauses_v2_QUICKTIME.mov`
-8. Import to CapCut. Now you have BOTH versions in your bin: A/B them when assembling and pick the one that feels more explosive
+> **Team-lead VETO on Vercel deploy.** Do NOT deploy to production on submission day. Pixels are 100% identical between localhost dev server and Vercel CDN as far as QuickTime is concerned. Your stable Vercel deployment stays untouched; deployment risk = zero.
 
-If the QuickTime recording STILL has lag (unexpected per the recipe), revert to your existing `full_tab1_run_NO_pauses.mov` and ship the no-pauses cut. Don't burn more than 30 minutes on this.
+**Source code is already uncommented for you** (Claude did this overnight after team-lead review). Just run dev server + record:
+
+1. Open terminal: `cd /Users/andrew/Documents/Coding/hackathon-research/dashboard && bun run dev`
+2. Wait for "ready in Xms" message (~3 seconds). Dev server is at `http://localhost:3000`
+3. Open Chrome, navigate to `http://localhost:3000`. Hit **Cmd+Ctrl+F** to full-screen the window (hides URL bar — recording surface is clean)
+4. Open QuickTime alternative: **Cmd+Shift+5** → click "**Record Selected Portion**" → drag selection box around your Chrome window's video area (the dashboard, not the browser chrome)
+5. Do a **10-second test recording first** — hit play on the dashboard video, let it run for 10s, stop QuickTime (click the recording icon in menu bar), watch back. **Confirm: NO lag, NO replay glitches, smooth slow-mo at anomaly moments around 35.9s, coach panel pauses for typewriter.**
+6. If clean → record FULL ~150s take (the with-pauses version is longer because of slow-mo + 7 typewriter pauses, ~150s expected wall-clock). Save to `~/Documents/Panopticon_Captures/full_tab1_with_pauses_v2_QUICKTIME.mov`
+7. Import to CapCut. You now have THREE versions in your bin:
+   - `full_tab1_run_NO_pauses.mov` (clean playback, fallback)
+   - `full_tab1_run_v1_with_pauses.mov` (Saturday OBS recording with the lag baked in — DO NOT USE)
+   - `full_tab1_with_pauses_v2_QUICKTIME.mov` (NEW — clean explosive version) ← use this one
+
+If QuickTime recording STILL has lag (unexpected per `docs/RECORDING_LAG_RECIPE.md`), fall back to `full_tab1_run_NO_pauses.mov`. Don't burn more than 30 minutes on this.
+
+**When done with the recording, kill the dev server (`Ctrl+C` in the terminal). You're done with localhost — the rest of Sunday is CapCut work.**
+
+---
+
+## 🎙️ Communication Strategy (UPDATED — replaces voice-over directive)
+
+> **Andrew override 2026-04-26 ~04:00 EDT**: skip voice-over entirely. Communicate to the audience by TYPING messages on a black background — same aesthetic as the intro typing. One unified communication device throughout the demo = professional + on-brand.
+
+**Where typed-interludes land in the timeline** (each ~3s, total ~10s of communication):
+
+| Time | Interlude text | Style |
+|---|---|---|
+| 0:00-0:22 | (Already exists: 4-stage intro typing in claude.ai UI) | Full Claude UI |
+| ~0:30 | "Now: live HUD over broadcast" | Black bg, white text, typewriter |
+| ~1:30 | "The dashboard is just the showcase" | Black bg, white text, typewriter |
+| ~1:58 | "The final product: the raw telemetry" | Black bg, white text, typewriter |
+| 2:43-2:55 | (Already exists: closing card "capture the signal nobody else is reading") | Black bg, white serif |
+
+**Specs for the 3 NEW interludes** (build in CapCut as text overlays, NOT separate QuickTime takes — saves 30 minutes):
+
+- Background: pure black (`#000000`)
+- Text: white (`#F8FAFC`)
+- Font: **JetBrains Mono Regular** (matches Claude UI typing aesthetic) OR **Fraunces Italic** (matches closing card register — pick one and stay consistent)
+- Size: 36-48pt
+- Position: dead center
+- Animation: typewriter reveal at ~25 cps (CapCut's "Typewriter" preset)
+- Cursor: blinking underscore at end (CapCut text presets often include this)
+- Duration: 3 seconds total (text appears in ~2s, holds for 1s, hard cut to next clip)
+- NO Claude UI shell — that's reserved for the opener; reuse would dilute the effect
+
+**Why this works** (first-principles): one communication device used consistently throughout = "deeply intentional" reading. Mixed devices = "ad-hoc" reading. Judges associate intentionality with shipped products.
 
 ---
 

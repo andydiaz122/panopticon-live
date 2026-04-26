@@ -80,15 +80,13 @@ function InsightCard({ insight }: { insight: CoachInsight }) {
     let i = 0;
     let resumeTimeoutId: number | undefined;
 
-    // 2026-04-25 ~18:45 EDT — Step 1 (video.pause) DISABLED for OBS
-    // recording session per Andrew's call. Typewriter still types so the
-    // panel still surfaces commentary alongside the video — judges see
-    // both update independently over the natural 60s timeline. Editorial
-    // pacing (pause-on-insight) handled in CapCut. Re-enable post-demo by
-    // uncommenting `video?.pause()` and the two `video?.play()` resume
-    // calls below.
-    void video; // suppress unused warning while pause/play disabled
-    // video?.pause();
+    // 2026-04-26 ~04:30 EDT — RE-ENABLED for QuickTime recording session.
+    // OBS was the lag amplifier (see docs/RECORDING_LAG_RECIPE.md). With
+    // QuickTime as the recording tool, the slow-mo + telestrator pauses
+    // are back. Coach insight #5 was moved from t=36000 to t=37500 in
+    // 52b8294 to eliminate the slow-mo+pause collision. TELESTRATOR_HOLD_MS
+    // softened from 3500 to 1500 stays in place (better editorial pacing).
+    video?.pause();
 
     const typewriterId = window.setInterval(() => {
       i += 1;
@@ -99,11 +97,9 @@ function InsightCard({ insight }: { insight: CoachInsight }) {
       spanRef.current.textContent = commentary.slice(0, i);
       if (i >= commentary.length) {
         window.clearInterval(typewriterId);
-        // Step 3 (hold + resume) DISABLED — video is never paused so no
-        // resume needed. Typewriter ends and panel holds final text until
-        // the next insight fires (or the video moves out of range).
+        // Step 3: typewriter ends → hold for TELESTRATOR_HOLD_MS → resume.
         resumeTimeoutId = window.setTimeout(() => {
-          // video?.play().catch(() => {});
+          video?.play().catch(() => {});
         }, TELESTRATOR_HOLD_MS);
       }
     }, TYPEWRITER_STEP_MS);
@@ -113,8 +109,9 @@ function InsightCard({ insight }: { insight: CoachInsight }) {
       if (resumeTimeoutId !== undefined) {
         window.clearTimeout(resumeTimeoutId);
       }
-      // Step 4 (always resume on unmount) DISABLED for the same reason.
-      // video?.play().catch(() => {});
+      // Step 4: on insight change or unmount, always resume so the demo
+      // never leaves the viewer stranded at a paused frame.
+      video?.play().catch(() => {});
     };
   }, [insight.commentary, insight.insight_id, videoRef]);
 

@@ -44,15 +44,18 @@ export default function HudView() {
   // A2a slow-mo at the Detective Cut's anomaly beats (PHASE_6_TEAM_LEAD_HANDOFF §2).
   // Pure HTMLMediaElement API — zero canvas coordination. See
   // dashboard/src/lib/useSlowMoAtAnomalies.ts for the ramp/hold shape.
-  // 2026-04-25 ~18:45 EDT — DISABLED for OBS recording session per Andrew's
-  // call. Even after root-causing the t=35s replay illusion (coach insight
-  // #5 inside slow-mo window — fixed in 52b8294), Andrew chose the cleaner
-  // path: record straight-through and add editorial pacing (slow-mo, freeze
-  // callouts) in CapCut where the editor has full creative control. The
-  // slow-mo IS still good product behavior for the live URL — re-enable
-  // post-demo by uncommenting the next line.
-  // useSlowMoAtAnomalies(videoRef);
-  void videoRef; // suppress unused-ref warning while disabled
+  // 2026-04-26 ~04:30 EDT — RE-ENABLED for QuickTime recording session.
+  // Overnight forensic investigation (docs/RECORDING_LAG_RECIPE.md) confirmed
+  // OBS was the lag amplifier (x264 software encode contending with Chrome
+  // main thread under the dashboard's pre-existing per-rAF forced reflow at
+  // PanopticonEngine.tsx:108-109). Recording with macOS QuickTime via
+  // Cmd+Shift+5 uses VideoToolbox hardware encoding + system-process capture
+  // = zero contention. The "explosive" demo (slow-mo at anomalies + coach
+  // panel telestrator pause) is back. Coach insight #5 was moved from
+  // t=36000 to t=37500 in 52b8294 to eliminate the slow-mo+pause collision.
+  // Defaults softened in useSlowMoAtAnomalies.ts (0.5x rate, 1.5s window)
+  // are kept because they were what Andrew confirmed feels good.
+  useSlowMoAtAnomalies(videoRef);
 
   return (
     <div className="flex min-h-[calc(100vh-72px)] flex-col bg-[var(--color-bg-0)] p-6 lg:p-10">

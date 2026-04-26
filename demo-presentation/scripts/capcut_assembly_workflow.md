@@ -2,6 +2,14 @@
 
 **Authored:** 2026-04-25 ~06:00 EDT.
 
+> ⚠️ **AUDIO PIVOT 2026-04-25 ~20:41 EDT** — Andrew made the executive decision
+> to SHIP WITHOUT VOICE-OVER for v1 (<24h to deadline). Music bed is now the
+> primary audio + carries the editorial through-line. Voice is DEFERRED to a
+> potential v2 cut. The "Step 2 — Voiceover track" section below is RETIRED;
+> see "Step 2 (NEW) — Music-only audio mix" for the updated audio plan. Total
+> tracks reduced from 4 to 3 (top: visuals, middle: music + native intro audio,
+> bottom: optional UI SFX).
+
 **Replaces:** `davinci_composite_workflow.md` — DaVinci Resolve was the prior plan; the team-lead pivot to Anthropic Minimalism + free + zero-Fusion-macro toolchain made CapCut Desktop the right choice for solo execution under deadline.
 
 **Execution target:** Saturday 2026-04-25, 15:00–19:00 EDT.
@@ -212,7 +220,11 @@ Drag clips onto Track 4 in this exact sequence at these exact timecodes:
 
 Anthropic's vocabulary: "hard cut + occasional scale-pop + typewriter." Don't add additional crossfades. Don't add Ken Burns zooms. Don't add anything to the OBS captures (digital zoom on UI distorts text — team-lead VETO).
 
-### Step 2 — Voiceover track
+### ⚠️ RETIRED — Step 2 — Voiceover track (DO NOT EXECUTE)
+
+> **Voice-over deferred 2026-04-25 ~20:41 EDT** per Andrew's executive call.
+> Section preserved below for v2 reference only. Skip this entire block in
+> the v1 assembly. Go directly to "Step 2 (NEW) — Music-only audio mix".
 
 > **Timing shift:** the new typing+terminal opener is 30s vs the old static-card 15s opener. **All VO line timings shift forward by +15s** vs `voiceover_script.md`. See the updated timing table at the bottom of `voiceover_script.md` for the new positions.
 
@@ -226,6 +238,41 @@ into position.
 **Audio level rule:**
 - VO peak: -12 dBFS during spoken lines
 - VO completely silent (cut, not muted) between lines — silence is part of the script
+
+---
+
+### ✅ ACTIVE — Step 2 (NEW) — Music-only audio mix
+
+Without voice-over, the music bed becomes the THROUGH-LINE that holds 3
+minutes of silent footage together. Choose a track with a CLEAR 3-minute
+arc (build → climax → decay), not just a 30-second loop. Indie lo-fi /
+ambient electronica / minimal cinematic — SF tech-judge taste.
+
+**Audio track structure (revised):**
+
+```
+Track 4 (top):    Title cards + OBS captures (the visual)
+Track 2 (mid):    Music bed (continuous, primary audio)
+Track 1 (bot):    Live typing intro NATIVE AUDIO (keyboard clacks from QuickTime mic capture, 0:00-0:22 only)
+                  + optional UI click SFX on tab transitions
+```
+
+**Music placement:**
+
+1. Drag music track onto Track 2, starting at 0:00
+2. Trim music end to 3:00 + ~1s ring-out (so the final chord decays into 1-2s of silence after the YouTube cut, per Numerai DNA)
+3. **Base level: -14 dBFS** (was -24 with VO; raise to -14 since music is now primary). Should fill the room without overpowering.
+4. **Ducking under live-typing intro audio:** if your intro QuickTime captured authentic keyboard clacks at audible volume, duck music to -20 dBFS during 0:00-0:22 so the typing reads clearly. Restore to -14 at 0:22.
+5. **Volume swell at editorial pivot points** (use CapCut keyframes):
+   - 0:30 (dashboard reveal): +2 dB swell, 0.5s ramp — punctuates the visual transition from "input" (typing+terminal) to "output" (the dashboard)
+   - 1:50 (Tab 2 reveal): +1 dB swell, 0.5s ramp — punctuates the value-prop reveal
+   - 2:15 (Tab 3 swarm reveal): +2 dB swell, 0.5s ramp — punctuates the agent-orchestration reveal
+   - 2:48 (closing card entry): +3 dB swell to -11 dBFS, 1s ramp — sustains for the full 12-second closing hold
+6. **Final ring-out:** let music play through 3:00:00, then natural decay to silence by 3:01.5
+
+**No voice-over to duck under** — set CapCut's "Auto Duck" feature OFF for the music track (it has nothing to duck against).
+
+**The native typing audio from `intro_typing_raw.mov`** is the ONLY voice-like audio in the entire demo — keyboard clacks captured by the MacBook mic during live typing. This is the ANTHROPIC SIGNATURE move (real keystrokes, not stock SFX). Make sure it stays audible at -16 dBFS during 0:00-0:22.
 
 ### Step 3 — Music bed (optional but recommended)
 

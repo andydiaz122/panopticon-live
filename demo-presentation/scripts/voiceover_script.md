@@ -1,3 +1,23 @@
+# ⚠️ DEFERRED — Voiceover Script (NOT shipping in v1 demo)
+
+> **Status as of 2026-04-25 ~20:41 EDT**: Andrew made the executive decision to
+> SKIP voice-over entirely for the v1 hackathon submission (less than 24 hours
+> to deadline). Music bed now carries the audio. This script is preserved
+> verbatim for: (a) potential v2 / post-hackathon enhancement, (b) reference
+> for what facts the silent visuals + on-screen text would need to convey
+> if we add subtle text overlays in CapCut, (c) the pacing math (165 wpm,
+> ~37s spoken total) which is still useful for sanity-checking music duration.
+>
+> **DO NOT record this audio for the v1 submission.** The CapCut assembly
+> workflow has been updated to remove the voice track entirely. See
+> `capcut_assembly_workflow.md` for the music-only audio mix.
+>
+> **If we revisit voice for a v2 cut**, the closet sound booth setup + 12-line
+> structure below is still the right approach — just unlock by removing this
+> banner and re-engaging the recording protocol.
+
+---
+
 # Voiceover Script — PANOPTICON LIVE Demo (Anthropic Minimalism Pivot)
 
 **Authored:** 2026-04-25 ~05:50 EDT — incorporating team-lead pivot away from

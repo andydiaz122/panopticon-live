@@ -2239,6 +2239,129 @@ ALL CRITICAL + HIGH + MEDIUM findings addressed in one consolidated patch. Re-ra
 
 ---
 
+## 2026-04-25 (Saturday evening) — Recording Block + Audio Pivot Memory Entries
+
+**Numbering note**: FORANDREW Saturday-afternoon used DECISION-023/024/025 for FORANDREW-narrative numbering (don't-port-red-anomaly, record-clean-CapCut-freeze, skip-computer-use-install). Those are project-record decisions, not durable cross-session learnings, and were not promoted here. MEMORY.md continues from DECISION-026 to avoid ID collisions. (Per the active "exhaustive memory hygiene — ID-reuse warnings" discipline established 2026-04-25.)
+
+### DECISION-026 — Skip voice-over for v1 demo; preserve script for V2
+
+- **Type**: Decision
+- **Context**: Saturday 2026-04-25 ~20:41 EDT, ~24h before submission. Voiceover script (`voiceover_script.md`, 12 lines) was authored Saturday morning. Closet sound booth was set up. Going into the home stretch (post-recording, pre-CapCut assembly), Andrew made the executive call to ship v1 with music-only audio. Music carries the audio; on-screen text (chapter cards, lower-thirds, big-text callouts) carries the narration.
+- **Lesson**: Late-cycle audio pivots are sometimes the right call even when prep work is done. Skipping VO for v1 doesn't waste the prep work — it CONSERVES the script + sound-booth setup for V2 longer-form content where VO is mandatory (10-15 min product walkthrough, investor pitch, conference talk). Risk avoided: nasal-fry / breathiness / level mismatches between takes / 12-take retake-spiral consuming Sunday execution time. The Anthropic-Minimalism register actually SUPPORTS music-only on first-pass video — the typography + product mechanics ARE the protagonist; VO is reinforcement, not foundation.
+- **Operationalized**:
+  - `voiceover_script.md` PRESERVED in repo with a DEFERRED banner at the top (NOT deleted)
+  - `capcut_assembly_workflow.md` Step 2 (Voiceover Recording) RETIRED, replaced with new Step 2 (Music-only audio mix at -14 dBFS base + editorial swells at 0:30 / 1:50 / 2:15 / 2:48)
+  - Music sourcing constraint: ROYALTY-FREE ONLY (per `demo-presentation/CLAUDE.md` §2.3 + YouTube Content ID risk for big-name artists). Recommended Pixabay Music for SF tech-judge taste (lo-fi cinematic / ambient electronic / chillhop)
+  - New persistent memory at `~/.claude/projects/-Users-andrew-Documents-Coding-Built-with-Opus-4-7-Hackathon/memory/project_demo_v1_no_voiceover.md` documents the call
+  - Logged as IDEA-024 in `docs/deferred_ideas.md` for V2 re-engagement
+- **Severity**: HIGH (timeline-critical decision; freed Sunday assembly time + de-risked the audio mix)
+- **Source**: Andrew's executive call 2026-04-25 ~20:41 EDT.
+- **See also**: DECISION-021 (Anthropic Minimalism over Motion Maximalism — same register family); IDEA-024 in deferred_ideas.md (V2 voice-over re-engagement plan).
+
+### GOTCHA-050 — react-markdown DEFAULT plugin set lacks GFM table support
+
+- **Type**: Gotcha
+- **Context**: Saturday 2026-04-25 evening Tab 3 swarm trace expansion. Built `scripts/expand_agent_trace.py` to expand the Tactical Strategist final brief from 906 chars → 5220 chars across 7 H2 sections. Authored the Confidence Calibration section as a markdown TABLE. First chrome-devtools-mcp validation pass on the deployed Tab 3 showed the table rendering as raw `|` pipes + dashes — no table styling.
+- **Root cause**: react-markdown's DEFAULT plugin set processes CommonMark syntax (headings, lists, emphasis, code blocks, links) but does NOT include GitHub-Flavored Markdown extensions. Tables are a GFM extension, requiring `remark-gfm` plugin to be explicitly installed + passed to the `<ReactMarkdown>` component via `remarkPlugins={[remarkGfm]}`. Without the plugin, table syntax is treated as literal text.
+- **Lesson**: Don't assume "this is just markdown" when a renderer is in the loop. Validate the RENDERED output, not the raw text. Renderer plugin sets vary; CommonMark and GFM are NOT interchangeable. Specifically: react-markdown defaults to CommonMark only; tables, strikethrough, task lists, and autolinks ALL require remark-gfm.
+- **Workaround chosen (Saturday evening)**: Reformatted Confidence Calibration as a definition list (bold term + indented description). Renders cleanly on react-markdown defaults; reads identically in semantics. Avoided the plugin-install + redeploy + chrome-devtools-mcp re-validation churn (~30 min wall-clock) at <24h before submission.
+- **Permanent fix (deferred)**: `npm install remark-gfm` in `dashboard/`, then `import remarkGfm from 'remark-gfm'` and pass `remarkPlugins={[remarkGfm]}` to the `<ReactMarkdown>` component. Re-author Confidence Calibration + future agent transcripts as proper GFM tables. Logged as IDEA-025 in `docs/deferred_ideas.md`.
+- **Severity**: MEDIUM (would have shipped a visibly-broken section in the Tactical Strategist brief if not caught by chrome-devtools-mcp validation pass; workaround is clean; permanent fix is a 10-line PR)
+- **Source**: Discovered Saturday 2026-04-25 ~19:45 EDT during chrome-devtools-mcp validation of expanded `agent_trace.json`.
+- **See also**: PATTERN-087 (chrome-devtools-mcp instrumentation enables this class of catch); IDEA-025 in deferred_ideas.md.
+
+### PATTERN-087 — chrome-devtools-mcp video event instrumentation (the durable pattern for any HTML5 `<video>` timing bug)
+
+- **Type**: Pattern
+- **Context**: Saturday 2026-04-25 evening, debugging perceptual lag artifacts in OBS recordings of Tab 1 (lag at ~35s and 58-60s). Initial instinct was to keep tweaking React/canvas rendering speculatively. Andrew called the validation-tool gap directly (USER-CORRECTION-038). Pivoted to chrome-devtools-mcp instrumentation; ONE pass surfaced the smoking gun.
+- **The pattern**: Inject instrumentation via chrome-devtools-mcp `evaluate_script` that wraps `HTMLMediaElement.prototype` methods + listens to all media events. Dump to `window.__vlog` for queryable retrieval.
+  ```javascript
+  // Pseudo-code (actual eval was injected via chrome-devtools-mcp)
+  window.__vlog = [];
+  // 1) Wrap currentTime setter with stack trace
+  const _setCT = HTMLMediaElement.prototype.__lookupSetter__('currentTime');
+  Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
+    set(v) { window.__vlog.push({ev:'set:currentTime', v, stack:new Error().stack}); _setCT.call(this, v); }
+  });
+  // 2) Wrap pause/play with stack trace
+  const _pause = HTMLMediaElement.prototype.pause;
+  HTMLMediaElement.prototype.pause = function() {
+    window.__vlog.push({ev:'pause', t:this.currentTime, stack:new Error().stack});
+    _pause.call(this);
+  };
+  // 3) Listen to all media events
+  ['seeking','seeked','ratechange','pause','play','timeupdate'].forEach(ev =>
+    document.querySelector('video').addEventListener(ev, e =>
+      window.__vlog.push({ev, t:e.target.currentTime})));
+  ```
+- **The smoking gun it surfaced**: Coach insight #5 timestamp `36000ms` fell INSIDE the anomaly slow-mo window (35.6-37.1s @ 0.5x). Sequence on screen: slow-mo (0.4s of video time) → 6.2s freeze for typewriter animation of insight #5 → slow-mo continuation (1.1s of video time) at the SAME paused frame. From the viewer: "the player keeps running off court for 6 seconds." Pure timing collision; no actual code bug.
+- **The fix**: Moved coach insight #5 from `t=36000` → `t=37500` (just past the slow-mo window's exit). Validated end-to-end with chrome-devtools-mcp instrumentation — lag artifact gone, no other timing collisions surfaced.
+- **Generalization**: ANY HTML5 `<video>` with multi-system timing interactions (programmatic pause/play, slow-mo via playbackRate, currentTime jumps from React effects, sidechain animations) needs instrumentation BEFORE speculation. ONE instrumented pass beats 3 rounds of code-reading.
+- **Severity**: HIGH (the PATTERN, not the bug — this is the durable lesson; expect this class of timing-collision bug whenever multiple subsystems can pause/play/seek the same video)
+- **Source**: Saturday 2026-04-25 evening lag debugging session.
+- **See also**: USER-CORRECTION-038 (validation-tool discipline that prompted the workflow flip); GOTCHA-046 (chrome-devtools-mcp install + capability inventory); `~/.claude/projects/-Users-andrew-Documents-Coding-Built-with-Opus-4-7-Hackathon/memory/feedback_chrome_devtools_mcp_video_instrumentation.md` (durable cross-session memory).
+
+### PATTERN-088 — Python authoring scripts for large-JSON surgical mutation (project Rule-of-Two)
+
+- **Type**: Pattern
+- **Context**: Two independent applications this week of the SAME pattern (load → mutate in-memory → atomic-write):
+  1. `scripts/sync_match_data_to_ground_truth.py` (Saturday morning, Phase 7) — ~480 lines, mutates 5 arrays + 1 profile field in 549 KB JSON
+  2. `scripts/expand_agent_trace.py` (Saturday evening, Phase 9) — ~280 lines, mutates 3 agent event-arrays + 1 final-brief field in agent_trace.json
+- **The pattern**:
+  ```python
+  # 1) Load
+  data = json.loads(path.read_text())
+
+  # 2) Validate input invariants (raise ValueError, NOT assert — assertions silenced under -O)
+  if some_invariant_violated(data):
+      raise ValueError("...")
+
+  # 3) Mutate in-memory (immutable functional style preferred where possible)
+  data["agents"][0]["events"] = build_new_events(...)
+
+  # 4) Validate output invariants (ID uniqueness, schema compliance, idempotency markers)
+  validate_output(data)
+
+  # 5) Atomic write via .tmp + os.replace()
+  tmp_path = path.with_suffix(path.suffix + ".tmp")
+  tmp_path.write_text(json.dumps(data, separators=(",", ":")))
+  os.replace(tmp_path, path)
+
+  # 6) Print MD5 for idempotency check
+  print(f"MD5: {hashlib.md5(path.read_bytes()).hexdigest()}")
+  ```
+- **Why this beats LLM direct-edit of large JSON**:
+  - LLM direct-edit risks JSON truncation / closing-bracket drops at scale (>50KB)
+  - Atomic write via `.tmp` + `os.replace()` prevents Ctrl-C corruption
+  - Idempotent (MD5 stable if script re-run with same inputs)
+  - Spec-source-of-truth lives in code (the inline content tables); reproducible across machines
+  - Fast iteration: <1 second per re-run vs minutes per LLM regeneration
+- **Rule-of-Two trigger**: Two independent successful applications this week. A THIRD application (Sunday or post-submission) should trigger extraction to a project skill (`.claude/skills/large-json-surgical-mutation/SKILL.md`).
+- **Severity**: HIGH (this pattern is the workhorse for ANY large-JSON mutation in the project; standardizing now prevents drift across future applications)
+- **Source**: PATTERN co-discovered Saturday 2026-04-25 (sync_match_data + expand_agent_trace are sibling applications).
+- **See also**: DECISION-022 (the morning ground-truth sync that established the pattern); Phase 8 + Phase 9 entries in TOOLS_IMPACT.md.
+
+### USER-CORRECTION-038 — Validation-tool discipline (USE the validation tool BEFORE speculating)
+
+- **Type**: User-Correction
+- **Context**: Saturday 2026-04-25 ~19:00 EDT, mid-debug of perceptual lag in Tab 1 OBS recordings. I had run two rounds of speculative code-reading on the React/canvas/rAF loop without using available validation tools. Andrew interjected verbatim: *"Did you validate your work and use the best tools for validation for this sort of bug?"*
+- **The lesson**: When a validation tool is available for the failure class, USE IT BEFORE speculating. Speculation is a fallback for when validation tools are unavailable. Specifically:
+  - Browser-runtime bugs → chrome-devtools-mcp (instrumentation, console messages, DOM queries, screenshot)
+  - Build vs runtime delta → chrome-devtools-mcp `evaluate_script` to verify in-browser behavior
+  - JSON schema vs runtime delta → Python script with explicit assertions (raise ValueError, not assert)
+  - Multi-agent reasoning quality → multi-agent orthogonal review panel
+- **Generalization**: this is the same family as global anti-pattern #29 (don't re-inventory tools; CHAIN them) and anti-pattern #35 (surface tool-call failures, don't silently fall back). The new sibling: **don't speculate when a validation tool is available**. Speculation has a known failure mode (chasing the wrong root cause for hours); validation tools have a known cost (~10-30 sec per query).
+- **Operationalized for future sessions**:
+  - When debugging a UI bug, FIRST question: "what validation tool covers this failure class?"
+  - If a validation tool exists, USE IT BEFORE writing speculative fixes
+  - If no validation tool exists, log the gap (anti-pattern #25 — TOOLS_IMPACT.md "Skills NOT Used") and ask whether one should be installed
+  - The 3-round code-reading speculation is the SYMPTOM that this discipline was skipped
+- **Severity**: HIGH (this specific gap cost ~30 min of speculative debugging on a 24h-pre-submission Saturday evening; would have cost more if Andrew hadn't intervened)
+- **Source**: Andrew's direct correction 2026-04-25 ~19:00 EDT.
+- **See also**: PATTERN-087 (the chrome-devtools-mcp instrumentation pattern that became the validation tool for this case); anti-pattern #29 (chain tools) + anti-pattern #35 (surface failures) — this is a third member of the same family.
+
+---
+
 ## DAY 5 LEARNINGS (Apr 26, 2026)
 
 (To be populated)

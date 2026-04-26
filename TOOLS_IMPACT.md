@@ -874,3 +874,111 @@ Skipping step 6 is the silent failure mode. The lessons learned tonight (PATTERN
 **Programmatic asset generation > UI asset creation** for any spec-tight one-time deliverable. The Pillow script approach for Card 3 is the canonical pattern: spec lives in code, render is deterministic, version-controllable, and re-runnable on spec changes. The Keynote alternative would have required Andrew to remember/re-execute every spec detail every time we adjusted anything — a recipe for drift.
 
 **Pillow variable-font defaults are a known gotcha.** Variable fonts loaded via `ImageFont.truetype(VARIABLE.ttf)` default to a non-Regular weight unless explicitly set. Use the static-weight TTF when precision matters; reach for the variable font only when intentionally animating across the weight axis.
+
+## Phase 9 — Saturday Evening Recording Block + Audio Pivot (Sat 2026-04-25 ~14:30–20:50 EDT)
+
+### Tool: chrome-devtools-mcp — VIDEO BUG ROOT-CAUSING (the BIG ROI of the evening)
+
+**Cost**: ~30 seconds to set up the instrumentation (one `evaluate_script` call) + ~10 seconds per playback pass.
+**Output**: Per-event log with stack-traced callsites for every `currentTime` setter, `pause()`, `play()`, and DOM media event (`seeking`, `seeked`, `ratechange`, `pause`, `play`, `timeupdate`). Dumped to `window.__vlog`, queryable via `evaluate_script`.
+
+**The bug it solved**: Tab 1 OBS recordings showed perceptual lag at ~35s and again at 58-60s. First instinct was to keep tweaking React/canvas rendering speculatively. Andrew called the validation-tool gap directly: *"Did you validate your work and use the best tools for validation for this sort of bug?"* — that was the correction that flipped the workflow.
+
+**The instrumentation pattern (now durable in `feedback_chrome_devtools_mcp_video_instrumentation.md`)**:
+```javascript
+// Pseudo-code (the actual eval was injected via chrome-devtools-mcp)
+window.__vlog = [];
+const _setCT = HTMLMediaElement.prototype.__lookupSetter__('currentTime');
+Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
+  set(v) { window.__vlog.push({ev:'set:currentTime', v, stack:new Error().stack}); _setCT.call(this, v); }
+});
+const _pause = HTMLMediaElement.prototype.pause;
+HTMLMediaElement.prototype.pause = function() { window.__vlog.push({ev:'pause', t:this.currentTime, stack:new Error().stack}); _pause.call(this); };
+// ... similar for play, plus listeners on all media events
+```
+
+**The smoking gun it surfaced**: Coach insight #5 timestamp `36000ms` fell INSIDE the anomaly slow-mo window (35.6-37.1s @ 0.5x). Sequence: slow-mo (0.4s of video) → 6.2s freeze for typewriter animation → slow-mo continuation (1.1s of video) at the SAME paused frame = "perceptual replay" of the player running off court. Pure timing collision; no actual code bug. ONE instrumented playback pass beat 3 prior rounds of code-reading speculation.
+
+**ROI**: **EXTREME**. The bug was perceptually severe (looked like a freeze in the demo). Speculative debugging had me chasing canvas rAF, ResizeObserver, and React state — none of which were the cause. The instrumentation directly named the timestamp + the colliding pause/play stack-traces. Total wall-clock: ~5 min instrumentation+pass vs ~45-60 min projected speculative debugging.
+
+**Pattern (durable for any future video bug)**: when a `<video>` element exhibits unexpected timing behavior, instrument the prototype methods + listen to the events FIRST. Code-reading is a fallback when instrumentation is unavailable.
+
+### Tool: chrome-devtools-mcp — Tab 3 swarm trace validation
+
+**Cost**: ~3 seconds per validation pass (load Tab 3 → snapshot DOM → inspect rendered markdown).
+**Output**: Direct visual confirmation of how `agent_trace.json` content actually renders in the browser (vs how it READS as raw markdown).
+
+**The bug it caught**: First chrome-devtools-mcp pass on the expanded Tactical Strategist 5220-char brief showed the Confidence Calibration markdown TABLE rendering as raw `|` pipes + dashes. Root cause: react-markdown DEFAULT plugin set does NOT include GitHub-Flavored Markdown table support (logged as GOTCHA-050). Without chrome-devtools-mcp validation, the broken table would have shipped to the demo.
+
+**ROI**: **HIGH for content-rendering validation**. Builds + deploys can succeed with content that renders incorrectly (the markdown TEXT is valid; the renderer just doesn't process tables). Pure-static-analysis cannot catch this. chrome-devtools-mcp closes the loop.
+
+**Pattern**: any time you author markdown content destined for react-markdown (or any component-based renderer), validate the RENDERED output, not the raw text. Renderer plugin sets vary; assumptions about "this is just markdown" are dangerous.
+
+### Tool: python-pptx skill (Anthropic skills repo) — Card 3 generation
+
+**Cost**: One-time install of the Anthropic skills repo + python-pptx 1.0.2 + Pillow 12.1.1 (already done in Phase 8 ~13:30 EDT). Per-render: <1 second.
+**Output**: `~/Documents/Panopticon_TitleCards/card_03_closing.{pptx, png}`. 1920×1080 closing thesis card with Fraunces 56pt headline + cyan rule + JetBrains Mono chrome.
+
+**ROI**: **EXTREME for spec-tight one-time deliverables**. The Card 3 build was a binary win condition: judges either see a polished closing thesis card or they see a half-baked one. The script approach:
+- Saved Andrew 5-10 min of Keynote UI fiddling per iteration
+- Eliminated the entire class of "color picker drift / kerning slider creep / Keynote font fallback" bugs
+- Single source of truth (the script) instead of two (script + Keynote file that drifts)
+- Re-runnable in <1 second when spec changes (e.g., "actually move the rule down 8px")
+- Both .pptx (editable in PowerPoint if Andrew wants to tweak interactively) AND .png (drop-in for CapCut) emitted in one call
+
+**Pattern**: any time you need a ONE-TIME static asset with a TIGHT spec (colors, font, position, size), prefer programmatic generation over UI tools. The UI is a tax you pay for every iteration; the script is one-time.
+
+**Why this skill is HIGH ROI for hackathons specifically**: title cards / hero images / pitch-deck slides are common deliverables under deadline. Keynote/PowerPoint UI fiddling consumes wall-clock that LLM-driven spec-translation does not. The Anthropic pptx skill + python-pptx makes "spec → asset" a single-call operation.
+
+### Tool: Python authoring script for `agent_trace.json` expansion
+
+**Cost**: ~30 minutes to author `scripts/expand_agent_trace.py` (~280 lines). Per-run: <1 second.
+**Output**: Mutated `agent_trace.json` in-place. Analytics Specialist 1→11 events / 0→1033 chars text. Technical Biomechanics Coach 1→9 events / 0→1663 chars text. Tactical Strategist 906→5220 chars final brief.
+
+**ROI**: **HIGH — same atomic-write pattern as the morning's `sync_match_data_to_ground_truth.py`**. Once the Python authoring-script pattern is established for one large-JSON surgical mutation, it generalizes for all subsequent ones (one-time setup cost, infinite reuse).
+
+**Why this beat LLM direct-edit of agent_trace.json**:
+- agent_trace.json is large (multi-MB after expansion)
+- LLM-direct-edit risks JSON truncation / closing-bracket drops at scale
+- Atomic write via `.tmp` + `os.replace()` prevents Ctrl-C corruption
+- Idempotent (MD5 stable if script re-run with same inputs)
+- Spec-source-of-truth lives in code (the inline content tables); reproducible across machines
+
+**Pattern (now established as a project meta-pattern)**: for ANY large-JSON mutation, write a Python authoring script that loads → mutates → atomic-writes. Two independent applications this week (sync_match_data_to_ground_truth.py + expand_agent_trace.py) makes this a Rule of Two — promote to a project skill if a third use-case emerges.
+
+### Tool: TaskCreate / TaskUpdate / TaskList — used throughout
+
+**Cost**: ~1 second per task action.
+**Output**: Persistent task tracking across the recording block + bug-fix iterations + Tab 3 expansion + audio pivot.
+
+**ROI**: **MEDIUM-HIGH for multi-thread session organization**. The Saturday evening session had 4 concurrent threads (record OBS captures, fix lag bug, expand Tab 3, decide audio strategy). Without TaskList, context-switching between them risked dropping a thread (e.g., "wait, did we ever re-record Tab 1 after the t=37500 fix?"). With TaskList, every thread had a status, and resuming after a context-switch took seconds.
+
+**Pattern**: when a session has ≥3 concurrent threads, TaskList earns its slot. Below 3, the cognitive overhead doesn't pay off.
+
+### Tool: vercel deploy CLI — 4-5 deploys this evening
+
+**Cost**: ~30 seconds per deploy (build + upload + propagation).
+**Output**: Production URL updated with each iteration. All deploys successful (no rollbacks).
+
+**ROI**: **HIGH because it enabled the chrome-devtools-mcp validation loop**. Without fast Vercel deploys, every "did the fix actually land?" check would have been a 5-10 min round-trip. With ~30s deploys, the validation cycle is tight: edit → deploy → chrome-devtools-mcp check → next iteration.
+
+**Pattern**: deployment-cycle-time is a force multiplier for ANY validation-tool ROI. If your deploy cycle is slow, your validation tool can't fire as often, and bugs compound. Sub-minute deploys + validation-tool instrumentation = real-time bug-fix discipline.
+
+### SKILLS NOT USED THIS EVENING (and why)
+
+- **`biomech-signal-architect` agent** — could have authored the agent transcripts (Analytics Specialist + Technical Biomechanics Coach + Tactical Strategist final brief) with proper biomech defensibility checking. **Why not**: time pressure + the trace expansion was content-shaped, not signal-claim-shaped. The morning's ground-truth sync had already validated the underlying signal data via `biomech-signal-architect`; the evening's transcripts cite those validated values rather than introducing new claims. Decision was reasonable but worth recording — if a HIGH-stakes claim had slipped into the Tactical Strategist brief, this would have been the agent that caught it.
+- **`video-frame-validator` agent** — could have validated visual claims in coach insights (e.g., "1.5m INSIDE the baseline" — does the footage actually show Player A stepped INSIDE the court at that timestamp?). **Why not**: text-fix from "behind" → "INSIDE" was authored by Andrew based on his own ground-truth visual review (he watched the footage frame-by-frame to author the morning's ground-truth log). Andrew's visual review WAS the validation. Worth noting for future sessions where the author isn't the same person who watched the footage.
+
+**Anti-pattern #18 defense**: both skill-skips above are recorded WITH REASONING (not silently skipped). The default for "did we use the right tool?" is to log the ANSWER even when the answer is "no, and here's why." This is the only sustainable defense against the skill ecosystem getting silently under-used.
+
+### Meta-learning Phase 9
+
+**chrome-devtools-mcp is the highest-ROI tool we own for any UI-runtime bug.** Three independent use-cases this week (Tab 1 lag root-cause, Tab 3 swarm rendering validation, dashboard build-vs-runtime delta from Phase 7) all returned EXTREME or HIGH ROI. The cost is trivial (~10 sec per query); the alternative (speculative code-reading + multiple deploy cycles) is 10-50x more expensive. **Generalization**: ANY browser-runtime question is cheaper to answer with chrome-devtools-mcp than to answer by reading code.
+
+**Validation-tool discipline is the durable lesson of the Saturday evening session.** Andrew's call-out — *"Did you validate your work and use the best tools for validation for this sort of bug?"* — is now USER-CORRECTION-038 in MEMORY.md. The principle: when a validation tool is available, USE IT BEFORE speculating. Speculation is a fallback for when validation tools are unavailable. This generalizes beyond chrome-devtools-mcp to any instrumentation/probe tool.
+
+**Programmatic asset generation is now a Rule of Two on this project.** Card 3 PNG (Phase 8) + agent_trace.json expansion (Phase 9) both used the same pattern: spec-in-code + atomic-write + idempotent + sub-second per-run. A third application next session (Sunday or post-submission) should trigger a project-skill extraction.
+
+**Save-not-trash discipline scales to commented-out code paths.** The `useSlowMoAtAnomalies` + `CoachPanel` pause/play disable is a commented-out save (with `// V2: re-enable, see IDEA-026` markers in the code), not a deletion. Same discipline as `deferred_ideas.md` — preserving "we considered this and chose otherwise" is institutional memory; deleting is amnesia.
+
+**Audio-pivot late-in-cycle is sometimes the right call.** The voiceover_script + sound-booth setup (~3 hours of Saturday afternoon) didn't get USED in v1 — but the work CONSERVES for V2. Hackathons reward shipping a clean v1, not utilizing every prepped asset. The `IDEA-024` entry preserves the V2 reactivation path.

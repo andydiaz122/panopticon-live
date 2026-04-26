@@ -185,6 +185,63 @@ Each entry tagged with deferral date + rationale + revisit-trigger.
 
 ---
 
+### IDEA-022 — Port red-blink anomaly visualization from `hackathon-demo-v1` branch
+**Deferred:** 2026-04-25 ~13:30 EDT (DECISION-023, recording block)
+**Reason:** The `hackathon-demo-v1` worktree branch has a red-blinking SignalBar visualization when `anomalies` events fire. Our current `hackathon-research` branch doesn't render this. Andrew asked whether to port it before recording B1 cold open. Two reasons we didn't:
+1. **Defensibility**: only 2 anomaly events in our 60s match_data, and our coach insights honestly say "first match window — no z-score baseline yet." A red blink labeled "ANOMALY DETECTED" with no defensible underlying z-score = a careful judge would ask "what triggered this?" and we'd have to admit it's a hardcoded display value. Contradicts the rigor narrative we just built via the ground-truth sync.
+2. **Architectural risk**: porting requires React code changes; team-lead VETOED React changes pre-submission; we just merged PR #7 to main and don't want to destabilize.
+**What it would be:** SignalBar component animates a red pulse (cyan → red → cyan, ~600ms cycle, 2-3 cycles) when an anomaly_event timestamp matches the current video time. Visually striking proof-of-detection.
+**Revisit:** 🚀 V2-PRODUCT — when we have multi-clip baselines (per IDEA-014) so anomalies are REAL z-score events with defensible causes ("crouch depth -2.4σ from his baseline established over 8 prior matches"), THEN the red blink is honest narrative + visual sizzle.
+
+### IDEA-023 — Install remaining 13 skills from Anthropic skills repo
+**Deferred:** 2026-04-25 ~13:30 EDT (post-Card-3-build)
+**Reason:** During Card 3 work we cloned `https://github.com/anthropics/skills` and installed 4 office skills (pptx, pdf, docx, xlsx). The repo has 13 OTHER skills we did NOT install due to time pressure + relevance scoping for hackathon demo. Each could be useful post-submission.
+**What it would be:** Copy each from `/tmp/anthropic-skills-repo/skills/<name>/` to `~/.claude/skills/<name>/`:
+- `algorithmic-art` — generative art via code
+- `brand-guidelines` — author brand-doc presentations
+- `canvas-design` — canvas-based design workflow
+- `claude-api` — Claude API patterns (we already have a similar local skill, but worth diffing)
+- `doc-coauthoring` — collaborative doc workflow
+- `frontend-design` — distinct frontend design (similar to our local frontend-design skill but Anthropic-flavored)
+- `internal-comms` — internal communications doc patterns
+- `mcp-builder` — MCP server scaffolding
+- `skill-creator` — meta-skill for authoring skills
+- `slack-gif-creator` — animated GIF generation
+- `theme-factory` — design system / theme generation
+- `web-artifacts-builder` — Claude artifacts for web
+- `webapp-testing` — web app testing patterns
+**Revisit:** ⏰ POST-SUBMISSION — install 1-2 at a time as needs arise, not bulk-install (skill-context bloat).
+
+### IDEA-024 — V2 voice-over re-engagement
+**Deferred:** 2026-04-25 ~20:41 EDT (Andrew's executive call: skip VO for v1 demo, music carries audio)
+**Reason:** Saturday evening Andrew made the call to ship v1 with music-only audio. The 12-line `voiceover_script.md` was authored, the closet sound booth was set up, but in the home stretch (post-recording, pre-CapCut assembly) the calculus changed: a clinical music bed + on-screen text (chapter cards, lower-thirds, big-text callouts) carries the demo without VO risk (nasal-fry, breathiness, level mismatches between takes, 12-take retake-spiral). The voiceover_script.md was preserved verbatim with a DEFERRED banner at the top, NOT deleted. New memory at `~/.claude/projects/.../memory/project_demo_v1_no_voiceover.md` documents the call.
+**What it would be:** Re-record the 12 lines per voiceover_script.md in the closet sound booth (TwistedWave or QuickTime, AirPods Pro mic, 24-bit/48kHz). Sidechain-duck the music bed -8 dB during VO segments. Place under chapter cards 1, 3, 5 + the closing thesis frame. Total VO presence ~45-60s of the 180s runtime, ~25-33% of timeline.
+**Revisit:** ⏰ POST-SUBMISSION + 🚀 V2-PRODUCT — once the v1 demo lands, the Anthropic-Minimalism register can support a clinical disembodied VO without theatrical drift. The script is already production-ready.
+**Why it's interesting:** The disembodied-clinical voice IS the Anthropic brand register (per DECISION-021). For longer-form post-hackathon content (10-15 min product walkthrough, investor pitch, conference talk), VO becomes mandatory — text-only chrome breaks down past ~3 min. The script + sound-booth setup are sunk cost ready to deploy.
+
+### IDEA-025 — GFM table support via remark-gfm in OrchestrationConsoleTab
+**Deferred:** 2026-04-25 ~20:00 EDT (Saturday evening Tab 3 expansion validation)
+**Reason:** During chrome-devtools-mcp validation pass on the expanded `agent_trace.json` (Tactical Strategist 5220-char brief), discovered react-markdown DEFAULT plugin set does NOT include GitHub-Flavored Markdown table support. The Confidence Calibration section was authored as a markdown table; rendered as raw `|` pipes + dashes, not as a styled table. Workaround: reformatted Confidence Calibration as a definition list (bold term + indented description), which renders cleanly on react-markdown defaults and reads identically in semantics. Plugin-install + redeploy churn (~30 min wall-clock + Vercel deploy + chrome-devtools re-validation) was the wrong cost on Saturday evening with submission <24h away.
+**What it would be:** `npm install remark-gfm` in `dashboard/`, then in OrchestrationConsoleTab.tsx (or wherever react-markdown is imported), add `import remarkGfm from 'remark-gfm'` and pass `remarkPlugins={[remarkGfm]}` to the `<ReactMarkdown>` component. Re-author Confidence Calibration + any future agent transcripts as proper GFM tables (rows for confidence dimension × column for HIGH/MEDIUM/LOW + rationale).
+**Revisit:** ⏰ POST-SUBMISSION — clean ~10-line PR. Tables are the natural structure for confidence calibration matrices, agent capability comparisons, signal-by-signal grids.
+**Why it's interesting:** Markdown tables are the most-requested authoring affordance in any reasoning-trace UI. Definition-list workaround scales for 1-2 sections; for richer agent transcripts (5-10 dimensions × 3-5 categories) a table is the only readable structure. Cheap permanent win post-submission.
+
+### IDEA-026 — Re-enable useSlowMoAtAnomalies + CoachPanel video.pause()/video.play() for live URL post-demo
+**Deferred:** 2026-04-25 ~19:30 EDT (Saturday evening playback-cleanliness pivot for OBS recording)
+**Reason:** Saturday evening bug-fix iteration on the lag-at-35s/58-60s window root-caused a perceptual-replay artifact: anomaly slow-mo (`playbackRate=0.5`) + coach-insight-driven `video.pause()` for typewriter animation + slow-mo continuation at the same paused frame = "the player keeps running off court for 6 seconds." Even after softening the slow-mo (rate 0.25→0.5, window 4s→1.5s, hold 3500ms→1500ms) and fixing the t=36000 → t=37500 insight-shift fix, Andrew called the final pivot: DISABLE both behaviors entirely for clean OBS recording, handle pacing in CapCut via freeze-frame instead. Both code paths preserved as commented-out lines (NOT deleted) for clean re-enable: `useSlowMoAtAnomalies` hook in `PanopticonProvider.tsx`, `video.pause()`/`video.play()` calls in `CoachPanel.tsx`.
+**What it would be:** Uncomment the slow-mo hook + the pause/resume calls. With the t=36000 → t=37500 insight-shift FIX retained, the perceptual-replay artifact won't recur (insight #5 typewriter no longer falls inside the slow-mo window). The behaviors add real "live HUD" texture: slow-mo on detected anomalies = "the system is highlighting THIS moment for you," pause-on-coach-insight = "give the user time to read." Both behaviors are sympathetic to a LIVE viewer (paused on demand) but hostile to an OBS RECORDING (artifact bake-in).
+**Revisit:** ⏰ POST-SUBMISSION — once the demo video is locked, the live URL (`panopticon-live.vercel.app`) becomes a permanent showcase visited by anyone clicking through the README. For that AUDIENCE the behaviors are correct UX. Re-enable as a post-submission v1.1 polish pass.
+**Why it's interesting:** Two-mode UX (recording mode OFF / live-viewing mode ON) is a generalizable pattern for any product whose demo video is a critical artifact. A simple `?recording=true` URL flag could toggle them. Worth a post-hackathon experiment.
+
+### IDEA-027 — Port red-blink anomaly visualization from `hackathon-demo-v1` branch
+**Deferred:** 2026-04-25 ~13:30 EDT (DECISION-023 in FORANDREW; same root cause as IDEA-022)
+**Reason:** Duplicate of IDEA-022. Logged as a separate IDEA-027 because it was re-considered DURING Saturday evening (post-recording, pre-assembly) when the question came back as "now that we have the recording, can we afford the React change?" Answer was the same: defensibility risk (no z-score baseline) + we just merged PR #7 to main + the architectural-risk argument still holds. Andrew greenlit logging the SECOND consideration as a separate idea-entry to record the date the question was re-asked.
+**What it would be:** See IDEA-022 (SignalBar component animates a red pulse cyan → red → cyan, ~600ms cycle, 2-3 cycles, when an anomaly_event timestamp matches the current video time).
+**Revisit:** 🚀 V2-PRODUCT — see IDEA-022. Same revisit-trigger.
+**Why it's interesting (additional context vs IDEA-022):** The Saturday-evening re-ask establishes a useful pattern — when an idea gets re-considered later in the project, log a NEW IDEA-NNN entry pointing to the original rather than mutating the original. This preserves the timeline of "when was this question raised" as an artifact of decision discipline.
+
+---
+
 ## Maintenance Notes
 
 - Append new entries with the same template (IDEA-NNN, deferred date, reason, what-it-is, revisit-trigger).

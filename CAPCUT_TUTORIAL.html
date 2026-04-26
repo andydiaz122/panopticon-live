@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CapCut Tutorial — PANOPTICON LIVE Demo</title>
+<style>
+  :root {
+    --bg-0: #05080F;
+    --bg-1: #0A0F1C;
+    --bg-2: #111827;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #5A6678;
+    --accent: #00E5FF;
+    --warn: #FBBF24;
+    --error: #FF3D71;
+    --player-a: #00E5FF;
+    --border: #1F2937;
+    --code-bg: #0F1729;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg-0);
+    color: var(--text-primary);
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    font-size: 15px;
+  }
+  .container {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 60px 32px 120px;
+  }
+  h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 44px;
+    font-weight: 400;
+    letter-spacing: -0.5px;
+    margin: 0 0 8px 0;
+    color: var(--text-primary);
+  }
+  h1 + .subtitle {
+    color: var(--accent);
+    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    margin-bottom: 40px;
+  }
+  h2 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 400;
+    font-size: 28px;
+    color: var(--text-primary);
+    margin-top: 56px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 400;
+    font-size: 20px;
+    color: var(--text-primary);
+    margin-top: 32px;
+    margin-bottom: 8px;
+  }
+  h4 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    margin-top: 20px;
+    margin-bottom: 8px;
+  }
+  p {
+    color: var(--text-secondary);
+    margin: 0 0 14px 0;
+  }
+  strong { color: var(--text-primary); font-weight: 600; }
+  em { color: var(--accent); font-style: italic; }
+  a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--accent);
+  }
+  a:hover { border-bottom-style: solid; }
+  ol, ul {
+    color: var(--text-secondary);
+    padding-left: 22px;
+    margin: 12px 0;
+  }
+  li { margin: 6px 0; }
+  code {
+    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    background: var(--code-bg);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  pre {
+    background: var(--code-bg);
+    border-left: 2px solid var(--accent);
+    padding: 14px 18px;
+    overflow-x: auto;
+    border-radius: 4px;
+    margin: 14px 0;
+  }
+  pre code {
+    background: none;
+    color: var(--text-primary);
+    padding: 0;
+  }
+  .toc {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px 32px;
+    margin: 32px 0 48px;
+  }
+  .toc-title {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+  .toc ol {
+    columns: 2;
+    column-gap: 32px;
+    padding-left: 18px;
+    margin: 0;
+  }
+  .toc a {
+    color: var(--text-primary);
+    border-bottom: none;
+  }
+  .toc a:hover { color: var(--accent); }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(0, 229, 255, 0.06);
+    padding: 16px 20px;
+    margin: 20px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout-warn {
+    border-left-color: var(--warn);
+    background: rgba(251, 191, 36, 0.06);
+  }
+  .callout-error {
+    border-left-color: var(--error);
+    background: rgba(255, 61, 113, 0.06);
+  }
+  .callout-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .callout-warn .callout-label { color: var(--warn); }
+  .callout-error .callout-label { color: var(--error); }
+  .callout p:last-child { margin-bottom: 0; }
+  .stuck-block {
+    background: var(--bg-2);
+    border: 1px dashed var(--border);
+    padding: 14px 18px;
+    margin: 14px 0;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .stuck-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--warn);
+    margin-bottom: 6px;
+    display: block;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--bg-1);
+    color: var(--accent);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-weight: 600;
+  }
+  td { color: var(--text-secondary); }
+  td:first-child { color: var(--text-primary); font-weight: 500; }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 56px 0;
+  }
+  .keystroke {
+    font-family: "JetBrains Mono", monospace;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    color: var(--text-primary);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+  }
+  .anchor-rule {
+    width: 80px;
+    height: 1px;
+    background: var(--accent);
+    opacity: 0.7;
+    margin: 56px auto 32px;
+  }
+  .step-num {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--bg-0);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 24px;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    font-size: 13px;
+    margin-right: 10px;
+  }
+  .objective {
+    background: var(--bg-1);
+    padding: 14px 20px;
+    border-radius: 6px;
+    margin: 16px 0;
+    border-left: 2px solid var(--player-a);
+  }
+  .objective-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--player-a);
+    margin-bottom: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>CapCut, in 10 minutes.</h1>
+<div class="subtitle">PANOPTICON LIVE · v1 demo · authored 2026-04-25 overnight</div>
+
+<p>This tutorial covers <strong>only</strong> the CapCut operations needed for your specific 3-minute Panopticon demo. You will <em>not</em> learn 80% of CapCut. You'll learn the 12 things that get this demo shipped by 5 PM Sunday.</p>
+
+<p>Read straight through (10 min), then keep this tab open as a reference while you edit. Each section ends with a <strong>"if stuck"</strong> block that covers the most common pitfalls.</p>
+
+<div class="toc">
+<div class="toc-title">Table of Contents</div>
+<ol>
+<li><a href="#orientation">Orientation — the CapCut UI</a></li>
+<li><a href="#project">Project setup (60 seconds)</a></li>
+<li><a href="#import">Importing assets to the media bin</a></li>
+<li><a href="#drag">Dragging clips to the timeline</a></li>
+<li><a href="#trim">Trimming clips (start + end edges)</a></li>
+<li><a href="#split">Splitting a clip mid-stream</a></li>
+<li><a href="#speed">Speed-ramping a clip</a></li>
+<li><a href="#freeze">Freeze-frames + the lag pitfall</a></li>
+<li><a href="#mute">Muting OBS audio (CRITICAL)</a></li>
+<li><a href="#text">Text overlays (countdown + value-prop labels)</a></li>
+<li><a href="#music">Music track placement + keyframed swells</a></li>
+<li><a href="#export">Export settings + YouTube prep</a></li>
+<li><a href="#vision">Implementing your countdown vision (concrete steps)</a></li>
+<li><a href="#troubleshoot">When CapCut breaks (universal troubleshooting)</a></li>
+</ol>
+</div>
+
+<hr id="orientation" />
+
+<h2>1. Orientation — the CapCut UI</h2>
+
+<p>CapCut Desktop has 4 main panels:</p>
+
+<table>
+<thead><tr><th>Panel</th><th>Where</th><th>What it's for</th></tr></thead>
+<tbody>
+<tr><td>Media Bin</td><td>Top-left</td><td>Your imported assets. Drag from here onto the timeline.</td></tr>
+<tr><td>Preview</td><td>Top-right</td><td>Plays whatever your timeline cursor is parked on.</td></tr>
+<tr><td>Properties</td><td>Right side, below preview</td><td>Edit selected clip's speed, color, volume, etc.</td></tr>
+<tr><td>Timeline</td><td>Bottom (full width)</td><td>The actual edit surface. Tracks stack vertically; time flows left-to-right.</td></tr>
+</tbody>
+</table>
+
+<p>Tracks numbered 1, 2, 3, 4 stack from bottom to top. Track 1 is the bottom layer; higher tracks render <em>over</em> lower ones. For our demo:</p>
+
+<ul>
+<li><strong>Track 4 (top):</strong> Title cards + text overlays</li>
+<li><strong>Track 3:</strong> OBS captures + intro typing video</li>
+<li><strong>Track 2:</strong> Music bed</li>
+<li><strong>Track 1 (bottom):</strong> Native intro audio (from intro_typing_v1.mov, separated)</li>
+</ul>
+
+<div class="callout">
+<div class="callout-label">Mental model</div>
+<p>Think of the timeline like a stack of glass sheets. The TOP track is the visible visual; lower tracks are heard but not seen (audio) or hidden behind the top track (visual layers). Audio mixes additively across all audio tracks.</p>
+</div>
+
+<hr id="project" />
+
+<h2>2. Project setup (60 seconds)</h2>
+
+<ol>
+<li>Open CapCut. If a project is open from last night, use that — your assets are already imported.</li>
+<li>If starting fresh: <strong>File → New Project</strong> → name it <code>panopticon_live_demo_v1</code></li>
+<li>Click the <strong>gear icon</strong> top-right (Project Settings)</li>
+<li>Set <strong>Resolution: 1920 × 1080</strong></li>
+<li>Set <strong>Frame Rate: 60 fps</strong> (or 30 if 60 isn't an option)</li>
+<li>Set <strong>Aspect Ratio: 16:9</strong></li>
+<li>Click <strong>Save</strong></li>
+<li><span class="keystroke">Cmd+S</span> to save the project file</li>
+</ol>
+
+<div class="stuck-block">
+<span class="stuck-label">If stuck</span>
+Can't find Project Settings? Click the project name in the top-left corner — sometimes Settings lives there in older CapCut versions. Or look for "Canvas Size" / "Output Size" in any menu — same thing.
+</div>
+
+<hr id="import" />
+
+<h2>3. Importing assets to the media bin</h2>
+
+<p>If you already imported last night, skip this. Otherwise:</p>
+
+<ol>
+<li>Drag files <em>directly</em> from Finder onto the Media Bin panel (top-left)</li>
+<li>OR click the <strong>+</strong> / Import button in the Media Bin and navigate to <code>~/Documents/Panopticon_Captures/</code></li>
+</ol>
+
+<p><strong>Required asset list:</strong></p>
+
+<ul>
+<li><code>Intro_typing_v1.mov</code></li>
+<li><code>terminal_precompute_v1.mov</code></li>
+<li><code>full_tab1_run_NO_pauses.mov</code> (clean playback)</li>
+<li><code>full_tab1_run_v1_with_pauses.mov</code> (the one you loved — keep both, A/B in CapCut)</li>
+<li><code>tab2_with_csv_view.mov</code></li>
+<li><code>tab_3_committee.mov</code></li>
+<li><code>card_03_closing.png</code> (from <code>~/Documents/Panopticon_TitleCards/</code>)</li>
+<li>Your music track (whatever you picked)</li>
+<li><strong>If overnight agent succeeded:</strong> a clean v2 with-pauses recording at <code>~/Documents/Panopticon_Captures/full_tab1_with_pauses_v2_clean.mp4</code></li>
+</ul>
+
+<hr id="drag" />
+
+<h2>4. Dragging clips to the timeline</h2>
+
+<ol>
+<li>Click and drag any clip from Media Bin <strong>down</strong> onto Track 3 (the visual track)</li>
+<li>Release. The clip lands at wherever you dropped it on the timeline.</li>
+<li>To position it precisely: click the clip and drag horizontally to slide it left/right</li>
+<li>To make a clip START at exactly 0:00: drag it all the way to the left edge of the timeline</li>
+</ol>
+
+<div class="callout">
+<div class="callout-label">Pro tip</div>
+<p>CapCut snaps clips to nearby clip edges automatically. If you drag a clip near another clip's end, they'll click together. This is good — it eliminates 1-frame gaps that show up as black flashes during playback.</p>
+</div>
+
+<hr id="trim" />
+
+<h2>5. Trimming clips (start + end edges)</h2>
+
+<p>This is the operation you'll use most. Trimming SHORTENS a clip by cutting off content from the start or end. The remaining content plays at normal speed.</p>
+
+<ol>
+<li>Click a clip on the timeline — its edges become draggable handles</li>
+<li><strong>Drag the LEFT edge inward (rightward)</strong> to cut off the BEGINNING of the clip</li>
+<li><strong>Drag the RIGHT edge inward (leftward)</strong> to cut off the END of the clip</li>
+<li>The Preview pane updates as you drag — use it to find the exact frame where you want to cut</li>
+<li>Release when you've found the cut point</li>
+</ol>
+
+<div class="callout">
+<div class="callout-label">Watch this carefully</div>
+<p>When you trim, CapCut may push other clips to the right to fill the gap (Ripple Edit) OR leave a gap (Standard Trim). Look at your timeline after each trim — if there's a black gap, drag the next clip leftward to close it. Black gaps = black flashes in the export.</p>
+</div>
+
+<div class="stuck-block">
+<span class="stuck-label">If stuck</span>
+Edges aren't draggable? Click the clip first to select it. Hover precisely over the very edge — your cursor should change to a horizontal arrow. If it doesn't, zoom in on the timeline (Cmd++ or scroll wheel) — small clips have thin edges that are hard to grab.
+</div>
+
+<hr id="split" />
+
+<h2>6. Splitting a clip mid-stream</h2>
+
+<p>Sometimes you don't want to trim the END of a clip — you want to KEEP both halves but treat them differently (e.g., speed-ramp the boring middle of a clip but keep the beginning + end at normal speed).</p>
+
+<ol>
+<li>Position the timeline cursor where you want to split (click on the time ruler at the top)</li>
+<li>Click the clip you want to split (so it's selected)</li>
+<li>Press <span class="keystroke">S</span> (the Split keyboard shortcut)</li>
+<li>The clip becomes TWO clips at that exact frame</li>
+<li>Now you can treat each half independently</li>
+</ol>
+
+<p><strong>Use case for our demo:</strong> the terminal precompute clip (2:25). You want the FIRST 2 seconds at normal speed (so viewers see what's happening), THEN speed-ramp the middle 2 minutes 20 seconds to ~3 seconds, THEN the LAST 1 second at normal speed (so the "Writing match_data.json ✓" line lands cleanly). Split the clip at 0:02 and 2:24, then speed-ramp only the middle piece.</p>
+
+<hr id="speed" />
+
+<h2>7. Speed-ramping a clip</h2>
+
+<ol>
+<li>Click a clip to select it</li>
+<li>In the Properties panel (right side), find the <strong>Speed</strong> tab</li>
+<li>OR right-click the clip → <strong>Speed → Custom</strong></li>
+<li>Set the speed multiplier:
+  <ul>
+  <li><strong>0.5x</strong> = half speed (slow-mo)</li>
+  <li><strong>1.0x</strong> = normal</li>
+  <li><strong>2x – 4x</strong> = sped up, motion still visible</li>
+  <li><strong>10x – 50x</strong> = blur of fast motion (good for terminal precompute)</li>
+  </ul>
+</li>
+<li>Click Apply</li>
+</ol>
+
+<p><strong>Speed-ramp uses for our demo:</strong></p>
+
+<table>
+<thead><tr><th>Clip</th><th>Speed</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>terminal_precompute middle</td><td>30x to 50x</td><td>Fast scrolling logs blur into "tech porn" without showing the wait</td></tr>
+<tr><td>Intro typing portions</td><td>1.4x</td><td>Adds urgency without losing keystroke clarity</td></tr>
+<tr><td>Tab 1 cold-open up to anomaly moment</td><td>0.5x at the anomaly frame (35.9s, 45.3s, 59.1s)</td><td>Cinematic broadcast slow-mo — your "explosive" moment</td></tr>
+<tr><td>Tab 1 dead time (empty court 0:00-0:10)</td><td>3x to 5x</td><td>Compress dead time while keeping recovery clock visibly initializing</td></tr>
+</tbody>
+</table>
+
+<hr id="freeze" />
+
+<h2>8. Freeze-frames + the lag pitfall</h2>
+
+<div class="callout callout-warn">
+<div class="callout-label">Critical lesson from yesterday</div>
+<p><strong>Hard freeze-frames stop the entire clip — including any animated UI elements (canvas, tickertape, signal bars)</strong>. To an engineering judge, a frozen UI looks like the dashboard crashed. AVOID hard freezes on dashboard footage.</p>
+<p><strong>Use these alternatives instead:</strong></p>
+<ul>
+<li><strong>20% slow-mo</strong> via Speed Curve (right-click → Speed → Curve) — gives 5x reading time but UI stays "alive"</li>
+<li><strong>Callout-paired hard freeze</strong> — if you must hard-freeze, layer a CapCut text callout at the EXACT freeze moment so it reads as editorial choice, not browser crash</li>
+</ul>
+</div>
+
+<p>How to add a 20% slow-mo at a specific moment:</p>
+
+<ol>
+<li>Split the clip just before the moment you want to slow</li>
+<li>Split again just after the moment</li>
+<li>Click the middle piece</li>
+<li>Speed → Custom → 0.2x</li>
+<li>OR use Speed → Curve → drag the curve down for an eased slow-down</li>
+</ol>
+
+<hr id="mute" />
+
+<h2>9. Muting OBS audio (CRITICAL)</h2>
+
+<div class="callout callout-error">
+<div class="callout-label">Don't skip this</div>
+<p>Every OBS capture has an AAC stereo audio track. Likely it captured your room noise / mouse clicks / breathing. If you don't mute these tracks, they'll compete with your music bed and make the demo sound amateur.</p>
+</div>
+
+<p>For EACH of your OBS captures (Tab 1, Tab 2, Tab 3, full_demo_all_tabs):</p>
+
+<ol>
+<li>Click the clip on the timeline</li>
+<li>Right-click → <strong>Mute</strong> (or <strong>Detach Audio</strong> then delete the audio sub-track)</li>
+<li>Verify: the clip's audio waveform should disappear from view, OR a small "muted" icon should appear on the clip</li>
+</ol>
+
+<div class="callout">
+<div class="callout-label">Exception — keep this audio</div>
+<p>The <code>Intro_typing_v1.mov</code> clip's audio IS the asset — it's the keyboard clacks captured by your MacBook mic. Do NOT mute that clip. Keep it audible at around -16 dBFS, with the music ducked to -20 dBFS underneath during 0:00-0:22.</p>
+</div>
+
+<hr id="text" />
+
+<h2>10. Text overlays (countdown + value-prop labels)</h2>
+
+<p>For your countdown vision (3-2-1) and any "5 days, 7 signals, Apple Silicon" value-prop labels:</p>
+
+<ol>
+<li>Click <strong>Text</strong> in the left sidebar</li>
+<li>Choose a basic text style (avoid the cartoonish ones — pick clean serif or mono)</li>
+<li>Drag onto Track 4 at the timeline position you want it</li>
+<li>Double-click the text on the Preview to edit content</li>
+<li>In Properties (right): set font, size, color, position</li>
+</ol>
+
+<p><strong>For the countdown, recommended specs:</strong></p>
+
+<ul>
+<li>Font: <strong>Fraunces</strong> (matches closing card) or system serif fallback (Georgia, Times)</li>
+<li>Size: <strong>180-220pt</strong> (massive — fills the screen)</li>
+<li>Color: <strong>#F8FAFC</strong> (white) on solid black background</li>
+<li>Position: dead center</li>
+<li>Each number: 1.5 seconds long, hard cut between numbers</li>
+<li>Optional: tiny scale-in animation (start at 80%, scale to 100% over 0.3s) for energy</li>
+</ul>
+
+<p><strong>For value-prop labels (e.g., "7 BIOMECHANICAL SIGNALS"):</strong></p>
+
+<ul>
+<li>Font: <strong>JetBrains Mono</strong> uppercase</li>
+<li>Size: <strong>24-32pt</strong></li>
+<li>Color: <strong>cyan #00E5FF</strong> on transparent</li>
+<li>Position: bottom-third or top-third</li>
+<li>Duration: 2-3 seconds</li>
+<li>Animation: opacity fade-in 0.4s, fade-out 0.4s</li>
+</ul>
+
+<hr id="music" />
+
+<h2>11. Music track placement + keyframed swells</h2>
+
+<ol>
+<li>Drag your music file from Media Bin onto Track 2</li>
+<li>Position at 0:00</li>
+<li>Trim the END to land at 3:00 + ~1 second of decay (so the final chord rings out into 1-2s of silence after the YouTube cut)</li>
+<li>Set base volume to <strong>-14 dBFS</strong>:
+  <ul>
+  <li>Click the music clip</li>
+  <li>Properties → Volume slider → drag to about 70% (rough -14 dBFS equivalent)</li>
+  <li>OR enter exact value if Properties has a numeric field</li>
+  </ul>
+</li>
+</ol>
+
+<p><strong>Keyframed editorial swells</strong> (this is the polish that elevates the demo):</p>
+
+<p>At each pivot point in your demo, the music should briefly swell up by 1-3 dB to punctuate the visual transition. CapCut keyframes the volume:</p>
+
+<ol>
+<li>Click the music clip</li>
+<li>Properties → Volume → click the <strong>diamond/keyframe icon</strong> next to the volume slider (this enables keyframing)</li>
+<li>Position the timeline cursor at the moment you want the swell to BEGIN (e.g., 0:30 for the dashboard reveal)</li>
+<li>Set volume to current base (-14)</li>
+<li>Move cursor 0.5 seconds forward (to 0:30.5)</li>
+<li>Set volume to swell level (-12 or -11)</li>
+<li>Move cursor 1.5 seconds forward (to 0:32)</li>
+<li>Set volume back to base (-14)</li>
+</ol>
+
+<p>Result: smooth volume swell from -14 to -12 over 0.5s, hold at -12 for 1.5s, return to -14. Repeat for each editorial pivot:</p>
+
+<table>
+<thead><tr><th>Time</th><th>Pivot</th><th>Swell amount</th></tr></thead>
+<tbody>
+<tr><td>0:30</td><td>Dashboard reveal (after typing+terminal opener)</td><td>+2 dB</td></tr>
+<tr><td>1:50</td><td>Tab 2 reveal (CSV download moment)</td><td>+1 dB</td></tr>
+<tr><td>2:15</td><td>Tab 3 reveal (swarm)</td><td>+2 dB</td></tr>
+<tr><td>2:48</td><td>Closing card entry</td><td>+3 dB (sustain through closing)</td></tr>
+</tbody>
+</table>
+
+<hr id="export" />
+
+<h2>12. Export settings + YouTube prep</h2>
+
+<ol>
+<li>Top-right: <strong>Export</strong> button</li>
+<li>Settings:
+  <ul>
+  <li><strong>Format:</strong> MP4</li>
+  <li><strong>Resolution:</strong> 1920 × 1080</li>
+  <li><strong>Frame Rate:</strong> 60 fps (or 30 if your project is 30)</li>
+  <li><strong>Bitrate:</strong> 12 Mbps (CBR) — visually lossless at 1080p</li>
+  <li><strong>Codec:</strong> H.264 (NOT H.265/HEVC — YouTube prefers H.264)</li>
+  <li><strong>Audio Codec:</strong> AAC, 320 kbps, 48 kHz, stereo</li>
+  <li><strong>Color Space:</strong> Rec. 709 / sRGB</li>
+  </ul>
+</li>
+<li><strong>Output filename:</strong> <code>panopticon_live_demo_v1_FINAL_2026-04-26.mp4</code></li>
+<li><strong>Output location:</strong> <code>~/Documents/Panopticon_Final/</code></li>
+<li>Click Export. CapCut renders for 1-3 minutes (Apple Silicon hardware encoder is fast).</li>
+<li>When complete, OPEN IN QUICKTIME and watch end-to-end ONCE without scrubbing. QA audit (see <a href="#export-qa">below</a>).</li>
+</ol>
+
+<h3 id="export-qa">QA audit checklist (before YouTube upload)</h3>
+
+<ul>
+<li>[ ] Total runtime is 3:00 ± 1 second</li>
+<li>[ ] No black flashes between cuts</li>
+<li>[ ] No audio clipping (peaks under -3 dBFS)</li>
+<li>[ ] Cyan reads as cyan (#00E5FF), not blue</li>
+<li>[ ] Closing card holds for full 12 seconds</li>
+<li>[ ] First frame is intentional (countdown 3 OR typing intro), not a black frame</li>
+<li>[ ] Last frame is the closing card or 1s of black</li>
+<li>[ ] No browser chrome / toolbar visible in OBS captures</li>
+</ul>
+
+<hr id="vision" />
+
+<h2>13. Implementing your countdown vision (concrete steps)</h2>
+
+<p>Your stated vision: <em>"start with a countdown 3-2-1, almost like a black-and-white movie, then maybe have the Claude UI flicker in and out quickly during the countdown, then jump directly to the apex of when player A serves, hits his serve, and play out the point. Start with the bang."</em></p>
+
+<p>Operationalized in CapCut:</p>
+
+<h4>0:00 – 0:01.5 — "3"</h4>
+<ul>
+<li>Track 4: text overlay "3" — Fraunces 220pt, white #F8FAFC, dead center</li>
+<li>Track 3: solid black background</li>
+<li>Add a 4-frame flicker overlay of <code>Intro_typing_v1.mov</code> at 80% opacity (creates the "Claude UI flicker" effect — duck to 0% opacity for 60% of the time, full opacity for 40%, with 4-6 quick on/off pulses across the 1.5s)</li>
+</ul>
+
+<h4>0:01.5 – 0:03 — "2"</h4>
+<ul>
+<li>Same as above with "2" text</li>
+<li>Increase flicker frequency (energy ramps up)</li>
+</ul>
+
+<h4>0:03 – 0:04.5 — "1"</h4>
+<ul>
+<li>Same with "1"</li>
+<li>Maximum flicker frequency</li>
+<li>Music swells +4 dB during this 1.5s</li>
+</ul>
+
+<h4>0:04.5 — HARD CUT to serve apex</h4>
+<ul>
+<li>Track 3: <code>full_tab1_run_v1_with_pauses.mov</code> (or v2 clean from overnight agent if available) — pre-trimmed to start at the moment of serve contact (~17-20s in the source clip)</li>
+<li>Music drops back to base level</li>
+<li>Let the point play out for ~12-15 seconds (the rally)</li>
+</ul>
+
+<h4>~0:18 — Hand off to walkthrough</h4>
+<ul>
+<li>Continue Tab 1 footage through the recovery interval and second pre-serve</li>
+<li>At ~1:40, click to Tab 2 (CSV download moment)</li>
+<li>At ~2:10, click to Tab 3 (swarm reveal)</li>
+<li>At 2:48, hard cut to closing card</li>
+</ul>
+
+<div class="callout">
+<div class="callout-label">Why this works</div>
+<p>The countdown creates a 4.5-second commitment — judges who see "3" know they're committed for the whole demo (sunk cost works in your favor). The hard cut to serve apex is the "explosion" Andrew envisioned. The walkthrough then earns the time you bought with the energetic open.</p>
+</div>
+
+<div class="objective">
+<div class="objective-label">Time budget for this section</div>
+The countdown opener takes ~45 minutes to build cleanly in CapCut. Build it FIRST tomorrow morning. If it takes longer than 60 minutes, bail and revert to your existing intro typing scaffold — the rest of the demo is more important than a perfect opener.
+</div>
+
+<hr id="troubleshoot" />
+
+<h2>14. When CapCut breaks (universal troubleshooting)</h2>
+
+<h3>"My export looks different than the preview"</h3>
+<p>Almost always: a track is muted in preview but unmuted in export, or vice versa. Check the eye-icon and speaker-icon on each track header. Confirm what you intend.</p>
+
+<h3>"There's a black flash between two clips"</h3>
+<p>1-frame gap in the timeline. Zoom in (Cmd++) on the timeline at that point until you see the gap. Drag the right clip leftward until it snaps to the left clip's edge.</p>
+
+<h3>"My music keeps clipping/distorting"</h3>
+<p>Lower the music's base volume. -14 dBFS is the recommendation; if it sounds clipped at -14, lower to -16 or -18. The music doesn't need to be loud — it needs to be PRESENT.</p>
+
+<h3>"Speed-ramping made my clip blurry"</h3>
+<p>This is correct behavior at high speeds (10x+). The motion blur IS the visual signature for terminal-log-scrolling. If you don't want blur, use a lower speed multiplier (2-4x).</p>
+
+<h3>"My text overlay disappears at certain points"</h3>
+<p>The text clip has a duration too. Click it and check the right edge — drag it longer if needed. Text overlays don't auto-extend.</p>
+
+<h3>"CapCut crashed mid-edit"</h3>
+<p>CapCut auto-saves every 60-120 seconds. Re-open the project — you'll be back within ~1 minute of work. Save manually <span class="keystroke">Cmd+S</span> after every major operation as insurance.</p>
+
+<h3>"My preview is laggy / choppy"</h3>
+<p>Preview is real-time RENDER, not the export quality. Choppy preview is OK — the export is what matters. To make preview smoother: lower preview quality in CapCut settings (1/4 res preview is plenty for editing decisions). The exported file will be full quality regardless.</p>
+
+<h3>"I accidentally deleted something important"</h3>
+<p><span class="keystroke">Cmd+Z</span> to undo. CapCut keeps a long undo history (often 100+ steps). Don't panic.</p>
+
+<h3>"YouTube upload says my file is invalid"</h3>
+<p>Codec mismatch. Re-export with H.264 (NOT H.265/HEVC). YouTube does accept HEVC but rejects some encoder variants.</p>
+
+<div class="anchor-rule"></div>
+
+<p style="text-align: center; color: var(--text-muted); font-size: 13px;">You now know enough CapCut to ship this demo. Trust the scaffold, work in micro-sprints, ship by 17:00 EDT.</p>
+
+<div class="footer">
+PANOPTICON LIVE · Built with Claude Opus 4.7 · 2026-04-25 → 2026-04-26
+</div>
+
+</div>
+</body>
+</html>

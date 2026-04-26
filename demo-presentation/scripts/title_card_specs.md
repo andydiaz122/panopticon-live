@@ -6,7 +6,9 @@
 
 **Tool:** Apple Keynote (preferred — exports clean PNG with crisp anti-aliasing) OR Figma. Skip Canva — its export pipeline crushes serif kerning.
 
-**Total cards needed:** 3 primary cards (Beats 1a, 1b, 5) + 1 optional pre-roll. All static. Animation handled by CapCut cross-fades during assembly.
+**Total cards needed:** **1 primary card (Card 3 — Beat 5 closing thesis)** + 1 optional pre-roll. All static. Animation handled by CapCut cross-fades during assembly.
+
+> ⚠️ **Cards 1 + 2 RETIRED 2026-04-25 ~10:45 EDT** — superseded by the live typing intro per team-lead pivot. The 4-stage prompt evolution captured via QuickTime in `intro_typing_script.md` replaces both static cards. **Do NOT build Cards 1 or 2 in Keynote** — you only need Card 3 (closing). Reference specs for retired Cards 1 + 2 are kept below for historical context only.
 
 ---
 
@@ -27,7 +29,9 @@
 
 ---
 
-## Card 1 — The Question (Beat 1a, 0:03 – 0:08)
+## ⚠️ RETIRED — Card 1 — The Question (was Beat 1a, 0:03 – 0:08)
+
+**Superseded 2026-04-25 by live typing intro.** Spec preserved below for reference only — DO NOT BUILD.
 
 **Filename:** `card_01_question.png`
 
@@ -57,7 +61,9 @@
 
 ---
 
-## Card 2 — The Answer (Beat 1b, 0:09 – 0:14)
+## ⚠️ RETIRED — Card 2 — The Answer (was Beat 1b, 0:09 – 0:14)
+
+**Superseded 2026-04-25 by live typing intro.** Spec preserved below for reference only — DO NOT BUILD.
 
 **Filename:** `card_02_answer.png`
 
@@ -90,7 +96,9 @@
 
 ---
 
-## Card 3 — The Closing Thesis (Beat 5, 2:48 – 3:00)
+## ✅ ACTIVE — Card 3 — The Closing Thesis (Beat 5, 2:48 – 3:00) — **THIS IS THE ONE TO BUILD**
+
+> 🤖 **Programmatic generator (preferred path):** Run `python3 scripts/build_card_03_closing.py` to produce both `card_03_closing.pptx` (editable in PowerPoint) and `card_03_closing.png` (drop-in for CapCut) at `~/Documents/Panopticon_TitleCards/`. The script encodes this entire spec — single source of truth, byte-deterministic output, no Keynote UI fiddling. Built using the Anthropic `pptx` skill (~/.claude/skills/pptx/) + python-pptx + Pillow. Generated 2026-04-25 ~14:00 EDT after team-lead pivot to PowerPoint workflow. Manual Keynote spec below preserved as fallback.
 
 **Filename:** `card_03_closing.png`
 

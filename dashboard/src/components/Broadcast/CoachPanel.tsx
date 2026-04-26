@@ -23,8 +23,14 @@ import type { CoachInsight } from '@/lib/types';
  */
 
 const TYPEWRITER_STEP_MS = 18;
-/** Broadcast "hold" after typewriter completes before resuming the video. */
-const TELESTRATOR_HOLD_MS = 3500;
+// 2026-04-25 ~17:35 EDT — TELESTRATOR_HOLD_MS reduced 3500 → 1500. The
+// 3.5s hold compounded badly with anomaly slow-mo at 35-39s window (insight
+// #5 fires at 36s INSIDE that window): 4.7s typewriter + 3.5s hold = 8.2s
+// pause, then video resumed at 0.25x for ~13s — total 22s of non-normal
+// playback per coach insight. The new 1.5s hold gives judges 1.5s read time
+// after typewriter completes, which is enough for a forensic reader to
+// finish-and-process the last sentence before resume.
+const TELESTRATOR_HOLD_MS = 1500;
 
 export default function CoachPanel() {
   const { activeCoachInsight } = usePanopticonState();
@@ -74,7 +80,12 @@ function InsightCard({ insight }: { insight: CoachInsight }) {
     let i = 0;
     let resumeTimeoutId: number | undefined;
 
-    // Step 1: pause the video. Guard — videoRef may be null during hydration.
+    // 2026-04-26 ~04:30 EDT — RE-ENABLED for QuickTime recording session.
+    // OBS was the lag amplifier (see docs/RECORDING_LAG_RECIPE.md). With
+    // QuickTime as the recording tool, the slow-mo + telestrator pauses
+    // are back. Coach insight #5 was moved from t=36000 to t=37500 in
+    // 52b8294 to eliminate the slow-mo+pause collision. TELESTRATOR_HOLD_MS
+    // softened from 3500 to 1500 stays in place (better editorial pacing).
     video?.pause();
 
     const typewriterId = window.setInterval(() => {
@@ -86,11 +97,9 @@ function InsightCard({ insight }: { insight: CoachInsight }) {
       spanRef.current.textContent = commentary.slice(0, i);
       if (i >= commentary.length) {
         window.clearInterval(typewriterId);
-        // Step 3: hold, then resume
+        // Step 3: typewriter ends → hold for TELESTRATOR_HOLD_MS → resume.
         resumeTimeoutId = window.setTimeout(() => {
-          video?.play().catch(() => {
-            /* ignore autoplay-blocked / video-ended errors */
-          });
+          video?.play().catch(() => {});
         }, TELESTRATOR_HOLD_MS);
       }
     }, TYPEWRITER_STEP_MS);
@@ -102,9 +111,7 @@ function InsightCard({ insight }: { insight: CoachInsight }) {
       }
       // Step 4: on insight change or unmount, always resume so the demo
       // never leaves the viewer stranded at a paused frame.
-      video?.play().catch(() => {
-        /* ignore */
-      });
+      video?.play().catch(() => {});
     };
   }, [insight.commentary, insight.insight_id, videoRef]);
 

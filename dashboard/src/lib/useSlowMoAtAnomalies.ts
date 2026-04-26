@@ -34,10 +34,17 @@ export interface SlowMoConfig {
   holdMs?: number;
 }
 
+// 2026-04-25 ~17:35 EDT — softened from (0.25, 500, 3000) = 4s @ 0.25x to
+// (0.5, 300, 900) = 1.5s @ 0.5x. Andrew observed compounding lag during
+// recording when slow-mo windows overlapped with CoachPanel auto-pauses
+// (insight #5 at t=36000ms fell inside the 35.9s anomaly window: 8.2s pause
+// + 13.6s slow-mo crawl = 22s of non-normal playback per event). The new
+// values still read as "broadcast replay" but compound less destructively
+// with the typewriter-pause pattern. Editorial intent preserved.
 const DEFAULT_CONFIG: Required<SlowMoConfig> = {
-  slowRate: 0.25,
-  rampMs: 500,
-  holdMs: 3000,
+  slowRate: 0.5,
+  rampMs: 300,
+  holdMs: 900,
 };
 
 /**
@@ -115,6 +122,11 @@ export function useSlowMoAtAnomalies(
 
     const tick = () => {
       rafId = requestAnimationFrame(tick);
+      // 2026-04-25 ~17:35 EDT — early-out when paused. The CoachPanel
+      // auto-pauses the video for the typewriter telestrator beat. While
+      // paused, currentTime doesn't advance, so the slow-mo decision is
+      // stable — no need to recompute every frame. Cheap defensive guard.
+      if (video.paused) return;
       const currentTimeMs = video.currentTime * 1000;
       const desired = computePlaybackRate(
         currentTimeMs,
